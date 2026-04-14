@@ -2,27 +2,76 @@
  * ============================================================
  * main.css —— 全局 CSS 变量与基础样式
  * ============================================================
- * 这个文件在 main.ts 中被导入，作用于整个应用。
- *
- * CSS 变量（Custom Properties）以 -- 开头，定义在 :root（即 <html>）上后，
- * 任何元素都可以通过 var(--变量名) 来引用，方便统一管理主题色。
- * ============================================================
  */
 
-/* :root 伪类 = <html> 元素，在这里定义全局 CSS 变量 */
 :root {
-  --sf-primary: #409eff;  /* 主色调（Element Plus 默认蓝色） */
-  --sf-bg: #f5f7fa;       /* 页面背景色（浅灰） */
+  /* 品牌色系 */
+  --sf-primary: #667eea;
+  --sf-primary-dark: #5a67d8;
+  --sf-primary-light: #818cf8;
+  --sf-accent: #764ba2;
+  --sf-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  --sf-gradient-light: linear-gradient(135deg, #667eea20 0%, #764ba220 100%);
+
+  /* 背景与表面 */
+  --sf-bg: #f0f2f5;
+  --sf-surface: #ffffff;
+  --sf-surface-hover: #fafafa;
+
+  /* 文字色阶 */
+  --sf-text-primary: #1a1a2e;
+  --sf-text-secondary: #606266;
+  --sf-text-muted: #909399;
+
+  /* 阴影 */
+  --sf-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
+  --sf-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --sf-shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.12);
+
+  /* 圆角 */
+  --sf-radius-sm: 6px;
+  --sf-radius-md: 10px;
+  --sf-radius-lg: 16px;
 }
 
-/* 页面 body 基础样式 */
 body {
-  background-color: var(--sf-bg); /* 使用上面定义的 CSS 变量 */
-  color: #303133;                 /* 全局文字颜色（深灰） */
+  background-color: var(--sf-bg);
+  color: var(--sf-text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* 链接样式：使用主色调，去掉下划线 */
 a {
   color: var(--sf-primary);
   text-decoration: none;
+}
+
+/* Element Plus 卡片全局美化 */
+.el-card {
+  border: none !important;
+  box-shadow: var(--sf-shadow-sm) !important;
+  border-radius: var(--sf-radius-md) !important;
+}
+
+.el-card:hover {
+  box-shadow: var(--sf-shadow-md) !important;
+}
+
+/* 滚动条美化 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c0c4cc;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #909399;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
 }

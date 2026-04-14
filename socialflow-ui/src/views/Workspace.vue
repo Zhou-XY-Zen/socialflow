@@ -373,7 +373,9 @@ async function onGenerate() {
       <!-- 左栏：生成参数 -->
       <el-col :span="9">
         <el-card class="param-card">
-          <h3 style="margin-top: 0">AI 文案工作台</h3>
+          <div class="card-header-bar">
+            <h3 class="card-title">AI 文案工作台</h3>
+          </div>
           <el-form label-position="top" size="default">
             <el-form-item label="主题">
               <el-input v-model="form.topic" type="textarea" :rows="3" placeholder="描述你想写什么..." />
@@ -458,7 +460,13 @@ async function onGenerate() {
             </div>
 
             <div style="display: flex; gap: 8px">
-              <el-button type="primary" :loading="streaming" @click="onGenerate" :disabled="!form.topic.trim()">
+              <el-button
+                type="primary"
+                :loading="streaming"
+                @click="onGenerate"
+                :disabled="!form.topic.trim()"
+                class="generate-btn"
+              >
                 {{ streaming ? '生成中...' : (useMultiAgent ? 'Multi-Agent 生成' : '流式生成') }}
               </el-button>
               <el-button v-if="streaming" @click="stop">中断</el-button>
@@ -472,9 +480,11 @@ async function onGenerate() {
         <!-- 生成结果 -->
         <el-card class="result-card" style="flex: 1; display: flex; flex-direction: column">
           <template #header>
-            <div style="display: flex; justify-content: space-between">
-              <span>生成结果</span>
-              <span v-if="stage" style="color: #999; font-size: 13px">{{ stage }}</span>
+            <div style="display: flex; justify-content: space-between; align-items: center">
+              <span class="card-title">生成结果</span>
+              <el-tag v-if="stage" size="small" :type="stage.includes('错误') ? 'danger' : stage.includes('完成') ? 'success' : 'warning'" effect="light">
+                {{ stage }}
+              </el-tag>
             </div>
           </template>
 
@@ -514,15 +524,29 @@ async function onGenerate() {
             style="flex: 1; overflow-y: auto; max-height: 60vh; padding: 16px; background: #fff; border: 1px solid #dcdfe6; border-radius: 4px; line-height: 1.8"
           />
 
-          <!-- 源码编辑模式 / 空状态 -->
+          <!-- 源码编辑模式 -->
           <el-input
-            v-else
+            v-else-if="body"
             v-model="body"
             type="textarea"
             :autosize="{ minRows: 14, maxRows: 30 }"
-            placeholder="AI 生成的内容会出现在这里..."
             style="flex: 1"
           />
+
+          <!-- 空状态引导 -->
+          <div v-else class="empty-state">
+            <div class="empty-icon">&#x2728;</div>
+            <h3 class="empty-title">输入主题，开始 AI 创作</h3>
+            <p class="empty-desc">在左侧填写主题和参数，点击生成按钮，AI 将为你撰写专业文案并自动配图</p>
+            <div class="empty-tags">
+              <el-tag size="small" effect="plain" round>小红书种草</el-tag>
+              <el-tag size="small" effect="plain" round>抖音脚本</el-tag>
+              <el-tag size="small" effect="plain" round>旅行攻略</el-tag>
+              <el-tag size="small" effect="plain" round>美食探店</el-tag>
+              <el-tag size="small" effect="plain" round>产品测评</el-tag>
+              <el-tag size="small" effect="plain" round>穿搭分享</el-tag>
+            </div>
+          </div>
         </el-card>
 
         <!-- ==================== AI 智能配图面板 ==================== -->
@@ -647,14 +671,97 @@ async function onGenerate() {
 .workspace-container {
   height: calc(100vh - 120px);
 }
+
+/* 卡片标题带渐变条纹 */
+.card-header-bar {
+  position: relative;
+  padding-left: 14px;
+}
+.card-header-bar::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 2px;
+  bottom: 2px;
+  width: 4px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, #667eea, #764ba2);
+}
+.card-title {
+  font-weight: 600;
+  font-size: 16px;
+  color: #1a1a2e;
+  margin: 0;
+}
+
 .param-card {
   height: 100%;
   overflow-y: auto;
 }
+
 .result-card :deep(.el-card__body) {
   flex: 1;
   display: flex;
   flex-direction: column;
+}
+
+/* 生成按钮渐变 */
+.generate-btn {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+  border: none !important;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  padding: 10px 28px !important;
+}
+.generate-btn:hover {
+  opacity: 0.9;
+}
+.generate-btn:disabled {
+  opacity: 0.5;
+}
+
+/* 空状态引导 */
+.empty-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+}
+.empty-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  animation: float 3s ease-in-out infinite;
+}
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+.empty-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: #1a1a2e;
+  margin: 0 0 8px;
+}
+.empty-desc {
+  font-size: 14px;
+  color: #909399;
+  margin: 0 0 24px;
+  text-align: center;
+  max-width: 360px;
+  line-height: 1.6;
+}
+.empty-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+.empty-tags .el-tag {
+  cursor: default;
+  color: #667eea;
+  border-color: #667eea40;
 }
 .media-recommend-grid {
   display: grid;
