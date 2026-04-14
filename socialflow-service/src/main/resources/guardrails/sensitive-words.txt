@@ -1,0 +1,3 @@
+# SocialFlow sensitive word dictionary
+# One word per line. Lines starting with # are comments.
+# Keep this list small at startup; load heavier dicts at runtime from DB.

@@ -1,0 +1,57 @@
+# =========================
+# Java / Maven
+# =========================
+target/
+*.class
+*.jar
+*.war
+*.ear
+*.nar
+hs_err_pid*
+.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+# =========================
+# IDE
+# =========================
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.project
+.classpath
+.settings/
+.factorypath
+
+# =========================
+# Spring
+# =========================
+logs/
+*.log
+
+# =========================
+# Node / Vite
+# =========================
+node_modules/
+dist/
+dist-ssr/
+*.local
+.eslintcache
+*.tsbuildinfo
+
+# =========================
+# Secrets & local data
+# =========================
+.env
+.env.*
+!.env.example
+data/
+application-local.yml
+
+# =========================
+# OS
+# =========================
+.DS_Store
+Thumbs.db

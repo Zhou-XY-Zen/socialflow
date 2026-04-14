@@ -1,0 +1,39 @@
+{
+  "name": "socialflow-ui",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc -b && vite build",
+    "preview": "vite preview",
+    "lint": "eslint . --fix",
+    "type-check": "vue-tsc --noEmit"
+  },
+  "dependencies": {
+    "vue": "^3.5.13",
+    "vue-router": "^4.4.5",
+    "pinia": "^2.2.6",
+    "element-plus": "^2.8.8",
+    "@element-plus/icons-vue": "^2.3.1",
+    "axios": "^1.7.9",
+    "dayjs": "^1.11.13",
+    "@fullcalendar/core": "^6.1.15",
+    "@fullcalendar/vue3": "^6.1.15",
+    "@fullcalendar/daygrid": "^6.1.15",
+    "@fullcalendar/interaction": "^6.1.15",
+    "@tiptap/vue-3": "^2.10.2",
+    "@tiptap/starter-kit": "^2.10.2",
+    "markdown-it": "^14.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/markdown-it": "^14.1.2",
+    "@vitejs/plugin-vue": "^5.2.1",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.3",
+    "vue-tsc": "^2.1.10",
+    "unplugin-auto-import": "^0.18.6",
+    "unplugin-vue-components": "^0.27.5"
+  }
+}
