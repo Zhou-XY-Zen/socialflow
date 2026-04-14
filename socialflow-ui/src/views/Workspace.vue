@@ -482,9 +482,21 @@ async function onGenerate() {
           <template #header>
             <div style="display: flex; justify-content: space-between; align-items: center">
               <span class="card-title">生成结果</span>
-              <el-tag v-if="stage" size="small" :type="stage.includes('错误') ? 'danger' : stage.includes('完成') ? 'success' : 'warning'" effect="light">
-                {{ stage }}
-              </el-tag>
+              <div style="display: flex; align-items: center; gap: 8px">
+                <el-tag v-if="stage" size="small" :type="stage.includes('错误') || stage.includes('失败') ? 'danger' : stage.includes('完成') ? 'success' : 'warning'" effect="light">
+                  {{ stage }}
+                </el-tag>
+                <el-button
+                  v-if="body && !streaming"
+                  size="small"
+                  type="primary"
+                  plain
+                  @click="onGenerate"
+                  :disabled="!form.topic.trim()"
+                >
+                  重新生成
+                </el-button>
+              </div>
             </div>
           </template>
 
@@ -576,8 +588,11 @@ async function onGenerate() {
 
           <!-- 提示词输入区 -->
           <div v-if="!savedMedia.length" style="margin-bottom: 12px">
-            <div style="margin-bottom: 6px; font-size: 13px; color: #606266">
-              中文绘图提示词（AI 自动从文案提取，可手动编辑后生成）
+            <div style="margin-bottom: 6px; font-size: 13px; color: #606266; display: flex; justify-content: space-between; align-items: center">
+              <span>中文绘图提示词（AI 自动从文案提取，可手动编辑后生成）</span>
+              <el-button link type="primary" size="small" :loading="promptLoading" @click="extractImagePrompt(body)">
+                重新提取
+              </el-button>
             </div>
             <div style="display: flex; gap: 8px">
               <el-input
@@ -637,6 +652,13 @@ async function onGenerate() {
               <div v-if="selectedImageUrls.has(url)" class="media-check-badge">✓</div>
               <div class="media-recommend-tags">AI 生成 #{{ idx + 1 }}</div>
             </div>
+          </div>
+
+          <!-- 图片生成后：重新生成按钮 -->
+          <div v-if="aiImages.length > 0 && !aiGenerating && savedMedia.length === 0" style="margin-top: 10px">
+            <el-button size="small" plain @click="startAiGenerate" :disabled="!aiImagePrompt.trim()">
+              重新生成配图
+            </el-button>
           </div>
 
           <!-- 已保存的配图 -->

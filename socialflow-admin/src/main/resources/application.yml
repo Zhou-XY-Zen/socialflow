@@ -12,6 +12,16 @@ server:
 spring:
   application:
     name: socialflow
+  # Nacos 配置中心（spring.config.import 方式，替代 bootstrap.yml）
+  config:
+    import:
+      - optional:nacos:socialflow.yml?group=DEFAULT_GROUP
+  cloud:
+    nacos:
+      config:
+        server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+        username: ${NACOS_USER:nacos}
+        password: ${NACOS_PASS:nacos}
   servlet:
     multipart:
       enabled: true
