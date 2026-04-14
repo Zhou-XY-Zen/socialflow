@@ -10,16 +10,15 @@ import com.socialflow.service.ai.embedding.EmbeddingService;
 import com.socialflow.service.ai.embedding.VectorStoreService;
 import com.socialflow.service.ai.rag.DocumentChunker;
 import com.socialflow.service.knowledge.KnowledgeIngestService;
-import io.minio.GetObjectArgs;
-import io.minio.MinioClient;
+import com.socialflow.service.storage.StorageService;
 import org.apache.tika.Tika;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.io.InputStream;
+import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
@@ -31,7 +30,7 @@ import java.util.UUID;
 /**
  * 知识库文档摄入服务实现 —— 异步执行文档解析、分块、向量嵌入和持久化。
  *
- * 处理流程：下载文件 → Tika 解析 → 文本分块 → 批量嵌入 → 存储到 MySQL 和 pgvector。
+ * 处理流程：从对象存储下载文件 → Tika 解析 → 文本分块 → 批量嵌入 → 存储到 MySQL 和 pgvector。
  */
 @Service
 public class KnowledgeIngestServiceImpl implements KnowledgeIngestService {
@@ -44,35 +43,22 @@ public class KnowledgeIngestServiceImpl implements KnowledgeIngestService {
     private final EmbeddingService embeddingService;
     private final VectorStoreService vectorStoreService;
     private final DocumentChunker documentChunker;
-
-    /** MinIO 对象存储端点地址 */
-    @Value("${socialflow.storage.endpoint}")
-    private String minioEndpoint;
-
-    /** MinIO 访问密钥 */
-    @Value("${socialflow.storage.access-key}")
-    private String minioAccessKey;
-
-    /** MinIO 秘密密钥 */
-    @Value("${socialflow.storage.secret-key}")
-    private String minioSecretKey;
-
-    /** MinIO 存储桶名称 */
-    @Value("${socialflow.storage.bucket}")
-    private String minioBucket;
+    private final StorageService storageService;
 
     public KnowledgeIngestServiceImpl(KnowledgeDocumentMapper documentMapper,
                                       KnowledgeChunkMapper chunkMapper,
                                       KnowledgeBaseMapper baseMapper,
                                       EmbeddingService embeddingService,
                                       VectorStoreService vectorStoreService,
-                                      DocumentChunker documentChunker) {
+                                      DocumentChunker documentChunker,
+                                      StorageService storageService) {
         this.documentMapper = documentMapper;
         this.chunkMapper = chunkMapper;
         this.baseMapper = baseMapper;
         this.embeddingService = embeddingService;
         this.vectorStoreService = vectorStoreService;
         this.documentChunker = documentChunker;
+        this.storageService = storageService;
     }
 
     /**
@@ -98,18 +84,9 @@ public class KnowledgeIngestServiceImpl implements KnowledgeIngestService {
             doc.setParseStatus("PARSING");
             documentMapper.updateById(doc);
 
-            // 3. 从 MinIO 下载文件
-            MinioClient minioClient = MinioClient.builder()
-                    .endpoint(minioEndpoint)
-                    .credentials(minioAccessKey, minioSecretKey)
-                    .build();
-
-            InputStream inputStream = minioClient.getObject(
-                    GetObjectArgs.builder()
-                            .bucket(minioBucket)
-                            .object(doc.getFileUrl())
-                            .build()
-            );
+            // 3. 从对象存储下载文件（通过公开 URL）
+            String fileUrl = storageService.getPublicUrl(doc.getFileUrl());
+            InputStream inputStream = URI.create(fileUrl).toURL().openStream();
 
             // 4. 使用 Apache Tika 解析文档内容为纯文本
             String rawText = new Tika().parseToString(inputStream);

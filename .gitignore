@@ -49,6 +49,9 @@ dist-ssr/
 !.env.example
 data/
 application-local.yml
+# Nacos 配置（含服务器地址和密码，不提交）
+**/bootstrap.yml
+!**/bootstrap.yml.example
 
 # =========================
 # OS

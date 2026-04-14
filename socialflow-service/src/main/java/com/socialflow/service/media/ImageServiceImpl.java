@@ -11,16 +11,13 @@ import com.socialflow.service.ai.llm.ChatMessage;
 import com.socialflow.service.ai.llm.LlmConfig;
 import com.socialflow.service.ai.llm.LlmResponse;
 import com.socialflow.service.ai.llm.LlmRouter;
-import io.minio.MinioClient;
-import io.minio.PutObjectArgs;
+import com.socialflow.service.storage.StorageService;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 
-import java.io.ByteArrayInputStream;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -51,6 +48,7 @@ public class ImageServiceImpl implements ImageService {
 
     private final MediaAssetMapper mediaAssetMapper;
     private final LlmRouter llmRouter;
+    private final StorageService storageService;
 
     // ==================== DashScope 文生图配置 ====================
 
@@ -69,43 +67,18 @@ public class ImageServiceImpl implements ImageService {
     @Value("${socialflow.image.image-size:1024*1024}")
     private String imageSize;
 
-    // ==================== MinIO 配置（与 MediaServiceImpl 一致） ====================
-
-    @Value("${socialflow.storage.endpoint}")
-    private String minioEndpoint;
-
-    @Value("${socialflow.storage.access-key}")
-    private String minioAccessKey;
-
-    @Value("${socialflow.storage.secret-key}")
-    private String minioSecretKey;
-
-    @Value("${socialflow.storage.bucket}")
-    private String minioBucket;
-
     /** LLM 系统 API Key（用于提取提示词） */
     @Value("${socialflow.ai.system-api-key}")
     private String systemApiKey;
-
-    /** MinIO 客户端 */
-    private MinioClient minioClient;
 
     /** HTTP 客户端（用于调用 DashScope API 和下载图片） */
     private HttpClient httpClient;
 
     @PostConstruct
     public void init() {
-        // 初始化 MinIO 客户端
-        this.minioClient = MinioClient.builder()
-                .endpoint(minioEndpoint)
-                .credentials(minioAccessKey, minioSecretKey)
-                .build();
-
-        // 初始化 HTTP 客户端（DashScope API + 图片下载）
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(30))
                 .build();
-
         log.info("AI 配图服务初始化完成: model={}, imageCount={}", imageModel, imageCount);
     }
 
@@ -358,20 +331,15 @@ public class ImageServiceImpl implements ImageService {
                 default -> ".png";
             };
 
-            // 2. 生成文件名和 MinIO objectKey
+            // 2. 生成文件名和对象键
             String fileName = "ai_" + UUID.randomUUID().toString().substring(0, 8) + ext;
             String objectKey = "media/" + userId + "/" + UUID.randomUUID() + "_" + fileName;
 
-            // 3. 上传到 MinIO
-            minioClient.putObject(PutObjectArgs.builder()
-                    .bucket(minioBucket)
-                    .object(objectKey)
-                    .stream(new ByteArrayInputStream(imageBytes), imageBytes.length, -1)
-                    .contentType(contentType)
-                    .build());
+            // 3. 上传到对象存储（COS 或 MinIO）
+            storageService.upload(objectKey, imageBytes, contentType);
 
-            // 4. 生成访问 URL
-            String fileUrl = minioEndpoint + "/" + minioBucket + "/" + objectKey;
+            // 4. 获取公开访问 URL
+            String fileUrl = storageService.getPublicUrl(objectKey);
 
             // 5. 创建 MediaAsset 记录
             MediaAsset asset = new MediaAsset();

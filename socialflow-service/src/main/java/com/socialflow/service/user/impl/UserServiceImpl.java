@@ -11,15 +11,10 @@ import com.socialflow.model.dto.RegisterDTO;
 import com.socialflow.model.entity.SysUser;
 import com.socialflow.model.vo.LoginVO;
 import com.socialflow.model.vo.UserVO;
+import com.socialflow.service.storage.StorageService;
 import com.socialflow.service.user.UserService;
-import io.minio.BucketExistsArgs;
-import io.minio.MakeBucketArgs;
-import io.minio.MinioClient;
-import io.minio.PutObjectArgs;
-import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
@@ -44,48 +39,8 @@ public class UserServiceImpl implements UserService {
     /** 系统用户数据库映射器 */
     private final SysUserMapper sysUserMapper;
 
-    /** MinIO 服务地址 */
-    @Value("${socialflow.storage.endpoint}")
-    private String endpoint;
-
-    /** MinIO 访问密钥 */
-    @Value("${socialflow.storage.access-key}")
-    private String accessKey;
-
-    /** MinIO 密钥 */
-    @Value("${socialflow.storage.secret-key}")
-    private String secretKey;
-
-    /** MinIO 存储桶名称 */
-    @Value("${socialflow.storage.bucket}")
-    private String bucket;
-
-    /** MinIO 客户端实例 */
-    private MinioClient minioClient;
-
-    /**
-     * 初始化 MinIO 客户端，确保存储桶存在。
-     */
-    @PostConstruct
-    public void init() {
-        try {
-            this.minioClient = MinioClient.builder()
-                    .endpoint(endpoint)
-                    .credentials(accessKey, secretKey)
-                    .build();
-            boolean exists = minioClient.bucketExists(
-                    BucketExistsArgs.builder().bucket(bucket).build());
-            if (!exists) {
-                minioClient.makeBucket(
-                        MakeBucketArgs.builder().bucket(bucket).build());
-                log.info("已创建 MinIO 存储桶: {}", bucket);
-            }
-            log.info("UserServiceImpl MinIO 客户端初始化完成, endpoint={}, bucket={}", endpoint, bucket);
-        } catch (Exception e) {
-            log.error("UserServiceImpl MinIO 初始化失败", e);
-            throw new RuntimeException("MinIO 初始化失败: " + e.getMessage(), e);
-        }
-    }
+    /** 统一存储服务（COS / MinIO） */
+    private final StorageService storageService;
 
     /**
      * 用户注册 —— 创建新用户账号。
@@ -248,14 +203,9 @@ public class UserServiceImpl implements UserService {
         try {
             String objectKey = "avatar/" + userId + "/avatar.jpg";
             try (InputStream inputStream = file.getInputStream()) {
-                minioClient.putObject(PutObjectArgs.builder()
-                        .bucket(bucket)
-                        .object(objectKey)
-                        .stream(inputStream, file.getSize(), -1)
-                        .contentType(file.getContentType())
-                        .build());
+                storageService.upload(objectKey, inputStream, file.getSize(), file.getContentType());
             }
-            String avatarUrl = endpoint + "/" + bucket + "/" + objectKey;
+            String avatarUrl = storageService.getPublicUrl(objectKey);
             user.setAvatarUrl(avatarUrl);
             sysUserMapper.updateById(user);
             log.info("用户头像上传成功, userId={}, url={}", userId, avatarUrl);

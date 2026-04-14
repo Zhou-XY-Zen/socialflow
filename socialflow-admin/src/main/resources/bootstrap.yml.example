@@ -1,0 +1,23 @@
+# ============================================================
+# bootstrap.yml.example —— Nacos 配置示例
+# ============================================================
+# 复制此文件为 bootstrap.yml，填入实际的 Nacos 地址和密码：
+#   cp bootstrap.yml.example bootstrap.yml
+#
+# 或通过环境变量设置：
+#   export NACOS_ADDR=your-nacos-server:8848
+#   export NACOS_USER=nacos
+#   export NACOS_PASS=your-password
+# ============================================================
+
+spring:
+  application:
+    name: socialflow
+  cloud:
+    nacos:
+      config:
+        server-addr: ${NACOS_ADDR:localhost:8848}
+        username: ${NACOS_USER:nacos}
+        password: ${NACOS_PASS:your-password-here}
+        file-extension: yml
+        group: DEFAULT_GROUP
