@@ -129,10 +129,21 @@ async function logout() {
         <div>{{ route.meta?.title || '' }}</div>
         <!-- 用户下拉菜单 —— 点击昵称展开，可退出登录 -->
         <el-dropdown>
-          <span style="cursor:pointer">{{ userStore.user?.nickname || 'guest' }}</span>
+          <div style="display:flex; align-items:center; gap:8px; cursor:pointer">
+            <el-avatar
+              :size="32"
+              :src="userStore.user?.avatarUrl || undefined"
+              style="background:#409eff"
+            >
+              {{ (userStore.user?.nickname || 'U').charAt(0).toUpperCase() }}
+            </el-avatar>
+            <span style="font-size:14px; color:#303133">{{ userStore.user?.nickname || 'guest' }}</span>
+            <el-icon :size="12"><ArrowDown /></el-icon>
+          </div>
           <template #dropdown>
             <el-dropdown-menu>
-              <el-dropdown-item @click="logout">退出登录</el-dropdown-item>
+              <el-dropdown-item @click="$router.push('/settings')">个人设置</el-dropdown-item>
+              <el-dropdown-item divided @click="logout">退出登录</el-dropdown-item>
             </el-dropdown-menu>
           </template>
         </el-dropdown>

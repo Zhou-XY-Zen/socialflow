@@ -8,6 +8,7 @@ import { useSse } from '@/composables/useSse'
 import { templateApi, type TemplateVO } from '@/api/template'
 import { kbApi } from '@/api/knowledge'
 import { mediaApi, type MediaAssetVO } from '@/api/media'
+import { imageApi, type ImageTaskStatusVO } from '@/api/image'
 import { post } from '@/api/http'
 import { ElMessage } from 'element-plus'
 import type { ContentGenerateDTO, KbVO } from '@/types/api'
@@ -71,157 +72,228 @@ async function loadKbList() {
 watch(() => form.platform, () => { form.templateId = undefined; loadTemplates() })
 onMounted(() => { loadTemplates(); loadKbList() })
 
-/** 推荐配图 */
-const recommendedMedia = ref<MediaAssetVO[]>([])
-const mediaLoading = ref(false)
+/* ===================== AI 智能配图 ===================== */
+
+/** 图片预览 */
 const previewImg = ref('')
 const previewVisible = ref(false)
 
-async function searchMatchingMedia(generatedText: string) {
-  mediaLoading.value = true
-  recommendedMedia.value = []
-  try {
-    const seen = new Set<string | number>()
-    const results: MediaAssetVO[] = []
+/** AI 配图提示词（中文） */
+const aiImagePrompt = ref('')
+/** 提示词提取中 */
+const promptLoading = ref(false)
+/** 是否已提取提示词（控制面板显示） */
+const showImagePanel = ref(false)
 
-    // 从生成的文案内容中提取关键词（而不是只用主题）
-    const keywords = extractKeywords(generatedText, form.topic.trim())
+/** AI 文生图任务 */
+const aiTaskId = ref<string | null>(null)
+const aiGenerating = ref(false)
+const aiImages = ref<string[]>([])
+const aiError = ref('')
+/** 轮询定时器 */
+let pollTimer: ReturnType<typeof setInterval> | null = null
+/** 轮询次数（用于计算进度条） */
+const pollCount = ref(0)
+const maxPollCount = 40
 
-    // 逐个关键词搜索，合并结果
-    for (const kw of keywords) {
-      if (results.length >= 8) break
-      const r = await mediaApi.list({ pageNum: 1, pageSize: 4, fileType: 'IMAGE', keyword: kw })
-      for (const item of r.records) {
-        if (!seen.has(item.id) && results.length < 8) {
-          seen.add(item.id)
-          results.push(item)
-        }
-      }
-    }
-
-    // 兜底：用通用词搜索
-    if (results.length < 4) {
-      const fallbackWords = ['产品', '美食', '风景', '时尚', '生活', '美妆', '护肤']
-      for (const fw of fallbackWords) {
-        if (results.length >= 8) break
-        const r = await mediaApi.list({ pageNum: 1, pageSize: 4, fileType: 'IMAGE', keyword: fw })
-        for (const item of r.records) {
-          if (!seen.has(item.id) && results.length < 8) {
-            seen.add(item.id)
-            results.push(item)
-          }
-        }
-      }
-    }
-
-    recommendedMedia.value = results
-  } catch { recommendedMedia.value = [] }
-  finally { mediaLoading.value = false }
-}
-
-/**
- * 从文案内容中提取关键词用于搜索素材
- * 策略：提取高频名词短语 + 主题词拆分
- */
-function extractKeywords(text: string, topic: string): string[] {
-  const keywords: string[] = []
-  const added = new Set<string>()
-  const addWord = (w: string) => { if (w.length >= 2 && !added.has(w)) { added.add(w); keywords.push(w) } }
-
-  // 1. 主题词优先级最高（用户明确想要的内容）
-  addWord(topic)
-  topic.split(/[,，\s、·]+/).forEach(addWord)
-  splitChinese(topic).forEach(addWord)
-
-  // 2. 从文案标题（前50字）提取品类词——标题最能代表文案核心
-  const titleArea = text.substring(0, Math.min(text.length, 200))
-  const categoryWords = [
-    '口红', '唇膏', '唇釉', '唇彩',
-    '护肤', '面霜', '精华', '防晒', '面膜', '洗面奶', '乳液', '眼霜',
-    '香水', '香氛', '美妆', '化妆品', '彩妆', '粉底', '眼影', '腮红',
-    '穿搭', '连衣裙', '裙子', '仙女裙', '碎花裙', '半裙', '长裙', '短裙',
-    '牛仔裤', '西装', '大衣', '毛衣', '衬衫', '卫衣', '外套', '风衣',
-    '球鞋', '高跟鞋', '运动鞋', '包包', '手表', '项链', '耳环', '墨镜',
-    '汉服', '旗袍', '丝巾', '女装', '男装', '童装',
-    '咖啡', '奶茶', '拿铁', '饮品', '果汁',
-    '蛋糕', '甜品', '面包', '烘焙', '巧克力', '冰淇淋',
-    '火锅', '烧烤', '寿司', '拉面', '牛排', '披萨', '沙拉', '饺子',
-    '手机', '电脑', '耳机', '相机', '键盘', '平板',
-    '猫', '猫咪', '狗', '狗狗', '宠物', '萌宠',
-    '健身', '瑜伽', '跑步', '游泳', '骑行',
-    '海滩', '山峰', '城市', '森林', '日落', '樱花', '雪山', '湖泊',
-    '绿植', '蜡烛', '书架', '沙发', '厨房', '卧室',
-    '跑车', '汽车', '摩托车',
-    '婚礼', '烟花', '圣诞', '生日',
-    '玫瑰', '向日葵', '郁金香', '花束',
-    '婴儿', '亲子', '家庭',
-  ]
-
-  // 先从标题区域提取（权重最高）
-  for (const word of categoryWords) {
-    if (titleArea.includes(word)) addWord(word)
-  }
-
-  // 再从全文提取（补充）
-  for (const word of categoryWords) {
-    if (text.includes(word)) addWord(word)
-  }
-
-  return keywords.slice(0, 10)
-}
-
-/** 把中文文本每2个字拆一次（简易分词） */
-function splitChinese(text: string): string[] {
-  const words: string[] = []
-  const clean = text.replace(/[^\u4e00-\u9fff]/g, '')
-  for (let i = 0; i < clean.length - 1; i += 2) {
-    words.push(clean.substring(i, i + 2))
-  }
-  return words
-}
-
-/** 勾选的配图 ID 列表 */
-const selectedMediaIds = ref<Set<string | number>>(new Set())
-/** 最新生成的文案 ID（用于绑定配图） */
-const lastContentId = ref<string | number | null>(null)
-/** 保存中 */
+/** 已选图片 URL 集合 */
+const selectedImageUrls = ref<Set<string>>(new Set())
+/** 保存配图中 */
 const saving = ref(false)
+/** 保存进度文本 */
+const saveProgress = ref('')
+/** 已保存的 MediaAsset 列表 */
+const savedMedia = ref<MediaAssetVO[]>([])
+/** 最新生成的文案 ID */
+const lastContentId = ref<string | number | null>(null)
 
-function toggleMedia(id: string | number) {
-  if (selectedMediaIds.value.has(id)) {
-    selectedMediaIds.value.delete(id)
-  } else {
-    selectedMediaIds.value.add(id)
+/** 从文案中提取 AI 配图提示词 */
+async function extractImagePrompt(text: string) {
+  promptLoading.value = true
+  showImagePanel.value = true
+  aiImages.value = []
+  aiError.value = ''
+  selectedImageUrls.value = new Set()
+  savedMedia.value = []
+  try {
+    const result = await imageApi.extractPrompt(text)
+    aiImagePrompt.value = result.imagePrompt
+  } catch {
+    // 降级：用文案主题生成有意义的提示词，而不是写死万能废话
+    const topic = form.topic.trim() || '社交媒体'
+    aiImagePrompt.value = `${topic}相关的精美配图，高清画质，氛围感，适合社交媒体分享`
+  } finally {
+    promptLoading.value = false
   }
-  // 触发响应式更新
-  selectedMediaIds.value = new Set(selectedMediaIds.value)
 }
 
-function isSelected(id: string | number) {
-  return selectedMediaIds.value.has(id)
+/** 提交 AI 文生图任务 */
+async function startAiGenerate() {
+  if (!aiImagePrompt.value.trim()) {
+    ElMessage.warning('请输入配图提示词')
+    return
+  }
+  aiGenerating.value = true
+  aiImages.value = []
+  aiError.value = ''
+  pollCount.value = 0
+
+  try {
+    const result = await imageApi.generate(aiImagePrompt.value.trim())
+    aiTaskId.value = result.taskId
+    // 开始轮询任务状态
+    startPollStatus()
+  } catch (e: any) {
+    aiGenerating.value = false
+    aiError.value = e.message || '提交任务失败'
+    ElMessage.error('提交文生图任务失败')
+  }
 }
 
-/** 是否已保存配图 */
-const mediaSaved = ref(false)
+/** 轮询 AI 文生图任务状态 */
+function startPollStatus() {
+  stopPollStatus()
+  pollTimer = setInterval(async () => {
+    if (!aiTaskId.value) { stopPollStatus(); return }
+    pollCount.value++
 
-async function saveWithMedia() {
-  if (!lastContentId.value || selectedMediaIds.value.size === 0) {
-    ElMessage.warning('请先生成文案并勾选配图')
+    try {
+      const status = await imageApi.getStatus(aiTaskId.value)
+
+      if (status.status === 'SUCCEEDED') {
+        aiImages.value = status.imageUrls || []
+        aiGenerating.value = false
+        stopPollStatus()
+        ElMessage.success(`成功生成 ${aiImages.value.length} 张配图`)
+      } else if (status.status === 'FAILED') {
+        aiError.value = status.errorMessage || '图片生成失败'
+        aiGenerating.value = false
+        stopPollStatus()
+        ElMessage.error('图片生成失败：' + aiError.value)
+      }
+      // PENDING / RUNNING → 继续轮询
+    } catch {
+      // 网络错误，继续轮询
+    }
+
+    // 超时保护（40 次 × 3s = 2 分钟）
+    if (pollCount.value >= maxPollCount) {
+      aiError.value = '生成超时，请重试'
+      aiGenerating.value = false
+      stopPollStatus()
+    }
+  }, 3000)
+}
+
+function stopPollStatus() {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
+}
+
+/** 计算进度百分比（估算） */
+function getProgressPercentage(): number {
+  // 典型生成时间约 30-45 秒，按 40 次轮询计算
+  return Math.min(Math.round(pollCount.value / maxPollCount * 100), 95)
+}
+
+/** 切换图片选中状态 */
+function toggleImageUrl(url: string) {
+  if (selectedImageUrls.value.has(url)) {
+    selectedImageUrls.value.delete(url)
+  } else {
+    selectedImageUrls.value.add(url)
+  }
+  selectedImageUrls.value = new Set(selectedImageUrls.value)
+}
+
+/** 下载选中图片到 MinIO 并绑定到文案 */
+async function saveSelectedImages() {
+  if (selectedImageUrls.value.size === 0) {
+    ElMessage.warning('请先勾选要保存的图片')
     return
   }
   saving.value = true
+  saveProgress.value = ''
+
   try {
-    const ids = [...selectedMediaIds.value]
-    await post<void>(`/content/${lastContentId.value}/bindMedia`, ids)
-    ElMessage.success(`已保存，关联了 ${ids.length} 张配图`)
-    // 保存后只保留已选图片，清除未选的
-    recommendedMedia.value = recommendedMedia.value.filter(m => selectedMediaIds.value.has(m.id))
-    mediaSaved.value = true
+    const urls = [...selectedImageUrls.value]
+    const assetIds: (string | number)[] = []
+    const saved: MediaAssetVO[] = []
+
+    // 根据文案主题和提示词生成标签
+    const tags = buildImageTags()
+
+    // 逐张下载保存
+    for (let i = 0; i < urls.length; i++) {
+      saveProgress.value = `正在保存 ${i + 1}/${urls.length}...`
+      const asset = await imageApi.download(urls[i], tags)
+      assetIds.push(asset.id)
+      saved.push(asset)
+    }
+
+    // 绑定到文案
+    if (lastContentId.value && assetIds.length > 0) {
+      await post<void>(`/content/${lastContentId.value}/bindMedia`, assetIds)
+    }
+
+    savedMedia.value = saved
+    ElMessage.success(`已保存 ${saved.length} 张 AI 配图`)
   } catch (e: any) {
     ElMessage.error('保存失败：' + (e.message || ''))
   } finally {
     saving.value = false
+    saveProgress.value = ''
   }
+}
+
+/**
+ * 根据文案主题、平台、提示词自动生成图片标签。
+ * 标签用于素材库的搜索和分类。
+ */
+function buildImageTags(): string {
+  const tags: string[] = ['AI生成']
+
+  // 1. 文案主题作为核心标签
+  const topic = form.topic.trim()
+  if (topic) {
+    // 拆分主题词（用户可能输入"仙女裙穿搭"这样的复合词）
+    tags.push(topic)
+    // 尝试拆分为更细粒度的标签
+    const parts = topic.split(/[,，\s、·]+/).filter(w => w.length >= 2)
+    for (const p of parts) {
+      if (p !== topic && !tags.includes(p)) tags.push(p)
+    }
+  }
+
+  // 2. 平台标签
+  const platformMap: Record<string, string> = {
+    XIAOHONGSHU: '小红书', DOUYIN: '抖音',
+    WECHAT_MOMENT: '朋友圈', WECHAT_MP: '公众号',
+  }
+  const platformLabel = platformMap[form.platform]
+  if (platformLabel) tags.push(platformLabel)
+
+  // 3. 从绘图提示词中提取关键场景词
+  const prompt = aiImagePrompt.value
+  if (prompt) {
+    const sceneWords = [
+      '仙女', '裙子', '连衣裙', '穿搭', '时尚', '街拍',
+      '美食', '火锅', '咖啡', '奶茶', '甜品', '蛋糕',
+      '旅行', '风景', '城市', '夜景', '海滩', '山水', '日落',
+      '护肤', '美妆', '口红', '香水',
+      '健身', '瑜伽', '运动',
+      '猫咪', '狗狗', '宠物',
+      '花园', '森林', '阳光', '樱花',
+      '婚礼', '派对', '节日',
+    ]
+    for (const w of sceneWords) {
+      if (prompt.includes(w) && !tags.includes(w)) {
+        tags.push(w)
+        if (tags.length >= 8) break
+      }
+    }
+  }
+
+  return tags.slice(0, 8).join(',')
 }
 
 function openPreview(url: string) {
@@ -235,10 +307,12 @@ async function onGenerate() {
   warnings.value = []
   stage.value = ''
   multiAgentStages.value = []
-  recommendedMedia.value = []
-  selectedMediaIds.value = new Set()
+  showImagePanel.value = false
+  aiImages.value = []
+  selectedImageUrls.value = new Set()
+  savedMedia.value = []
   lastContentId.value = null
-  mediaSaved.value = false
+  stopPollStatus()
 
   /* 根据模式选择 SSE 端点和请求体 */
   const sseUrl = useMultiAgent.value
@@ -249,7 +323,11 @@ async function onGenerate() {
     : form
 
   await start(sseUrl, requestBody, {
-    onMessage: (data) => { const d = data as { token?: string }; if (d?.token) body.value += d.token },
+    onMessage: (data) => {
+      const d = data as { token?: string; clear?: boolean }
+      if (d?.clear) { body.value = '' }  // Multi-Agent 优化轮次时清空旧内容
+      else if (d?.token) { body.value += d.token }
+    },
     onStage: (data) => {
       stage.value = data.message || data.stage
       /* Multi-Agent 模式下收集阶段事件用于展示 */
@@ -263,9 +341,15 @@ async function onGenerate() {
     },
     onGuardrail: (data) => { warnings.value.push(data.message) },
     onDone: async () => {
+      // 检查是否有实际内容生成——防止空内容直接结束
+      if (!body.value.trim()) {
+        stage.value = '生成失败：未收到任何内容，请重试'
+        ElMessage.warning('生成失败：AI 未返回内容，可能是模型正在思考时连接中断，请重试')
+        return
+      }
       stage.value = '生成完成'
-      // 搜索匹配素材
-      searchMatchingMedia(body.value)
+      // AI 智能提取配图提示词
+      extractImagePrompt(body.value)
       // 获取刚保存的文案 ID（取最新一条）
       try {
         const { contentApi } = await import('@/api/content')
@@ -275,7 +359,10 @@ async function onGenerate() {
         }
       } catch { /* ignore */ }
     },
-    onError: (data) => { stage.value = `错误：${data.message}` },
+    onError: (data) => {
+      stage.value = `生成出错：${data.message}`
+      ElMessage.error('生成出错：' + data.message)
+    },
   })
 }
 </script>
@@ -438,42 +525,112 @@ async function onGenerate() {
           />
         </el-card>
 
-        <!-- 推荐配图（可勾选 + 保存） -->
-        <el-card v-if="recommendedMedia.length > 0 || mediaLoading" style="margin-top: 12px" v-loading="mediaLoading">
+        <!-- ==================== AI 智能配图面板 ==================== -->
+        <el-card v-if="showImagePanel" style="margin-top: 12px">
           <template #header>
             <div style="display: flex; justify-content: space-between; align-items: center">
-              <span>{{ mediaSaved ? '已保存的配图' : '推荐配图（点击勾选，绑定到文案）' }}</span>
-              <div v-if="!mediaSaved" style="display: flex; align-items: center; gap: 8px">
-                <el-tag v-if="selectedMediaIds.size > 0" type="success" size="small">
-                  已选 {{ selectedMediaIds.size }} 张
+              <span style="font-weight: 600">🎨 AI 智能配图</span>
+              <div style="display: flex; align-items: center; gap: 8px">
+                <el-tag v-if="selectedImageUrls.size > 0 && savedMedia.length === 0" type="success" size="small">
+                  已选 {{ selectedImageUrls.size }} 张
                 </el-tag>
                 <el-button
-                  v-if="selectedMediaIds.size > 0"
+                  v-if="selectedImageUrls.size > 0 && savedMedia.length === 0"
                   type="primary"
                   size="small"
                   :loading="saving"
-                  @click="saveWithMedia"
+                  @click="saveSelectedImages"
                 >
-                  保存配图
+                  {{ saveProgress || '下载并保存配图' }}
                 </el-button>
+                <el-tag v-if="savedMedia.length > 0" type="success" size="small">
+                  已保存 {{ savedMedia.length }} 张
+                </el-tag>
               </div>
-              <el-tag v-else type="success" size="small">已保存 {{ recommendedMedia.length }} 张</el-tag>
             </div>
           </template>
-          <div class="media-recommend-grid">
+
+          <!-- 提示词输入区 -->
+          <div v-if="!savedMedia.length" style="margin-bottom: 12px">
+            <div style="margin-bottom: 6px; font-size: 13px; color: #606266">
+              中文绘图提示词（AI 自动从文案提取，可手动编辑后生成）
+            </div>
+            <div style="display: flex; gap: 8px">
+              <el-input
+                v-model="aiImagePrompt"
+                type="textarea"
+                :rows="2"
+                :loading="promptLoading"
+                placeholder="AI 正在分析文案内容..."
+                style="flex: 1"
+              />
+              <el-button
+                type="primary"
+                :loading="aiGenerating || promptLoading"
+                :disabled="!aiImagePrompt.trim()"
+                @click="startAiGenerate"
+                style="align-self: flex-end; height: 60px"
+              >
+                {{ aiGenerating ? '生成中...' : '生成配图' }}
+              </el-button>
+            </div>
+          </div>
+
+          <!-- AI 生成进度条 -->
+          <div v-if="aiGenerating" style="margin-bottom: 12px">
+            <el-progress
+              :percentage="getProgressPercentage()"
+              :stroke-width="16"
+              :text-inside="true"
+              status="warning"
+            />
+            <div style="text-align: center; color: #909399; font-size: 12px; margin-top: 4px">
+              AI 正在创作配图，预计需要 30-60 秒...
+            </div>
+          </div>
+
+          <!-- 错误提示 -->
+          <el-alert
+            v-if="aiError"
+            :title="aiError"
+            type="error"
+            show-icon
+            :closable="true"
+            @close="aiError = ''"
+            style="margin-bottom: 12px"
+          />
+
+          <!-- AI 生成的图片网格 -->
+          <div v-if="aiImages.length > 0 && savedMedia.length === 0" class="media-recommend-grid">
             <div
-              v-for="m in recommendedMedia"
+              v-for="(url, idx) in aiImages"
+              :key="url"
+              class="media-recommend-item"
+              :class="{ selected: selectedImageUrls.has(url) }"
+              @click="toggleImageUrl(url)"
+            >
+              <img :src="url" :alt="'AI 配图 ' + (idx + 1)" />
+              <div v-if="selectedImageUrls.has(url)" class="media-check-badge">✓</div>
+              <div class="media-recommend-tags">AI 生成 #{{ idx + 1 }}</div>
+            </div>
+          </div>
+
+          <!-- 已保存的配图 -->
+          <div v-if="savedMedia.length > 0" class="media-recommend-grid">
+            <div
+              v-for="m in savedMedia"
               :key="m.id"
               class="media-recommend-item"
-              :class="{ selected: isSelected(m.id) }"
-              @click="mediaSaved ? openPreview(m.fileUrl) : toggleMedia(m.id)"
+              @click="openPreview(m.fileUrl)"
             >
               <img :src="m.fileUrl" :alt="m.fileName" />
-              <div v-if="isSelected(m.id) && !mediaSaved" class="media-check-badge">
-                <el-icon :size="20" color="#fff"><Select /></el-icon>
-              </div>
               <div class="media-recommend-tags">{{ m.tags }}</div>
             </div>
+          </div>
+
+          <!-- 空状态提示 -->
+          <div v-if="!aiGenerating && aiImages.length === 0 && savedMedia.length === 0 && !aiError && !promptLoading" style="text-align: center; padding: 20px; color: #909399">
+            编辑提示词后点击"生成配图"，AI 将为你创作 4 张配图
           </div>
         </el-card>
       </el-col>

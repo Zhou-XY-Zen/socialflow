@@ -47,14 +47,16 @@ const platforms = [
     name: '公众号',
     icon: 'Reading',
     color: '#576b95',
-    status: 'API对接中',
+    status: '辅助发布',
     statusType: 'warning' as const,
-    description: '微信公众号 API 对接中，即将支持自动发布',
+    description: '复制文案到公众号后台「新的创作」发布（自动发布需认证公众号）',
   },
 ]
 
 /** 所有内容列表 */
 const contentList = ref<ContentVO[]>([])
+/** 选中的平台（用于筛选内容） */
+const selectedPlatform = ref('')
 /** 选中的内容 ID */
 const selectedContentId = ref<number | undefined>(undefined)
 /** 准备发布的结果 */
@@ -73,6 +75,14 @@ const loadingTasks = ref(false)
 const mediaList = ref<any[]>([])
 /** 加载配图中 */
 const loadingMedia = ref(false)
+/** 自动发布中 loading */
+const autoPublishing = ref(false)
+
+/** 按平台筛选后的内容列表 */
+const filteredContentList = computed(() => {
+  if (!selectedPlatform.value) return contentList.value
+  return contentList.value.filter(c => c.platform === selectedPlatform.value)
+})
 
 /** 当前选中的内容对象 */
 const selectedContent = computed(() => {
@@ -271,6 +281,31 @@ function handleDownloadImages() {
   ElMessage.success(`正在下载 ${mediaList.value.length} 张配图...`)
 }
 
+/**
+ * 自动发布到微信公众号
+ */
+async function handleAutoPublish() {
+  if (!selectedContentId.value) {
+    ElMessage.warning('请先选择要发布的内容')
+    return
+  }
+  autoPublishing.value = true
+  try {
+    const result = await publishApi.autoPublish(selectedContentId.value, 'WECHAT_MP')
+    if (result.success) {
+      ElMessage.success('已成功发布到微信公众号')
+      // 刷新任务列表
+      loadTasks()
+    } else {
+      ElMessage.error(result.errorMessage || '发布失败，请稍后重试')
+    }
+  } catch (e) {
+    /* 错误已由拦截器处理 */
+  } finally {
+    autoPublishing.value = false
+  }
+}
+
 onMounted(() => {
   loadContentList()
   loadTasks()
@@ -316,8 +351,24 @@ onMounted(() => {
         </div>
       </template>
 
-      <!-- 选择内容 -->
+      <!-- 先选平台，再选内容 -->
       <el-form label-width="100px">
+        <el-form-item label="选择平台">
+          <el-radio-group
+            v-model="selectedPlatform"
+            @change="() => { selectedContentId = undefined; prepareResult = null; formattedText = ''; mediaList = [] }"
+          >
+            <el-radio-button value="">全部</el-radio-button>
+            <el-radio-button value="XIAOHONGSHU">小红书</el-radio-button>
+            <el-radio-button value="DOUYIN">抖音</el-radio-button>
+            <el-radio-button value="WECHAT_MOMENT">朋友圈</el-radio-button>
+            <el-radio-button value="WECHAT_MP">公众号</el-radio-button>
+          </el-radio-group>
+          <el-tag style="margin-left: 12px" type="info" size="small">
+            {{ filteredContentList.length }} 篇
+          </el-tag>
+        </el-form-item>
+
         <el-form-item label="选择内容">
           <el-select
             v-model="selectedContentId"
@@ -325,10 +376,11 @@ onMounted(() => {
             filterable
             style="width: 100%"
             :loading="loadingContent"
+            :disabled="filteredContentList.length === 0"
             @change="() => { prepareResult = null; formattedText = ''; mediaList = [] }"
           >
             <el-option
-              v-for="item in contentList"
+              v-for="item in filteredContentList"
               :key="item.id"
               :label="getOptionLabel(item)"
               :value="item.id"
@@ -378,6 +430,19 @@ onMounted(() => {
             <el-icon style="margin-right: 4px"><Download /></el-icon>
             下载全部配图（{{ mediaList.length }}张）
           </el-button>
+          <el-tooltip
+            v-if="selectedContent && selectedContent.platform === 'WECHAT_MP'"
+            content="自动发布需认证公众号，当前为辅助发布模式：请复制文案后到公众号后台手动发布"
+            placement="top"
+          >
+            <el-button
+              type="info"
+              disabled
+            >
+              <el-icon style="margin-right: 4px"><Upload /></el-icon>
+              自动发布（需认证）
+            </el-button>
+          </el-tooltip>
         </el-form-item>
 
         <!-- 格式化后的文案预览 -->

@@ -13,6 +13,7 @@
 import { onMounted, onUnmounted, ref, reactive, computed } from 'vue'
 import { evalApi, type EvalTaskVO, type EvalReportVO } from '@/api/eval'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Loading } from '@element-plus/icons-vue'
 
 /* ==================== 平台选项 ==================== */
 

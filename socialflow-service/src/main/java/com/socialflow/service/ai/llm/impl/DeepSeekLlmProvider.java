@@ -86,9 +86,12 @@ public class DeepSeekLlmProvider implements LlmProviderService {
             long latency = System.currentTimeMillis() - start;
             JsonNode root = JsonUtil.mapper().readTree(json);
 
-            // deepseek-reasoner 的回复在 choices[0].message.content
-            // 推理过程在 choices[0].message.reasoning_content（可选）
+            // deepseek-reasoner：只取 content（最终回答），不取 reasoning_content（推理过程）
             String content = root.path("choices").path(0).path("message").path("content").asText("");
+            // 过滤掉可能混入的 <think> 标签
+            if (content.contains("<think>")) {
+                content = content.replaceAll("<think>[\\s\\S]*?</think>", "").trim();
+            }
             int prompt = root.path("usage").path("prompt_tokens").asInt(0);
             int completion = root.path("usage").path("completion_tokens").asInt(0);
 
@@ -137,8 +140,17 @@ public class DeepSeekLlmProvider implements LlmProviderService {
                 .map(line -> {
                     try {
                         JsonNode node = JsonUtil.mapper().readTree(line);
-                        // deepseek-reasoner 流式：delta.content 是最终回答，delta.reasoning_content 是推理过程
-                        String content = node.path("choices").path(0).path("delta").path("content").asText("");
+                        JsonNode delta = node.path("choices").path(0).path("delta");
+                        // deepseek-reasoner：只取 content（最终回答），跳过 reasoning_content（推理过程）
+                        if (delta.has("reasoning_content") && !delta.has("content")) {
+                            return ""; // 纯推理 chunk，跳过
+                        }
+                        String content = delta.path("content").asText("");
+                        // 过滤掉可能的 <think> 标签包裹的推理内容
+                        if (content.contains("<think>") || content.contains("</think>")) {
+                            content = content.replaceAll("<think>[\\s\\S]*?</think>", "")
+                                             .replace("<think>", "").replace("</think>", "");
+                        }
                         return content;
                     } catch (Exception e) {
                         return "";

@@ -76,4 +76,12 @@ public interface EvalService {
      * @return 评测任务列表
      */
     List<EvalTask> listTasks(Long userId);
+
+    /**
+     * 删除评测任务及其所有评测结果。
+     *
+     * @param userId 操作者用户 ID（校验任务归属）
+     * @param taskId 要删除的评测任务 ID
+     */
+    void deleteTask(Long userId, Long taskId);
 }

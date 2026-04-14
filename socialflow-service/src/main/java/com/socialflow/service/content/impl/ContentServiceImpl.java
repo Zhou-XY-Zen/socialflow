@@ -205,6 +205,10 @@ public class ContentServiceImpl implements ContentService {
                 .doOnComplete(() -> {
                     try {
                         String fullContent = accumulated.toString();
+                        if (fullContent.isBlank()) {
+                            log.warn("流式生成完成但内容为空, userId={}, model={}", userId, config.getModel());
+                            return;
+                        }
                         // 异步执行输出安全检查（不阻塞流）
                         checkOutputSafely(userId, fullContent, dto.getPlatform(), finalRagContext);
                         // 用 TokenCountUtil 估算生成内容的 token 数（流式接口无法获取精确值）
@@ -216,8 +220,15 @@ public class ContentServiceImpl implements ContentService {
                         log.error("流式生成保存失败, userId={}", userId, e);
                     }
                 })
-                // 流出错时记录日志
-                .doOnError(e -> log.error("流式生成出错, userId={}", userId, e));
+                // 流出错时：发送错误事件给前端，而不是静默关闭
+                .onErrorResume(e -> {
+                    log.error("流式生成出错, userId={}, error={}", userId, e.getMessage(), e);
+                    String errorMsg = e.getMessage() != null ? e.getMessage() : "生成失败";
+                    String escapedMsg = errorMsg.replace("\\", "\\\\").replace("\"", "\\\"")
+                            .replace("\n", " ").replace("\r", "");
+                    // 发送一个错误事件给前端
+                    return Flux.just("event:error\ndata:{\"code\":500,\"message\":\"" + escapedMsg + "\"}\n\n");
+                });
     }
 
     /**

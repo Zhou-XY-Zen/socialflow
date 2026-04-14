@@ -321,6 +321,25 @@ public class EvalServiceImpl implements EvalService {
                         .orderByDesc(EvalTask::getCreateTime));
     }
 
+    @Override
+    public void deleteTask(Long userId, Long taskId) {
+        // 加载任务并校验归属
+        EvalTask task = evalTaskMapper.selectById(taskId);
+        if (task == null) {
+            throw new BusinessException("评测任务不存在: " + taskId);
+        }
+        if (!task.getUserId().equals(userId)) {
+            throw new BusinessException("无权删除此评测任务");
+        }
+        // 先删除该任务下的所有评测结果
+        evalResultMapper.delete(
+                new LambdaQueryWrapper<EvalResult>()
+                        .eq(EvalResult::getEvalTaskId, taskId));
+        // 再删除任务本身
+        evalTaskMapper.deleteById(taskId);
+        log.info("删除评测任务成功: taskId={}, name={}", taskId, task.getName());
+    }
+
     // ====================== 私有辅助方法 ======================
 
     /**

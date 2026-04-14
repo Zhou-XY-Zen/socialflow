@@ -3,7 +3,12 @@ package com.socialflow.service.ai.agent.impl;
 import com.socialflow.common.enums.AgentRole;
 import com.socialflow.common.enums.LlmProvider;
 import com.socialflow.common.util.JsonUtil;
+import com.socialflow.common.util.TokenCountUtil;
+import com.socialflow.dao.mapper.ContentMapper;
+import com.socialflow.dao.mapper.ContentVersionMapper;
 import com.socialflow.model.dto.MultiAgentGenerateDTO;
+import com.socialflow.model.entity.Content;
+import com.socialflow.model.entity.ContentVersion;
 import com.socialflow.service.ai.agent.AgentContext;
 import com.socialflow.service.ai.agent.MultiAgentService;
 import com.socialflow.service.ai.llm.ChatMessage;
@@ -32,8 +37,11 @@ import java.util.Map;
 @Service
 public class MultiAgentServiceImpl implements MultiAgentService {
 
-    /** LLM 请求路由器，根据提供者枚举分发到具体实现 */
+    /** LLM 请求路由器 */
     private final LlmRouter llmRouter;
+    /** 内容持久化 */
+    private final ContentMapper contentMapper;
+    private final ContentVersionMapper contentVersionMapper;
 
     /** 系统级 API 密钥，用于内部 Agent 调用 LLM */
     @Value("${socialflow.ai.system-api-key:}")
@@ -61,8 +69,10 @@ public class MultiAgentServiceImpl implements MultiAgentService {
     private static final String OPTIMIZER_PROMPT_TEMPLATE =
             "你是文案优化专家。根据审核意见优化以下文案：%s 审核意见：%s";
 
-    public MultiAgentServiceImpl(LlmRouter llmRouter) {
+    public MultiAgentServiceImpl(LlmRouter llmRouter, ContentMapper contentMapper, ContentVersionMapper contentVersionMapper) {
         this.llmRouter = llmRouter;
+        this.contentMapper = contentMapper;
+        this.contentVersionMapper = contentVersionMapper;
     }
 
     /**
@@ -99,7 +109,8 @@ public class MultiAgentServiceImpl implements MultiAgentService {
                 String planUserMsg = buildPlannerUserMessage(ctx);
                 String plan = callLlmSync(PLANNER_PROMPT, planUserMsg, config);
                 ctx.setPlan(plan);
-                emitTokenEvent(sink, plan);
+                // Planner 输出只作为内部数据，不推送给前端
+                emitStageEvent(sink, AgentRole.PLANNER, "策划完成，开始写作...");
                 log.info("【多Agent】PLANNER 阶段完成, userId={}, topic={}", userId, ctx.getTopic());
 
                 // ========== 3. 阶段二：WRITER（写作） ==========
@@ -108,6 +119,7 @@ public class MultiAgentServiceImpl implements MultiAgentService {
                 String writerUserMsg = buildWriterUserMessage(ctx);
                 String draft = callLlmSync(writerSystemPrompt, writerUserMsg, config);
                 ctx.setDraft(draft);
+                // Writer 输出是正文，推送给前端显示
                 emitTokenEvent(sink, draft);
                 log.info("【多Agent】WRITER 阶段完成, userId={}", userId);
 
@@ -120,7 +132,7 @@ public class MultiAgentServiceImpl implements MultiAgentService {
                     String reviewUserMsg = "请审核以下文案：\n" + ctx.getDraft();
                     String reviewResult = callLlmSync(REVIEWER_PROMPT, reviewUserMsg, config);
                     ctx.setReviewResult(reviewResult);
-                    emitTokenEvent(sink, reviewResult);
+                    // Reviewer 输出不推送正文，只更新阶段提示
                     log.info("【多Agent】REVIEWER 第{}轮完成, userId={}", round, userId);
 
                     // 判断审核是否通过
@@ -136,11 +148,38 @@ public class MultiAgentServiceImpl implements MultiAgentService {
                     String optimizerUserMsg = "请根据上述审核意见优化文案。";
                     String optimizedDraft = callLlmSync(optimizerSystemPrompt, optimizerUserMsg, config);
                     ctx.setDraft(optimizedDraft);
+                    // 发送特殊事件通知前端清空旧内容，再推送优化后的新版本
+                    sink.next("{\"clear\": true}");
                     emitTokenEvent(sink, optimizedDraft);
                     log.info("【多Agent】OPTIMIZER 第{}轮完成, userId={}", round, userId);
                 }
 
-                // ========== 5. 完成事件 ==========
+                // ========== 5. 保存到数据库 ==========
+                try {
+                    Content entity = new Content();
+                    entity.setUserId(userId);
+                    entity.setBody(ctx.getDraft());
+                    entity.setPlatform(dto.getPlatform());
+                    entity.setStatus("DRAFT");
+                    entity.setAiModel(defaultProvider + " (multi-agent)");
+                    entity.setTokenUsage(TokenCountUtil.estimate(ctx.getDraft()));
+                    if (dto.getKeywords() != null && !dto.getKeywords().isEmpty()) {
+                        entity.setTags(String.join(",", dto.getKeywords()));
+                    }
+                    contentMapper.insert(entity);
+                    // 保存版本
+                    ContentVersion version = new ContentVersion();
+                    version.setContentId(entity.getId());
+                    version.setVersionNum(1);
+                    version.setBodySnapshot(ctx.getDraft());
+                    version.setChangeDesc("AGENT_GENERATE");
+                    contentVersionMapper.insert(version);
+                    log.info("【多Agent】内容已保存, contentId={}", entity.getId());
+                } catch (Exception saveEx) {
+                    log.error("【多Agent】保存内容失败", saveEx);
+                }
+
+                // ========== 6. 完成事件 ==========
                 Map<String, Object> doneEvent = new HashMap<>();
                 doneEvent.put("stage", "DONE");
                 doneEvent.put("message", "生成完成");

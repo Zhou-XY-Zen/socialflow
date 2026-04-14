@@ -160,10 +160,20 @@ socialflow:
     enable-rerank: false
     rerank-model: bge-reranker-v2-m3
 
+  # AI 文生图配置（DashScope 通义万相 wanx 模型）
+  image:
+    dashscope-api-key: ${DASHSCOPE_API_KEY:sk-4668245a1acf47edbfb5597db19f71fc}
+    dashscope-base-url: https://dashscope.aliyuncs.com/api/v1
+    model: wanx-v1
+    image-count: 4
+    image-size: 1024*1024
+    poll-interval-ms: 3000
+    max-poll-count: 40
+
   publish:
     wechat-mp:
-      app-id: ${WECHAT_MP_APPID:}
-      app-secret: ${WECHAT_MP_SECRET:}
+      app-id: ${WECHAT_MP_APPID:wxb872119b3c3745d6}
+      app-secret: ${WECHAT_MP_SECRET:df859078b8b79f069757598cb98613fb}
 
 logging:
   level:

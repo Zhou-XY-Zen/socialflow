@@ -55,4 +55,13 @@ export const publishApi = {
    */
   tasks: () =>
     get<PublishTaskVO[]>('/publish/tasks'),
+
+  /**
+   * 自动发布到指定平台
+   * @param contentId 要发布的内容 ID
+   * @param platform 目标平台类型（如 WECHAT_MP）
+   * @returns 发布结果
+   */
+  autoPublish: (contentId: string | number, platform: string) =>
+    post<PublishResult>('/publish/auto', { contentId, platform }),
 }

@@ -51,16 +51,19 @@ public class PromptServiceImpl implements PromptService {
      */
     private static final String FALLBACK_SYSTEM_PROMPT =
             "你是一名专业的社媒文案写手，擅长为各大社交媒体平台撰写高质量的原创内容。" +
-            "你熟悉小红书、抖音、微信公众号等平台的内容风格和受众偏好，" +
-            "能够根据用户需求生成吸引人的、符合平台调性的文案。";
+            "你熟悉小红书、抖音、微信公众号、朋友圈等平台的内容风格和受众偏好，" +
+            "能够根据用户需求生成吸引人的、符合平台调性的文案。" +
+            "【重要】你必须严格遵守用户指定的字数限制，绝对不要超出。";
 
     /**
      * 兜底用户提示词模板 —— 当模板中没有定义 userPromptTemplate 时使用。
      *
-     * 包含基本的主题和关键词变量，覆盖最常见的文案生成场景。
+     * 包含主题、关键词、字数、平台等完整变量，确保字数限制生效。
      */
     private static final String FALLBACK_USER_PROMPT_TEMPLATE =
-            "请帮我撰写一篇关于「{{topic}}」的文案。{{#keywords}}关键词：{{keywords}}。{{/keywords}}";
+            "请帮我撰写一篇关于「{{topic}}」的{{platform}}文案。" +
+            "{{#keywords}}关键词：{{keywords}}。{{/keywords}}" +
+            "【字数硬限制】全文必须控制在 {{wordCount}} 字以内，严禁超出！这是最重要的要求。";
 
     /** 提示词模板 Mapper，用于从数据库查询模板数据 */
     private final PromptTemplateMapper promptTemplateMapper;

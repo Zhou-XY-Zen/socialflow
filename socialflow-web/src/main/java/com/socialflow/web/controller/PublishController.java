@@ -21,6 +21,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
@@ -80,6 +81,60 @@ public class PublishController {
         PlatformType platformType = PlatformType.of(content.getPlatform());
         Publisher publisher = publishRouter.get(platformType);
         PublishResult result = publisher.prepare(content);
+
+        return R.ok(result);
+    }
+
+    /**
+     * 自动发布到指定平台。
+     *
+     * 接口路径：POST /api/v1/publish/auto
+     *
+     * 功能：根据内容 ID 和平台类型，调用对应 Publisher 的 publish() 方法，
+     * 通过平台官方 API 自动发布内容。同时创建一条 PublishTask 记录用于追踪。
+     *
+     * @param body 请求体，包含 contentId（内容ID）和 platform（平台类型）
+     * @return 统一响应体 R，包含 PublishResult
+     */
+    @Operation(summary = "auto publish to platform")
+    @PostMapping("/auto")
+    public R<PublishResult> autoPublish(@RequestBody Map<String, Object> body) {
+        Long userId = StpUtil.getLoginIdAsLong();
+        Long contentId = Long.valueOf(body.get("contentId").toString());
+        String platform = body.get("platform").toString();
+
+        // 查询内容并校验归属
+        Content content = contentMapper.selectById(contentId);
+        if (content == null || !content.getUserId().equals(userId)) {
+            return R.fail("内容不存在或无权访问");
+        }
+
+        // 获取对应平台的 Publisher
+        PlatformType platformType = PlatformType.of(platform);
+        Publisher publisher = publishRouter.get(platformType);
+
+        if (!publisher.supportsAuto()) {
+            return R.fail("该平台不支持自动发布");
+        }
+
+        // 创建发布任务记录
+        PublishTask task = new PublishTask();
+        task.setContentId(contentId);
+        task.setPublishType("IMMEDIATE");
+        task.setStatus("EXECUTING");
+        task.setExecutedTime(LocalDateTime.now());
+        task.setRetryCount(0);
+        publishTaskMapper.insert(task);
+
+        // 调用 Publisher 执行自动发布（account 传 null，WechatMpPublisher 使用内部配置的 appId/appSecret）
+        PublishResult result = publisher.publish(content, null);
+
+        // 更新任务状态
+        task.setStatus(result.isSuccess() ? "SUCCESS" : "FAILED");
+        task.setResultMsg(result.isSuccess()
+                ? "发布成功" + (result.getPublishedUrl() != null ? ", URL: " + result.getPublishedUrl() : "")
+                : result.getErrorMessage());
+        publishTaskMapper.updateById(task);
 
         return R.ok(result);
     }

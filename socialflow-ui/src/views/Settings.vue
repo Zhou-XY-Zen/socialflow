@@ -237,7 +237,7 @@ onMounted(() => {
               class="avatar-img"
             />
             <div v-else class="avatar-placeholder">
-              <el-icon :size="36" color="#909399"><User /></el-icon>
+              <el-icon :size="40" color="#c0c4cc"><Avatar /></el-icon>
             </div>
             <div class="avatar-overlay">
               <el-icon :size="20" color="#fff"><Camera /></el-icon>

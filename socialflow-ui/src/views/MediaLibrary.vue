@@ -15,6 +15,7 @@
 import { onMounted, ref } from 'vue'
 import { mediaApi, type MediaAssetVO } from '@/api/media'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Delete, UploadFilled } from '@element-plus/icons-vue'
 
 // ==================== 素材列表数据 ====================
 
@@ -24,7 +25,7 @@ const mediaList = ref<MediaAssetVO[]>([])
 const loading = ref(false)
 /** 分页参数 */
 const pageNum = ref(1)
-const pageSize = ref(12)
+const pageSize = ref(20)
 const total = ref(0)
 
 /** 筛选条件 */
@@ -207,12 +208,11 @@ onMounted(() => {
         <el-button type="primary" @click="openUploadDialog">上传素材</el-button>
       </el-empty>
 
-      <!-- 素材卡片网格 -->
-      <el-row v-else :gutter="16">
-        <el-col
+      <!-- 素材卡片网格（一行 5 张） -->
+      <div v-else class="media-grid">
+        <div
           v-for="item in mediaList"
           :key="item.id"
-          :xs="12" :sm="8" :md="6" :lg="6"
         >
           <div class="media-card" @click="handlePreview(item)">
             <!-- 缩略图区域 -->
@@ -235,16 +235,15 @@ onMounted(() => {
                 <el-icon :size="16"><VideoCamera /></el-icon>
                 <span>视频</span>
               </div>
-              <!-- 悬浮删除按钮 -->
-              <div class="media-overlay">
-                <el-button
-                  type="danger"
-                  :icon="Delete"
-                  circle
-                  size="small"
-                  @click.stop="handleDelete(item)"
-                />
-              </div>
+              <!-- 右上角删除按钮（悬浮显示） -->
+              <el-button
+                class="media-delete-btn"
+                type="danger"
+                :icon="Delete"
+                circle
+                size="small"
+                @click.stop="handleDelete(item)"
+              />
             </div>
             <!-- 信息区域 -->
             <div class="media-info">
@@ -255,8 +254,8 @@ onMounted(() => {
               </div>
             </div>
           </div>
-        </el-col>
-      </el-row>
+        </div>
+      </div>
     </div>
 
     <!-- 分页 -->
@@ -265,7 +264,7 @@ onMounted(() => {
         v-model:current-page="pageNum"
         v-model:page-size="pageSize"
         :total="total"
-        :page-sizes="[12, 24, 36, 48]"
+        :page-sizes="[20, 50, 100]"
         layout="total, sizes, prev, pager, next, jumper"
         background
         @current-change="handlePageChange"
@@ -315,7 +314,7 @@ onMounted(() => {
     <el-dialog
       v-model="previewVisible"
       :title="previewItem?.fileName || '素材预览'"
-      width="70%"
+      width="50%"
       :close-on-click-modal="true"
       align-center
       class="preview-dialog"
@@ -346,10 +345,6 @@ onMounted(() => {
   </div>
 </template>
 
-<script lang="ts">
-import { Delete } from '@element-plus/icons-vue'
-export default { setup() { return { Delete } } }
-</script>
 
 <style scoped>
 .media-library {
@@ -385,6 +380,13 @@ export default { setup() { return { Delete } } }
   min-height: 300px;
 }
 
+/* 素材卡片网格：一行 5 张 */
+.media-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+}
+
 /* 素材卡片 */
 .media-card {
   border: 1px solid #e4e7ed;
@@ -392,7 +394,6 @@ export default { setup() { return { Delete } } }
   overflow: hidden;
   cursor: pointer;
   transition: box-shadow 0.2s, transform 0.2s;
-  margin-bottom: 16px;
   background: #fff;
 }
 
@@ -434,22 +435,16 @@ export default { setup() { return { Delete } } }
   pointer-events: none;
 }
 
-/* 悬浮删除按钮 */
-.media-overlay {
+/* 右上角删除按钮 */
+.media-delete-btn {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  top: 6px;
+  right: 6px;
   opacity: 0;
   transition: opacity 0.2s;
 }
 
-.media-card:hover .media-overlay {
+.media-card:hover .media-delete-btn {
   opacity: 1;
 }
 
@@ -498,9 +493,9 @@ export default { setup() { return { Delete } } }
 }
 
 .preview-img {
-  width: 100%;
-  max-height: 80vh;
-  object-fit: cover;
+  max-width: 100%;
+  max-height: 65vh;
+  object-fit: contain;
   border-radius: 8px;
 }
 

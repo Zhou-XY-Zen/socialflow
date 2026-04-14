@@ -13,6 +13,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -124,5 +125,20 @@ public class EvalController {
     @GetMapping("/tasks")
     public R<List<EvalTask>> listTasks() {
         return R.ok(evalService.listTasks(StpUtil.getLoginIdAsLong()));
+    }
+
+    /**
+     * 删除评测任务及其所有评测结果。
+     *
+     * 接口路径：DELETE /api/v1/eval/task/{taskId}
+     *
+     * @param taskId 要删除的评测任务 ID
+     * @return 统一响应体 R，无数据体
+     */
+    @Operation(summary = "delete eval task")
+    @DeleteMapping("/task/{taskId}")
+    public R<Void> deleteTask(@PathVariable Long taskId) {
+        evalService.deleteTask(StpUtil.getLoginIdAsLong(), taskId);
+        return R.ok();
     }
 }

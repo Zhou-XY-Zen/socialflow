@@ -242,7 +242,9 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<R<Void>> handleUnknown(Exception e) {
         log.error("unhandled exception", e);
+        // 开发环境返回详细错误信息，方便定位问题
+        String detail = e.getClass().getSimpleName() + ": " + e.getMessage();
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(R.fail(500, "internal server error"));
+                .body(R.fail(500, detail));
     }
 }
