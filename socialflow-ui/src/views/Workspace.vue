@@ -52,8 +52,12 @@ const currentTool = computed(
 
 <template>
   <div class="tool-shell">
-    <!-- 顶部 Tab 导航 -->
-    <el-tabs v-model="activeKey" class="tool-shell-tabs">
+    <!-- 顶部 Tab 导航：只在 ≥ 2 个工具时显示，单一工具时无需切换避免视觉冗余 -->
+    <el-tabs
+      v-if="tools.length > 1"
+      v-model="activeKey"
+      class="tool-shell-tabs"
+    >
       <el-tab-pane
         v-for="t in tools"
         :key="t.key"

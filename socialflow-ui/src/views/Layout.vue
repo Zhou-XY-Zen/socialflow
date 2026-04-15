@@ -16,30 +16,79 @@ const userStore = useUserStore()
 /** 侧边栏是否折叠 */
 const collapsed = ref(false)
 
-/** 菜单配置 */
-const menuItems = [
-  { path: '/workspace', label: '工作台', icon: 'EditPen' },
-  { path: '/content',   label: '内容库', icon: 'Files' },
-  { path: '/media',     label: '素材库', icon: 'Picture' },
-  { path: '/calendar',  label: '日历',   icon: 'Calendar' },
-  { path: '/knowledge', label: '知识库', icon: 'Reading' },
-  { path: '/template',  label: '模板',   icon: 'Collection' },
-  { path: '/eval',      label: '评估',   icon: 'DataAnalysis' },
-  { path: '/publish',   label: '分发',   icon: 'Promotion' },
-  { path: '/dashboard', label: '看板',   icon: 'TrendCharts' },
-  { path: '/settings',  label: '设置',   icon: 'Setting' },
+/**
+ * 主菜单按"工具"分组：
+ *   - 一级（MenuGroup）= 工具，本身不带 path，仅用于折叠分组
+ *   - 二级（MenuLeaf）= 工具的子功能，带 path 实际路由跳转
+ * 未来加一个无关方向的工具：在 menuGroups 数组追加一组即可。
+ */
+interface MenuLeaf {
+  path: string
+  label: string
+  icon: string
+}
+interface MenuGroup {
+  label: string
+  icon: string
+  children: MenuLeaf[]
+}
+
+const menuGroups: MenuGroup[] = [
+  {
+    label: '文案创作',
+    icon: 'EditPen',
+    children: [
+      { path: '/workspace', label: 'AI 创作工作台', icon: 'MagicStick' },
+      { path: '/content',   label: '内容库',        icon: 'Files' },
+      { path: '/media',     label: '素材库',        icon: 'Picture' },
+      { path: '/calendar',  label: '日历',          icon: 'Calendar' },
+      { path: '/knowledge', label: '知识库',        icon: 'Reading' },
+      { path: '/template',  label: '模板',          icon: 'Collection' },
+      { path: '/eval',      label: '评估',          icon: 'DataAnalysis' },
+      { path: '/publish',   label: '分发',          icon: 'Promotion' },
+      { path: '/dashboard', label: '看板',          icon: 'TrendCharts' },
+    ],
+  },
+  // 未来新增的无关方向工具在这里追加一组
 ]
+
+/**
+ * 系统级页面：不在左侧主菜单里渲染，仅用于顶栏标题/图标查找。
+ * 设置入口走右上角头像下拉。
+ */
+const systemPages: MenuLeaf[] = [
+  { path: '/settings', label: '个人设置', icon: 'Setting' },
+]
+
+/** 根据 path 在分组菜单 + 系统页面里查找对应 leaf */
+function findMenuByPath(path: string): MenuLeaf | undefined {
+  for (const g of menuGroups) {
+    const hit = g.children.find(c => c.path === path)
+    if (hit) return hit
+  }
+  return systemPages.find(s => s.path === path)
+}
 
 /** 当前激活的菜单路径 */
 const activePath = computed(() => route.path)
 
-/** 当前页面标题 */
-const currentTitle = computed(() => {
-  return (route.meta?.title as string) || menuItems.find(m => m.path === route.path)?.label || ''
+/** 当前路径所在分组的 label —— 用于让 sub-menu 自动展开当前工具组 */
+const defaultOpeneds = computed<string[]>(() => {
+  for (const g of menuGroups) {
+    if (g.children.some(c => c.path === route.path)) {
+      return [g.label]
+    }
+  }
+  return []
 })
 
-/** 当前页面对应的 menu item（用于获取图标） */
-const currentMenu = computed(() => menuItems.find(m => m.path === route.path))
+/** 当前页面标题（顶栏） */
+const currentTitle = computed(() => {
+  return (route.meta?.title as string) || findMenuByPath(route.path)?.label || ''
+})
+
+/** 当前页面对应的 menu leaf（顶栏图标） */
+const currentMenu = computed(() => findMenuByPath(route.path))
 
 async function logout() {
   try { await authApi.logout() } catch { /* ignore */ }
@@ -60,9 +109,10 @@ async function logout() {
         </transition>
       </div>
 
-      <!-- 菜单 -->
+      <!-- 菜单：按工具分组的折叠菜单 -->
       <el-menu
         :default-active="activePath"
+        :default-openeds="defaultOpeneds"
         :collapse="collapsed"
         :collapse-transition="false"
         class="sidebar-menu"
@@ -71,15 +121,26 @@ async function logout() {
         active-text-color="#ffffff"
         :router="true"
       >
-        <el-menu-item
-          v-for="item in menuItems"
-          :key="item.path"
-          :index="item.path"
-          class="menu-item-custom"
+        <el-sub-menu
+          v-for="group in menuGroups"
+          :key="group.label"
+          :index="group.label"
+          class="menu-group-custom"
         >
-          <el-icon><component :is="item.icon" /></el-icon>
-          <template #title>{{ item.label }}</template>
-        </el-menu-item>
+          <template #title>
+            <el-icon><component :is="group.icon" /></el-icon>
+            <span>{{ group.label }}</span>
+          </template>
+          <el-menu-item
+            v-for="child in group.children"
+            :key="child.path"
+            :index="child.path"
+            class="menu-item-custom"
+          >
+            <el-icon><component :is="child.icon" /></el-icon>
+            <template #title>{{ child.label }}</template>
+          </el-menu-item>
+        </el-sub-menu>
       </el-menu>
 
       <!-- 折叠按钮 -->
@@ -251,6 +312,61 @@ async function logout() {
 
 :deep(.menu-item-custom .el-icon) {
   font-size: 18px !important;
+}
+
+/* ---- 一级分组（el-sub-menu）标题 ---- */
+:deep(.menu-group-custom > .el-sub-menu__title) {
+  border-radius: var(--sf-radius-sm) !important;
+  margin: 4px 0 !important;
+  height: 44px !important;
+  line-height: 44px !important;
+  color: rgba(255, 255, 255, 0.85) !important;
+  font-weight: 500;
+  transition: all var(--sf-transition-fast) !important;
+}
+
+:deep(.menu-group-custom > .el-sub-menu__title:hover) {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: #fff !important;
+}
+
+:deep(.menu-group-custom > .el-sub-menu__title .el-icon) {
+  font-size: 18px !important;
+}
+
+/* sub-menu 展开后子项缩进显示层级 */
+:deep(.menu-group-custom .el-menu-item) {
+  padding-left: 44px !important;
+  height: 40px !important;
+  line-height: 40px !important;
+  font-size: 13px;
+}
+
+:deep(.menu-group-custom .el-menu-item .el-icon) {
+  font-size: 16px !important;
+}
+
+/* 折叠状态下，sub-menu 弹出的子菜单层保持深色基调 */
+:deep(.el-menu--vertical .el-menu--popup) {
+  background: linear-gradient(180deg, #1a2341 0%, #2d2a5a 100%) !important;
+  border-radius: 8px;
+  padding: 6px;
+}
+
+:deep(.el-menu--vertical .el-menu--popup .el-menu-item) {
+  border-radius: var(--sf-radius-sm) !important;
+  margin: 2px 0 !important;
+  color: rgba(255, 255, 255, 0.75) !important;
+}
+
+:deep(.el-menu--vertical .el-menu--popup .el-menu-item:hover) {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: #fff !important;
+}
+
+:deep(.el-menu--vertical .el-menu--popup .el-menu-item.is-active) {
+  background: rgba(102, 126, 234, 0.2) !important;
+  color: #fff !important;
 }
 
 /* 折叠按钮 */
