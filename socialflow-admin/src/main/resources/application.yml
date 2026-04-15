@@ -264,3 +264,33 @@ resilience4j:
         limit-refresh-period: 1s
         timeout-duration: 500ms
         register-health-indicator: false
+
+# ============================================================
+# Spring Boot Actuator + Prometheus
+# ============================================================
+# /actuator/health        —— 健康检查（含自定义 HealthIndicator，Wave 2.4）
+# /actuator/info          —— 应用元信息
+# /actuator/prometheus    —— Prometheus 抓取格式指标
+# /actuator/metrics       —— JSON 指标查询
+# /actuator/circuitbreakers —— Resilience4j 熔断状态
+# /actuator/retries       —— Resilience4j 重试统计
+# /actuator/ratelimiters  —— Resilience4j 限流状态
+# Prod 配置在 application-prod.yml 收紧（仅 health/info/prometheus）
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics,circuitbreakers,retries,ratelimiters,caches,flyway
+  endpoint:
+    health:
+      show-details: when-authorized
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      application: socialflow
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+      slo:
+        http.server.requests: 100ms,300ms,500ms,1s,3s

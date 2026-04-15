@@ -150,9 +150,12 @@ public class ContentServiceImpl implements ContentService {
         Content entity = saveContent(userId, dto, response.getContent(),
                 response.getModel(), response.getTotalTokens());
 
-        // 第七步：转换为视图对象并附加警告信息
+        // 第七步：转换为视图对象并附加警告信息 + Wave 3.4 fallback 透传
         ContentVO vo = toVo(entity);
         vo.setGuardrailWarnings(guardrailWarnings);
+        vo.setProviderUsed(response.getProviderUsed() != null
+                ? response.getProviderUsed() : defaultProvider);
+        vo.setFallback(response.isFallback());
         return vo;
     }
 

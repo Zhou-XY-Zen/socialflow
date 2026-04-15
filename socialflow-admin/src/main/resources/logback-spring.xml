@@ -2,9 +2,14 @@
 <configuration>
     <springProperty scope="context" name="appName" source="spring.application.name" defaultValue="socialflow"/>
 
+    <!-- 日志格式中加 [%X{traceId:-}] —— 由 MdcTraceIdFilter 在请求入口写入 MDC，
+         整条请求链路（controller / service / WebClient 回调）共用同一 traceId 便于排查 -->
+    <property name="LOG_PATTERN"
+              value="%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] [%X{traceId:-}] %-5level %logger{40} - %msg%n"/>
+
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
-            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{40} - %msg%n</pattern>
+            <pattern>${LOG_PATTERN}</pattern>
             <charset>UTF-8</charset>
         </encoder>
     </appender>
@@ -19,7 +24,7 @@
                 <totalSizeCap>10GB</totalSizeCap>
             </rollingPolicy>
             <encoder>
-                <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{40} - %msg%n</pattern>
+                <pattern>${LOG_PATTERN}</pattern>
                 <charset>UTF-8</charset>
             </encoder>
         </appender>

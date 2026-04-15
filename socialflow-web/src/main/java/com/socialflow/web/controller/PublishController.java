@@ -16,12 +16,14 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 
@@ -149,6 +151,106 @@ public class PublishController {
      *
      * @return 统一响应体 R，包含发布任务列表
      */
+    /**
+     * 创建定时发布任务（Wave 3.1）。
+     *
+     * <p>请求体：{@code {"contentId": 123, "scheduledTime": "2026-04-15T20:00:00", "platformAccountId": null}}</p>
+     *
+     * <p>创建后任务以 {@code status=PENDING, publish_type=SCHEDULED} 入库，
+     * 由 {@link com.socialflow.service.publish.ScheduledPublishExecutor} 每 30s 扫描到期触发。</p>
+     */
+    @Operation(summary = "schedule a publish task at a future time")
+    @PostMapping("/schedule")
+    public R<PublishTask> schedule(@RequestBody Map<String, Object> body) {
+        Long userId = StpUtil.getLoginIdAsLong();
+        Long contentId = Long.valueOf(body.get("contentId").toString());
+        String scheduledTimeStr = String.valueOf(body.get("scheduledTime"));
+
+        Content content = contentMapper.selectById(contentId);
+        if (content == null || !content.getUserId().equals(userId)) {
+            return R.fail("内容不存在或无权访问");
+        }
+
+        LocalDateTime scheduledTime;
+        try {
+            scheduledTime = LocalDateTime.parse(scheduledTimeStr, DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+        } catch (Exception e) {
+            return R.fail("scheduledTime 格式错误，需要 ISO yyyy-MM-ddTHH:mm:ss");
+        }
+        if (scheduledTime.isBefore(LocalDateTime.now())) {
+            return R.fail("scheduledTime 必须晚于当前时间");
+        }
+
+        PublishTask task = new PublishTask();
+        task.setContentId(contentId);
+        Object accId = body.get("platformAccountId");
+        if (accId != null) {
+            task.setPlatformAccountId(Long.valueOf(accId.toString()));
+        }
+        task.setPublishType("SCHEDULED");
+        task.setStatus("PENDING");
+        task.setScheduledTime(scheduledTime);
+        task.setRetryCount(0);
+        publishTaskMapper.insert(task);
+
+        return R.ok(task);
+    }
+
+    /**
+     * 取消尚未执行的定时任务（Wave 3.1）。
+     *
+     * <p>仅 status=PENDING 的任务可取消；EXECUTING/SUCCESS/FAILED_PERMANENT 都拒绝。</p>
+     */
+    @Operation(summary = "cancel a pending scheduled publish task")
+    @PostMapping("/tasks/{id}/cancel")
+    public R<PublishTask> cancelTask(@PathVariable Long id) {
+        Long userId = StpUtil.getLoginIdAsLong();
+        PublishTask task = publishTaskMapper.selectById(id);
+        if (task == null) {
+            return R.fail("任务不存在");
+        }
+        Content content = contentMapper.selectById(task.getContentId());
+        if (content == null || !content.getUserId().equals(userId)) {
+            return R.fail("无权操作此任务");
+        }
+        if (!"PENDING".equals(task.getStatus())) {
+            return R.fail("仅 PENDING 状态的任务可取消，当前状态：" + task.getStatus());
+        }
+        task.setStatus("CANCELLED");
+        task.setResultMsg("用户主动取消");
+        publishTaskMapper.updateById(task);
+        return R.ok(task);
+    }
+
+    /**
+     * 手动重试失败的任务（Wave 3.1）。
+     *
+     * <p>把 status FAILED/FAILED_PERMANENT 重置为 PENDING，retryCount 清零，
+     * scheduledTime 设为现在，让 ScheduledPublishExecutor 下次扫描时立即处理。</p>
+     */
+    @Operation(summary = "manually retry a failed publish task")
+    @PostMapping("/tasks/{id}/retry")
+    public R<PublishTask> retryTask(@PathVariable Long id) {
+        Long userId = StpUtil.getLoginIdAsLong();
+        PublishTask task = publishTaskMapper.selectById(id);
+        if (task == null) {
+            return R.fail("任务不存在");
+        }
+        Content content = contentMapper.selectById(task.getContentId());
+        if (content == null || !content.getUserId().equals(userId)) {
+            return R.fail("无权操作此任务");
+        }
+        if (!"FAILED".equals(task.getStatus()) && !"FAILED_PERMANENT".equals(task.getStatus())) {
+            return R.fail("仅失败的任务可重试，当前状态：" + task.getStatus());
+        }
+        task.setStatus("PENDING");
+        task.setRetryCount(0);
+        task.setScheduledTime(LocalDateTime.now());
+        task.setResultMsg("用户手动重试");
+        publishTaskMapper.updateById(task);
+        return R.ok(task);
+    }
+
     @Operation(summary = "list publish tasks for current user")
     @GetMapping("/tasks")
     public R<List<PublishTask>> tasks() {

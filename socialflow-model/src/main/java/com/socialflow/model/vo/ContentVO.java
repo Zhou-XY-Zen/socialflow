@@ -142,4 +142,19 @@ public class ContentVO implements Serializable {
      */
     @Schema(description = "source chunks from RAG (if any)")
     private List<RagSourceVO> ragSources;
+
+    /**
+     * 实际使用的 LLM provider（Wave 3.4）。
+     *
+     * 当主 provider 失败/熔断、走 fallback 时，这里反映兜底用到的 provider。
+     * 前端可显示 "已从 DeepSeek 切换到 Qwen" 提示。
+     */
+    @Schema(description = "actual LLM provider used (may differ from requested if fallback)")
+    private String providerUsed;
+
+    /**
+     * 是否走了 fallback 路径（Wave 3.4）。
+     */
+    @Schema(description = "true if response came from fallback chain")
+    private Boolean fallback;
 }

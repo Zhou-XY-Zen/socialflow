@@ -54,4 +54,22 @@ public class LlmResponse {
      * 从发送请求到收到完整响应的时间，用于性能监控和 SLA 追踪。
      */
     private Long latencyMs;
+
+    /**
+     * 实际使用的 Provider 名称（Wave 3.4）。
+     *
+     * <p>正常情况下与请求时指定的 provider 一致；但当 Resilience4j 熔断触发、
+     * 或 LlmRouter 启动跨 provider fallback 时，这里会反映实际兜底用到的 provider。
+     * 前端可借此提示用户："已从 DeepSeek 切换到 Qwen"。</p>
+     */
+    private String providerUsed;
+
+    /**
+     * 是否走了降级路径（Wave 3.4）。
+     *
+     * <p>{@code true} 表示主 provider 失败/熔断，本次响应来自 fallback 链路。
+     * 默认 {@code false}（主 provider 正常返回）。</p>
+     */
+    @Builder.Default
+    private boolean fallback = false;
 }
