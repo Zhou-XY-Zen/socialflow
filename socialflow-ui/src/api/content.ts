@@ -10,7 +10,7 @@
  * ============================================================
  */
 
-import http, { get, post, del } from './http'
+import http, { get, post, put, del } from './http'
 import type { ContentGenerateDTO, ContentVO, PageResult, R } from '@/types/api'
 
 /**
@@ -120,10 +120,29 @@ export const contentApi = {
   exportUrl: (id: number | string) => `/api/v1/content/${id}/export`,
 
   /**
-   * 批量删除内容
-   * @param ids 内容 ID 数组
+   * Wave 4.3 - 批量软删（POST /content/bulk/delete，body 是 {ids:[...]}）。
+   * 返回实际删除条数。
    */
-  batchDelete: (ids: number[]) => post<void>('/content/batch-delete', ids),
+  batchDelete: (ids: number[]) =>
+    post<{ affected: number }>('/content/bulk/delete', { ids }),
+
+  /**
+   * Wave 4.3 - 批量改状态（DRAFT/SCHEDULED/PUBLISHED 等）。
+   */
+  bulkUpdateStatus: (ids: number[], status: string) =>
+    post<{ affected: number }>('/content/bulk/status', { ids, status }),
+
+  /**
+   * Wave 4.3 - autosave 草稿。仅更新 title/body/tags，不写版本快照。
+   * 前端可在编辑表单上用 lodash.debounce 包一层，每 3s 调用。
+   */
+  saveDraft: (id: number, body: { title?: string; body?: string; tags?: string }) =>
+    put<ContentVO>(`/content/${id}/draft`, body),
+
+  /**
+   * Wave 4.3 - 克隆内容为新草稿（不复制版本/发布任务/媒体关联）。
+   */
+  clone: (id: number) => post<ContentVO>(`/content/${id}/clone`),
 
   /**
    * 批量导出内容（返回下载 URL）

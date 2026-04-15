@@ -401,10 +401,25 @@ onUnmounted(() => {
             {{ item.docName || '未知文档' }} - 片段 #{{ item.chunkIndex }}
           </span>
           <el-tag type="warning" size="small" v-if="item.score != null">
-            相似度: {{ item.score.toFixed(4) }}
+            相关度: {{ item.score.toFixed(4) }}
           </el-tag>
         </div>
-        <div style="white-space: pre-wrap; line-height: 1.6; color: #303133; font-size: 14px">
+        <!-- Wave 4.1: snippet 摘录优先显示，避免大段全文淹没用户视线 -->
+        <div
+          v-if="item.snippet"
+          style="background: #fffbe6; border-left: 3px solid #faad14; padding: 8px 12px; margin-bottom: 8px; font-size: 13px; line-height: 1.6; color: #303133"
+        >
+          <el-icon style="margin-right: 4px; vertical-align: middle"><MagicStick /></el-icon>
+          <span style="vertical-align: middle">{{ item.snippet }}</span>
+        </div>
+        <el-collapse v-if="item.snippet">
+          <el-collapse-item title="查看完整片段" name="full">
+            <div style="white-space: pre-wrap; line-height: 1.6; color: #303133; font-size: 14px">
+              {{ item.contentText }}
+            </div>
+          </el-collapse-item>
+        </el-collapse>
+        <div v-else style="white-space: pre-wrap; line-height: 1.6; color: #303133; font-size: 14px">
           {{ item.contentText }}
         </div>
       </el-card>

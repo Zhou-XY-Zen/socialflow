@@ -53,15 +53,36 @@ export const imageApi = {
     post<ImagePromptVO>('/image/extract-prompt', { text }),
 
   /**
-   * 提交 AI 文生图异步任务。
+   * 提交 AI 文生图异步任务（Wave 4.2 升级响应结构）。
    *
-   * 调用 DashScope wanx 模型开始生成图片，
-   * 返回任务 ID 供后续轮询使用。
+   * <p>响应格式：</p>
+   * <ul>
+   *   <li>{@code cached=true}：同 prompt 命中缓存，{@code mediaIds + imageUrls} 直接可用，无需轮询</li>
+   *   <li>{@code cached=false}：返回 {@code taskId}，前端轮询 status 直到 SUCCEEDED</li>
+   * </ul>
    *
    * @param prompt 英文绘图提示词
    */
   generate: (prompt: string) =>
-    post<{ taskId: string }>('/image/generate', { prompt }),
+    post<{
+      cached: boolean
+      taskId?: string
+      mediaIds?: number[]
+      imageUrls?: string[]
+    }>('/image/generate', { prompt }),
+
+  /**
+   * Wave 4.2 - 用户从生成的 4 个变体中选择并下载入库（写入去重缓存）。
+   *
+   * @param prompt 原始 prompt（用作缓存 key）
+   * @param imageUrls wanx 返回的 4 个图片 URL
+   * @param selected 选中的索引数组（如 [0, 2]）
+   * @param tags 素材标签
+   */
+  selectVariants: (prompt: string, imageUrls: string[], selected: number[], tags = 'AI生成') =>
+    post<{ count: number; assets: MediaAssetVO[] }>('/image/select', {
+      prompt, imageUrls, selected, tags,
+    }),
 
   /**
    * 查询文生图任务状态。

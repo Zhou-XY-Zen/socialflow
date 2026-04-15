@@ -14,6 +14,7 @@ import { onMounted, onUnmounted, ref, reactive, computed } from 'vue'
 import { evalApi, type EvalTaskVO, type EvalReportVO } from '@/api/eval'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Loading } from '@element-plus/icons-vue'
+import { useUserStore } from '@/stores/user'
 import PageHeader from '@/components/PageHeader.vue'
 import StatCard from '@/components/StatCard.vue'
 
@@ -246,6 +247,39 @@ async function handleViewReport(task: EvalTaskVO) {
 function pct(count: number, total: number): string {
   if (total === 0) return '0%'
   return (count / total * 100).toFixed(1) + '%'
+}
+
+/**
+ * Wave 4.6 - 下载评估报告 CSV。
+ *
+ * 用 fetch + Authorization 头拿到 blob，触发浏览器下载。
+ * 比用 a 标签 + token query 更通用（后端不需要支持从 query 读 token）。
+ */
+async function exportReportCsv() {
+  if (!reportData.value) return
+  const taskId = reportData.value.taskId
+  try {
+    const userStore = useUserStore()
+    const res = await fetch(evalApi.exportUrl(taskId), {
+      headers: { Authorization: `Bearer ${userStore.token || ''}` },
+    })
+    if (!res.ok) {
+      ElMessage.error(`下载失败: HTTP ${res.status}`)
+      return
+    }
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `eval_${taskId}.csv`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+    ElMessage.success('CSV 已下载')
+  } catch (e: any) {
+    ElMessage.error('下载失败: ' + (e?.message || ''))
+  }
 }
 
 /** 获取维度中文名 */
@@ -504,6 +538,13 @@ onUnmounted(() => {
     >
       <div v-loading="reportLoading" style="min-height: 200px">
         <template v-if="reportData && !reportLoading">
+          <!-- Wave 4.6: 工具栏 - 导出 CSV -->
+          <div style="display: flex; justify-content: flex-end; margin-bottom: 12px">
+            <el-button type="primary" @click="exportReportCsv">
+              <el-icon style="margin-right: 4px"><Download /></el-icon>
+              下载 CSV 报告
+            </el-button>
+          </div>
           <!-- 顶部：总体统计卡片 -->
           <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px;">
             <StatCard

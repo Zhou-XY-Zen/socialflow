@@ -24,6 +24,8 @@ export interface EvalTaskVO {
   totalCases: number    // 总测试用例数
   completedCases: number // 已完成用例数
   createTime?: string   // 创建时间
+  /** Wave 4.6: 配对 t 检验 p-value，COMPLETED 后才有；< 0.05 表示显著差异 */
+  pValue?: number
 }
 
 /**
@@ -79,4 +81,10 @@ export const evalApi = {
    * @returns EvalReportVO 评估报告
    */
   getReport: (taskId: string | number) => get<EvalReportVO>(`/eval/task/${taskId}/report`),
+
+  /**
+   * Wave 4.6 - 导出评估报告 CSV 下载 URL（直接组装路径触发浏览器下载）。
+   * 需要带 token，前端 a 标签 href 加上 ?token=xxx 参数。
+   */
+  exportUrl: (taskId: string | number) => `/api/v1/eval/task/${taskId}/export`,
 }

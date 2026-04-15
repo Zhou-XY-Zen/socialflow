@@ -1,6 +1,6 @@
 import { get, post, del } from './http'
 import http from './http'
-import type { R } from '@/types/api'
+import type { R, TemplatePreviewVO } from '@/types/api'
 
 export interface TemplateVO {
   id: string | number
@@ -28,4 +28,13 @@ export const templateApi = {
 
   delete: (id: string | number) =>
     del<void>(`/template/${id}`),
+
+  /**
+   * Wave 4.4 - 模板预览：用样例变量试渲染，给出变量诊断（缺失/未使用/已用）。
+   *
+   * @param id 模板 ID
+   * @param sampleVars 样例变量映射（如 {topic:"咖啡", tone:"活泼"}）
+   */
+  preview: (id: string | number, sampleVars: Record<string, unknown>) =>
+    post<TemplatePreviewVO>(`/template/${id}/preview`, sampleVars),
 }

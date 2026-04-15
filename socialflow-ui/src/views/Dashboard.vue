@@ -11,12 +11,15 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { contentApi } from '@/api/content'
-import type { ContentVO } from '@/types/api'
+import { dashboardApi } from '@/api/dashboard'
+import type { ContentVO, DashboardOverviewVO } from '@/types/api'
 import PageHeader from '@/components/PageHeader.vue'
 import StatCard from '@/components/StatCard.vue'
 
-/** 所有内容列表（最多加载 100 条用于统计） */
+/** 所有内容列表（最多加载 100 条用于统计 + 最近内容表展示） */
 const allContent = ref<ContentVO[]>([])
+/** Wave 3.2: 后端聚合的总览数据（优先用，client-side 聚合作 fallback） */
+const overview = ref<DashboardOverviewVO | null>(null)
 /** 加载状态 */
 const loading = ref(false)
 /** 详情弹窗可见性 */
@@ -25,13 +28,21 @@ const detailDialogVisible = ref(false)
 const currentDetail = ref<ContentVO | null>(null)
 
 /**
- * 加载内容数据
+ * 加载数据：并行拉后端 overview + 内容列表，前者失败时降级到 client-side 聚合。
  */
 async function loadData() {
   loading.value = true
   try {
-    const result = await contentApi.list({ pageNum: 1, pageSize: 100 })
-    allContent.value = result.records
+    const [overviewResult, listResult] = await Promise.allSettled([
+      dashboardApi.overview(),
+      contentApi.list({ pageNum: 1, pageSize: 100 }),
+    ])
+    if (overviewResult.status === 'fulfilled') {
+      overview.value = overviewResult.value
+    }
+    if (listResult.status === 'fulfilled') {
+      allContent.value = listResult.value.records
+    }
   } catch (e) {
     /* 错误已由拦截器处理 */
   } finally {
@@ -39,8 +50,18 @@ async function loadData() {
   }
 }
 
-/** 总内容数 */
-const totalCount = computed(() => allContent.value.length)
+/** 总内容数（优先用后端聚合） */
+const totalCount = computed(() =>
+  overview.value?.contentTotal ?? allContent.value.length)
+
+/** Wave 3.2: 待执行的定时发布数（后端聚合，无 fallback） */
+const scheduledPending = computed(() => overview.value?.scheduledPending ?? 0)
+
+/** Wave 3.2: 近 7 日 AI 调用次数 */
+const aiCalls7d = computed(() => overview.value?.aiCalls7d ?? 0)
+
+/** Wave 3.2: 近 7 日 AI 累计成本（美元） */
+const aiCost7d = computed(() => Number(overview.value?.aiCost7d ?? 0).toFixed(4))
 
 /** 平台数（去重） */
 const platformCount = computed(() => {
@@ -54,8 +75,9 @@ const todayCount = computed(() => {
   return allContent.value.filter(c => c.createTime?.startsWith(today)).length
 })
 
-/** 总 Token 消耗 */
+/** 总 Token 消耗（优先用后端 7 日真实数据，否则降级到 client-side 累计 100 条） */
 const totalTokens = computed(() => {
+  if (overview.value?.aiTokens7d != null) return overview.value.aiTokens7d
   return allContent.value.reduce((sum, c) => sum + (c.tokenUsage || 0), 0)
 })
 
@@ -226,6 +248,31 @@ onMounted(loadData)
         :value="tokenRanking.length > 0 ? (tokenRanking[0].tokenUsage || 0).toLocaleString() : '--'"
         icon="Timer"
         color="warning"
+      />
+    </div>
+
+    <!-- Wave 3.2: 后端聚合的真实 7 日数据 + 待执行任务 -->
+    <div v-if="overview" class="stat-grid stat-grid--3">
+      <StatCard
+        label="待执行定时任务"
+        :value="scheduledPending"
+        icon="AlarmClock"
+        color="warning"
+        hint="尚未到点的 SCHEDULED PublishTask"
+      />
+      <StatCard
+        label="近 7 日 AI 调用"
+        :value="aiCalls7d.toLocaleString()"
+        icon="MagicStick"
+        color="primary"
+        hint="ai_usage_log 真实统计"
+      />
+      <StatCard
+        :label="'近 7 日成本 (USD)'"
+        :value="aiCost7d"
+        icon="Money"
+        color="danger"
+        hint="按 provider 单价累加"
       />
     </div>
 

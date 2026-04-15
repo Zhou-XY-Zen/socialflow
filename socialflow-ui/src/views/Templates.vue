@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { templateApi, type TemplateVO } from '@/api/template'
+import type { TemplatePreviewVO } from '@/types/api'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import PageHeader from '@/components/PageHeader.vue'
 import EmptyState from '@/components/EmptyState.vue'
@@ -105,6 +106,37 @@ function openDetail(tpl: TemplateVO) {
   detailVisible.value = true
 }
 
+/* ===================== Wave 4.4 模板预览 ===================== */
+const previewVisible = ref(false)
+const previewLoading = ref(false)
+const previewVarsText = ref('{\n  "topic": "咖啡探店",\n  "tone": "活泼",\n  "wordCount": 300\n}')
+const previewResult = ref<TemplatePreviewVO | null>(null)
+
+function openPreview(tpl: TemplateVO) {
+  detailItem.value = tpl
+  previewResult.value = null
+  previewVisible.value = true
+}
+
+async function runPreview() {
+  if (!detailItem.value) return
+  let vars: Record<string, unknown> = {}
+  try {
+    vars = JSON.parse(previewVarsText.value)
+  } catch {
+    ElMessage.warning('样例变量必须是合法 JSON')
+    return
+  }
+  previewLoading.value = true
+  try {
+    previewResult.value = await templateApi.preview(detailItem.value.id, vars)
+  } catch {
+    /* 拦截器已提示 */
+  } finally {
+    previewLoading.value = false
+  }
+}
+
 onMounted(loadList)
 </script>
 
@@ -151,6 +183,7 @@ onMounted(loadList)
             </p>
           </div>
           <div style="margin-top: 12px; display: flex; justify-content: flex-end; gap: 4px" @click.stop>
+            <el-button link type="success" size="small" @click="openPreview(tpl)">预览</el-button>
             <el-button link type="primary" size="small" @click="openEdit(tpl)">编辑</el-button>
             <el-button link type="danger" size="small" @click="handleDelete(tpl)">删除</el-button>
           </div>
@@ -221,6 +254,53 @@ onMounted(loadList)
       <div v-if="detailItem?.userPromptTemplate" style="margin-top: 16px">
         <h4 style="margin: 0 0 8px">用户提示词模板</h4>
         <div style="background: #f5f7fa; padding: 12px; border-radius: 6px; font-size: 13px; line-height: 1.8; white-space: pre-wrap; color: #409eff">{{ detailItem.userPromptTemplate }}</div>
+      </div>
+    </el-dialog>
+
+    <!-- Wave 4.4: 模板预览对话框 —— 用样例变量试渲染 + 显示变量诊断 -->
+    <el-dialog
+      v-model="previewVisible"
+      :title="`模板预览 - ${detailItem?.templateName || ''}`"
+      width="780px"
+    >
+      <el-form label-position="top">
+        <el-form-item label="样例变量（JSON）">
+          <el-input
+            v-model="previewVarsText"
+            type="textarea"
+            :rows="6"
+            placeholder='{"topic":"咖啡探店","tone":"活泼"}'
+          />
+        </el-form-item>
+        <el-button type="primary" :loading="previewLoading" @click="runPreview">
+          运行预览
+        </el-button>
+      </el-form>
+
+      <div v-if="previewResult" style="margin-top: 20px">
+        <!-- 变量诊断 -->
+        <h4 style="margin: 0 0 8px">变量诊断</h4>
+        <el-row :gutter="12" style="margin-bottom: 16px">
+          <el-col :span="8">
+            <div style="font-size: 12px; color: #909399; margin-bottom: 4px">已声明（{{ previewResult.declaredVariables.length }}）</div>
+            <el-tag v-for="v in previewResult.declaredVariables" :key="'d'+v" size="small" style="margin: 2px">{{ v }}</el-tag>
+          </el-col>
+          <el-col :span="8">
+            <div style="font-size: 12px; color: #f56c6c; margin-bottom: 4px">缺失（{{ previewResult.missingVariables.length }}）</div>
+            <el-tag v-for="v in previewResult.missingVariables" :key="'m'+v" type="danger" size="small" style="margin: 2px">{{ v }}</el-tag>
+            <span v-if="previewResult.missingVariables.length === 0" style="font-size: 12px; color: #67c23a">✓ 全部已提供</span>
+          </el-col>
+          <el-col :span="8">
+            <div style="font-size: 12px; color: #909399; margin-bottom: 4px">未使用（{{ previewResult.unusedVariables.length }}）</div>
+            <el-tag v-for="v in previewResult.unusedVariables" :key="'u'+v" type="info" size="small" style="margin: 2px">{{ v }}</el-tag>
+          </el-col>
+        </el-row>
+
+        <h4 style="margin: 0 0 8px">渲染后 System Prompt</h4>
+        <div style="background: #f5f7fa; padding: 12px; border-radius: 6px; font-size: 13px; line-height: 1.8; white-space: pre-wrap; max-height: 200px; overflow: auto">{{ previewResult.renderedSystemPrompt }}</div>
+
+        <h4 style="margin: 16px 0 8px">渲染后 User Prompt</h4>
+        <div style="background: #ecf5ff; padding: 12px; border-radius: 6px; font-size: 13px; line-height: 1.8; white-space: pre-wrap; max-height: 200px; overflow: auto; color: #409eff">{{ previewResult.renderedUserPrompt }}</div>
       </div>
     </el-dialog>
   </div>

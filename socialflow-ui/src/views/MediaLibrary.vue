@@ -344,6 +344,13 @@ onMounted(() => {
         <span>文件名：{{ previewItem.fileName }}</span>
         <span>大小：{{ formatSize(previewItem.fileSize) }}</span>
         <span>类型：{{ previewItem.mimeType }}</span>
+        <!-- Wave 4.5: 图像尺寸 + SHA-256 哈希 -->
+        <span v-if="(previewItem as any).width && (previewItem as any).height">
+          尺寸：{{ (previewItem as any).width }} × {{ (previewItem as any).height }} px
+        </span>
+        <span v-if="(previewItem as any).sha256" :title="(previewItem as any).sha256" style="font-family: monospace; font-size: 12px">
+          SHA-256：{{ (previewItem as any).sha256.substring(0, 12) }}…
+        </span>
         <span v-if="previewItem.tags">标签：{{ previewItem.tags }}</span>
         <span v-if="previewItem.createTime">上传时间：{{ previewItem.createTime }}</span>
       </div>

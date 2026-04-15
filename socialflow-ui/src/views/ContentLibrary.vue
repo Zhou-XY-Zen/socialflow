@@ -10,7 +10,7 @@
 -->
 
 <script setup lang="ts">
-import { onMounted, reactive, ref, computed } from 'vue'
+import { onMounted, reactive, ref, computed, watch } from 'vue'
 import { contentApi } from '@/api/content'
 import { get } from '@/api/http'
 import type { ContentVO, PageResult } from '@/types/api'
@@ -76,6 +76,41 @@ const editForm = reactive({
 })
 /** 编辑保存中 */
 const editSaving = ref(false)
+
+/* ===================== Wave 4.3 autosave ===================== */
+/** autosave 状态文本（"已保存 12:34:56" / "保存中..." / ""） */
+const autosaveStatus = ref('')
+/** autosave 防抖定时器 */
+let autosaveTimer: ReturnType<typeof setTimeout> | null = null
+
+function scheduleAutosave() {
+  if (!editVisible.value || !editForm.id) return
+  autosaveStatus.value = '编辑中...'
+  if (autosaveTimer) clearTimeout(autosaveTimer)
+  autosaveTimer = setTimeout(async () => {
+    if (!editVisible.value || !editForm.id) return
+    try {
+      autosaveStatus.value = '保存中...'
+      await contentApi.saveDraft(editForm.id, {
+        title: editForm.title,
+        body: editForm.body,
+        tags: editForm.tags,
+      })
+      const t = new Date()
+      const hh = String(t.getHours()).padStart(2, '0')
+      const mm = String(t.getMinutes()).padStart(2, '0')
+      const ss = String(t.getSeconds()).padStart(2, '0')
+      autosaveStatus.value = `已自动保存 ${hh}:${mm}:${ss}`
+    } catch {
+      autosaveStatus.value = '自动保存失败，请手动保存'
+    }
+  }, 3000)
+}
+
+// 监听 editForm 变化触发 autosave 防抖
+watch(() => `${editForm.title}|${editForm.body}|${editForm.tags}`, () => {
+  scheduleAutosave()
+})
 
 /* ===================== 版本历史抽屉相关 ===================== */
 /** 版本历史抽屉可见性 */
@@ -177,6 +212,9 @@ function handleEdit(row: ContentVO) {
   editForm.tags = row.tags || ''
   editForm.scheduledTime = row.scheduledTime || null
   editVisible.value = true
+  // 重置 autosave 状态（避免显示上一篇的"已保存 xx:xx"）
+  autosaveStatus.value = ''
+  if (autosaveTimer) { clearTimeout(autosaveTimer); autosaveTimer = null }
 }
 
 /**
@@ -197,6 +235,35 @@ async function handleEditSave() {
     /* 错误已由拦截器处理 */
   } finally {
     editSaving.value = false
+  }
+}
+
+/**
+ * Wave 4.3 - 克隆内容为新草稿。
+ */
+async function handleClone(row: ContentVO) {
+  try {
+    const cloned = await contentApi.clone(row.id)
+    ElMessage.success(`已克隆为新草稿 #${cloned.id}`)
+    loadData()
+  } catch {
+    /* 拦截器已提示 */
+  }
+}
+
+/**
+ * Wave 4.3 - 批量改状态。
+ */
+async function handleBulkStatus(status: string) {
+  if (selectedRows.value.length === 0) return
+  try {
+    const ids = selectedRows.value.map(r => r.id)
+    const res = await contentApi.bulkUpdateStatus(ids, status)
+    ElMessage.success(`已更新 ${res.affected} 条记录状态为 ${status}`)
+    selectedRows.value = []
+    loadData()
+  } catch {
+    /* 拦截器已提示 */
   }
 }
 
@@ -412,7 +479,7 @@ onMounted(loadData)
 
     <!-- 批量操作栏（选中时显示） -->
     <el-card v-if="hasSelection" style="margin-bottom: 16px">
-      <div style="display: flex; align-items: center; gap: 12px">
+      <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap">
         <el-tag type="info">已选择 {{ selectedRows.length }} 项</el-tag>
         <el-button type="danger" size="small" @click="handleBatchDelete">
           <el-icon style="margin-right: 4px"><Delete /></el-icon>
@@ -422,6 +489,21 @@ onMounted(loadData)
           <el-icon style="margin-right: 4px"><Download /></el-icon>
           批量导出
         </el-button>
+        <!-- Wave 4.3: 批量改状态 -->
+        <el-dropdown trigger="click" @command="handleBulkStatus">
+          <el-button type="warning" size="small">
+            <el-icon style="margin-right: 4px"><Refresh /></el-icon>
+            批量改状态
+            <el-icon style="margin-left: 4px"><ArrowDown /></el-icon>
+          </el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="DRAFT">设为草稿</el-dropdown-item>
+              <el-dropdown-item command="SCHEDULED">设为待发布</el-dropdown-item>
+              <el-dropdown-item command="PUBLISHED">设为已发布</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
       </div>
     </el-card>
 
@@ -477,15 +559,19 @@ onMounted(loadData)
           </template>
         </el-table-column>
         <el-table-column prop="createTime" label="创建时间" width="180" />
-        <el-table-column label="操作" width="180" fixed="right">
+        <el-table-column label="操作" width="220" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" @click="handleView(row)">
+            <el-button link type="primary" @click="handleView(row)" title="查看">
               <el-icon><View /></el-icon>
             </el-button>
-            <el-button link type="primary" @click="handleEdit(row)">
+            <el-button link type="primary" @click="handleEdit(row)" title="编辑">
               <el-icon><Edit /></el-icon>
             </el-button>
-            <el-button link type="danger" @click="handleDelete(row)">
+            <!-- Wave 4.3: 克隆 -->
+            <el-button link type="warning" @click="handleClone(row)" title="克隆为新草稿">
+              <el-icon><CopyDocument /></el-icon>
+            </el-button>
+            <el-button link type="danger" @click="handleDelete(row)" title="删除">
               <el-icon><Delete /></el-icon>
             </el-button>
           </template>
@@ -544,8 +630,16 @@ onMounted(loadData)
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="editVisible = false">取消</el-button>
-        <el-button type="primary" :loading="editSaving" @click="handleEditSave">保存</el-button>
+        <div style="display: flex; align-items: center; justify-content: space-between">
+          <!-- Wave 4.3: autosave 状态指示器 -->
+          <span style="font-size: 12px; color: #909399">
+            {{ autosaveStatus || '编辑超过 3 秒会自动保存草稿' }}
+          </span>
+          <div>
+            <el-button @click="editVisible = false">关闭</el-button>
+            <el-button type="primary" :loading="editSaving" @click="handleEditSave">立即保存</el-button>
+          </div>
+        </div>
       </template>
     </el-dialog>
 
@@ -588,7 +682,20 @@ onMounted(loadData)
                   {{ getStatusLabel(detailContent.status) }}
                 </el-tag>
               </el-descriptions-item>
-              <el-descriptions-item label="模型">{{ detailContent.model || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="模型">
+                {{ detailContent.model || '-' }}
+                <!-- Wave 3.4: 如果走了 LLM fallback，显示提示 -->
+                <el-tag
+                  v-if="detailContent.fallback"
+                  type="warning"
+                  size="small"
+                  style="margin-left: 6px"
+                  effect="dark"
+                  title="主 provider 失败/熔断，本次响应来自 fallback 链路"
+                >
+                  ⚠ 已切换到 {{ detailContent.providerUsed || '备用' }}
+                </el-tag>
+              </el-descriptions-item>
               <el-descriptions-item label="Token">{{ detailContent.tokenUsage ?? '-' }}</el-descriptions-item>
               <el-descriptions-item label="创建时间" :span="2">{{ detailContent.createTime || '-' }}</el-descriptions-item>
               <el-descriptions-item v-if="detailContent.scheduledTime" label="定时发布" :span="2">

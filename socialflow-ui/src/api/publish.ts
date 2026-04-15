@@ -64,4 +64,21 @@ export const publishApi = {
    */
   autoPublish: (contentId: string | number, platform: string) =>
     post<PublishResult>('/publish/auto', { contentId, platform }),
+
+  /**
+   * Wave 3.1 - 创建定时发布任务。
+   * @param contentId 内容 ID
+   * @param scheduledTime ISO 时间字符串，如 '2026-04-15T20:00:00'
+   * @param platformAccountId 可选平台账号 ID
+   */
+  schedule: (contentId: number, scheduledTime: string, platformAccountId?: number) =>
+    post<PublishTaskVO>('/publish/schedule', { contentId, scheduledTime, platformAccountId }),
+
+  /** Wave 3.1 - 取消尚未执行的定时任务。仅 PENDING 状态可取消。 */
+  cancelTask: (taskId: number) =>
+    post<PublishTaskVO>(`/publish/tasks/${taskId}/cancel`),
+
+  /** Wave 3.1 - 重试失败任务（FAILED 或 FAILED_PERMANENT）。 */
+  retryTask: (taskId: number) =>
+    post<PublishTaskVO>(`/publish/tasks/${taskId}/retry`),
 }

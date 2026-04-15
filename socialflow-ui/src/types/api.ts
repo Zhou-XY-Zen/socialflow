@@ -111,6 +111,12 @@ export interface ContentVO {
   createTime?: string            // 创建时间
   guardrailWarnings?: string[]   // 内容安全警告列表（如果触发了护栏规则）
   ragSources?: RagSourceVO[]     // RAG 引用的知识库来源片段
+  /** Wave 3.4: 实际使用的 LLM provider（fallback 时与请求时不同） */
+  providerUsed?: string
+  /** Wave 3.4: 是否走了 fallback 路径，true 时前端可显示"已切换到备用模型" */
+  fallback?: boolean
+  /** 文案版本号（Wave 4.3 乐观锁） */
+  version?: number
 }
 
 /**
@@ -174,4 +180,55 @@ export interface ChunkSearchVO {
   docName?: string      // 所属文档名称
   page?: number         // 所在页码
   score?: number        // 向量相似度分数
+  /** Wave 4.1: 命中片段的 ±80 字符摘录（前端可高亮） */
+  snippet?: string
+}
+
+// ====================================================================
+// 以下为 Wave 3-4 后端新增 API 对应的 VO（Wave 3.2 Dashboard / Wave 4.x）
+// ====================================================================
+
+/** Wave 3.2 Dashboard 总览 VO */
+export interface DashboardOverviewVO {
+  contentTotal: number
+  contentByStatus: Record<string, number>
+  publishByStatus: Record<string, number>
+  scheduledPending: number
+  aiCalls7d: number
+  aiTokens7d: number
+  aiCost7d: number
+  aiUsageTrend: Array<{ date: string; calls: number; tokens: number; cost: number }>
+  kbTotal: number
+  mediaTotal: number
+}
+
+/** Wave 4.4 模板预览返回 */
+export interface TemplatePreviewVO {
+  renderedSystemPrompt: string
+  renderedUserPrompt: string
+  declaredVariables: string[]
+  usedVariables: string[]
+  missingVariables: string[]
+  unusedVariables: string[]
+}
+
+/** Wave 4.5 媒体素材增加的字段（已经在 MediaAsset 上自动返回，为前端展示加类型） */
+export interface MediaAssetExt {
+  id: number
+  userId: number
+  fileName: string
+  fileType: string
+  mimeType: string
+  fileUrl: string
+  thumbnailUrl?: string
+  fileSize: number
+  tags?: string
+  vectorId?: string
+  createTime?: string
+  /** Wave 4.5: 文件 SHA-256（去重 key） */
+  sha256?: string
+  /** Wave 4.5: 图像宽度 */
+  width?: number
+  /** Wave 4.5: 图像高度 */
+  height?: number
 }

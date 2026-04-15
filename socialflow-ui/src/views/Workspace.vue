@@ -141,8 +141,18 @@ async function startAiGenerate() {
 
   try {
     const result = await imageApi.generate(aiImagePrompt.value.trim())
+    // Wave 4.2: 命中缓存 → 直接返回 imageUrls，无需轮询
+    if (result.cached && result.imageUrls && result.imageUrls.length > 0) {
+      aiImages.value = result.imageUrls
+      aiGenerating.value = false
+      ElMessage.success(`命中缓存，复用之前生成的 ${result.imageUrls.length} 张配图（节省成本 + 时间）`)
+      return
+    }
+    if (!result.taskId) {
+      throw new Error('后端未返回 taskId')
+    }
     aiTaskId.value = result.taskId
-    // 开始轮询任务状态
+    // 未命中缓存：开始轮询任务状态
     startPollStatus()
   } catch (e: any) {
     aiGenerating.value = false
@@ -216,20 +226,23 @@ async function saveSelectedImages() {
   saveProgress.value = ''
 
   try {
-    const urls = [...selectedImageUrls.value]
-    const assetIds: (string | number)[] = []
-    const saved: MediaAssetVO[] = []
-
-    // 根据文案主题和提示词生成标签
+    // Wave 4.2: 用 selectVariants 一次性提交所有选中索引，后端批量下载 + 写入去重缓存
     const tags = buildImageTags()
+    const allUrls = aiImages.value
+    const selectedIndices = allUrls
+      .map((url, idx) => selectedImageUrls.value.has(url) ? idx : -1)
+      .filter(idx => idx >= 0)
 
-    // 逐张下载保存
-    for (let i = 0; i < urls.length; i++) {
-      saveProgress.value = `正在保存 ${i + 1}/${urls.length}...`
-      const asset = await imageApi.download(urls[i], tags)
-      assetIds.push(asset.id)
-      saved.push(asset)
-    }
+    saveProgress.value = `正在批量保存 ${selectedIndices.length} 张...`
+    const result = await imageApi.selectVariants(
+      aiImagePrompt.value.trim(),
+      allUrls,
+      selectedIndices,
+      tags,
+    )
+
+    const saved = result.assets
+    const assetIds: (string | number)[] = saved.map(a => a.id)
 
     // 绑定到文案
     if (lastContentId.value && assetIds.length > 0) {
@@ -237,7 +250,7 @@ async function saveSelectedImages() {
     }
 
     savedMedia.value = saved
-    ElMessage.success(`已保存 ${saved.length} 张 AI 配图`)
+    ElMessage.success(`已保存 ${saved.length} 张 AI 配图（已写入去重缓存，下次同 prompt 直接复用）`)
   } catch (e: any) {
     ElMessage.error('保存失败：' + (e.message || ''))
   } finally {

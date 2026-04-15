@@ -63,6 +63,16 @@ http.interceptors.request.use((config) => {
  *   - 401（未认证）：Token 过期或无效，清除登录状态并跳转到登录页。
  *   - 其他错误：弹出错误消息提示。
  */
+/**
+ * 提取响应头中的 traceId，便于把"用户报告 + 后端日志"对齐到同一条请求。
+ * 后端 MdcTraceIdFilter 会在每个响应上打 X-Trace-Id 头。
+ */
+function extractTraceId(headers?: Record<string, unknown>): string | undefined {
+  if (!headers) return undefined
+  const v = (headers['x-trace-id'] ?? headers['X-Trace-Id']) as string | undefined
+  return v && v.length > 0 ? v : undefined
+}
+
 http.interceptors.response.use(
   (response) => {
     /* 将响应体断言为 R<unknown> 类型以便访问 code 字段 */
@@ -70,7 +80,10 @@ http.interceptors.response.use(
     if (data && typeof data === 'object' && 'code' in data) {
       if (data.code !== 200) {
         /* 业务异常：弹出错误消息 */
-        ElMessage.error(data.message || 'request failed')
+        const traceId = extractTraceId(response.headers as unknown as Record<string, unknown>)
+        ElMessage.error(traceId
+          ? `${data.message || 'request failed'} (traceId: ${traceId})`
+          : (data.message || 'request failed'))
         return Promise.reject(new Error(data.message))
       }
     }
@@ -78,14 +91,22 @@ http.interceptors.response.use(
   },
   (error) => {
     const status = error?.response?.status
+    const traceId = extractTraceId(error?.response?.headers)
     if (status === 401) {
       /* Token 过期 / 未登录：清除本地会话并跳转到登录页 */
       const userStore = useUserStore()
       userStore.clear()
       window.location.href = '/login'
+    } else if (status === 429) {
+      /* Wave 1.4 Resilience4j 限流命中 —— 友好提示，不打"未知错误" */
+      ElMessage.warning('请求过于频繁，请稍后再试')
+      return Promise.reject(error)
     }
-    /* 将错误信息显示给用户 */
-    ElMessage.error(error?.response?.data?.message || error.message)
+    /* 其他错误：统一弹消息，附带 traceId 便于排查 */
+    const baseMsg = error?.response?.data?.message || error.message || '请求失败'
+    ElMessage.error(traceId ? `${baseMsg} (traceId: ${traceId})` : baseMsg)
+    /* 把 traceId 挂到 error 对象上，方便上游 catch 时记录 */
+    if (traceId && error) (error as { traceId?: string }).traceId = traceId
     return Promise.reject(error)
   },
 )

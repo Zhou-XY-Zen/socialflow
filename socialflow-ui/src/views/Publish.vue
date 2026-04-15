@@ -78,6 +78,12 @@ const mediaList = ref<any[]>([])
 const loadingMedia = ref(false)
 /** 自动发布中 loading */
 const autoPublishing = ref(false)
+/** Wave 3.1: 定时发布对话框 */
+const scheduleDialogVisible = ref(false)
+/** Wave 3.1: 选定的发布时间（element-plus DateTimePicker 给出 Date） */
+const scheduleTime = ref<Date | null>(null)
+/** Wave 3.1: 创建/取消/重试中 */
+const scheduleSubmitting = ref(false)
 
 /** 按平台筛选后的内容列表 */
 const filteredContentList = computed(() => {
@@ -258,8 +264,72 @@ function getTaskStatusLabel(status: string): string {
     EXECUTING: '执行中',
     SUCCESS: '已成功',
     FAILED: '已失败',
+    FAILED_PERMANENT: '永久失败',
+    CANCELLED: '已取消',
   }
   return map[status] || status
+}
+
+/**
+ * Wave 3.1 - 打开定时发布对话框。
+ */
+function openScheduleDialog() {
+  if (!selectedContentId.value) {
+    ElMessage.warning('请先选择要发布的内容')
+    return
+  }
+  // 默认值：1 小时后
+  scheduleTime.value = new Date(Date.now() + 60 * 60 * 1000)
+  scheduleDialogVisible.value = true
+}
+
+/**
+ * Wave 3.1 - 提交定时发布任务。
+ */
+async function submitSchedule() {
+  if (!selectedContentId.value || !scheduleTime.value) {
+    ElMessage.warning('请选择内容和时间')
+    return
+  }
+  if (scheduleTime.value.getTime() <= Date.now()) {
+    ElMessage.warning('排期时间必须晚于当前时间')
+    return
+  }
+  scheduleSubmitting.value = true
+  try {
+    // 后端 LocalDateTime 接受 ISO yyyy-MM-ddTHH:mm:ss（无时区后缀），所以裁剪到秒
+    const iso = scheduleTime.value.toISOString().substring(0, 19)
+    await publishApi.schedule(selectedContentId.value, iso)
+    ElMessage.success('定时发布任务已创建，到点后由后端 ScheduledPublishExecutor 自动执行')
+    scheduleDialogVisible.value = false
+    loadTasks()
+  } catch (e) {
+    /* 拦截器已提示 */
+  } finally {
+    scheduleSubmitting.value = false
+  }
+}
+
+/** Wave 3.1 - 取消尚未执行的定时任务（仅 PENDING）。 */
+async function handleCancelTask(task: PublishTaskVO) {
+  try {
+    await publishApi.cancelTask(task.id)
+    ElMessage.success(`已取消任务 #${task.id}`)
+    loadTasks()
+  } catch (e) {
+    /* 拦截器已提示 */
+  }
+}
+
+/** Wave 3.1 - 重试失败任务。 */
+async function handleRetryTask(task: PublishTaskVO) {
+  try {
+    await publishApi.retryTask(task.id)
+    ElMessage.success(`任务 #${task.id} 已重置为待执行，下次扫描时立即处理`)
+    loadTasks()
+  } catch (e) {
+    /* 拦截器已提示 */
+  }
 }
 
 /**
@@ -449,6 +519,15 @@ onMounted(() => {
               自动发布（需认证）
             </el-button>
           </el-tooltip>
+          <!-- Wave 3.1: 定时发布按钮 -->
+          <el-button
+            v-if="selectedContent"
+            type="warning"
+            @click="openScheduleDialog"
+          >
+            <el-icon style="margin-right: 4px"><AlarmClock /></el-icon>
+            定时发布
+          </el-button>
         </el-form-item>
 
         <!-- 格式化后的文案预览 -->
@@ -525,6 +604,25 @@ onMounted(() => {
         <el-table-column prop="resultMsg" label="结果" min-width="200" show-overflow-tooltip />
         <el-table-column prop="retryCount" label="重试次数" width="90" />
         <el-table-column prop="createTime" label="创建时间" width="180" />
+        <!-- Wave 3.1: 操作列 - cancel/retry -->
+        <el-table-column label="操作" width="160" fixed="right">
+          <template #default="{ row }">
+            <el-button
+              v-if="row.status === 'PENDING'"
+              size="small"
+              type="warning"
+              link
+              @click="handleCancelTask(row)"
+            >取消</el-button>
+            <el-button
+              v-if="row.status === 'FAILED' || row.status === 'FAILED_PERMANENT'"
+              size="small"
+              type="primary"
+              link
+              @click="handleRetryTask(row)"
+            >重试</el-button>
+          </template>
+        </el-table-column>
       </el-table>
       <el-empty
         v-if="!loadingTasks && publishTasks.length === 0"
@@ -532,5 +630,43 @@ onMounted(() => {
         :image-size="80"
       />
     </el-card>
+
+    <!-- Wave 3.1: 定时发布对话框 -->
+    <el-dialog v-model="scheduleDialogVisible" title="创建定时发布任务" width="520px">
+      <el-form label-width="100px">
+        <el-form-item label="发布内容">
+          <span style="font-size: 13px; color: #606266">
+            #{{ selectedContentId }} - {{ selectedContent ? getDisplayTitle(selectedContent) : '' }}
+          </span>
+        </el-form-item>
+        <el-form-item label="排期时间" required>
+          <el-date-picker
+            v-model="scheduleTime"
+            type="datetime"
+            placeholder="选择发布时间"
+            format="YYYY-MM-DD HH:mm:ss"
+            style="width: 100%"
+          />
+        </el-form-item>
+        <el-alert
+          type="info"
+          :closable="false"
+          show-icon
+        >
+          后端 ScheduledPublishExecutor 每 30 秒扫一次到期任务，多实例部署用 ShedLock 保证只跑一份。
+          失败自动指数退避（1min/2min/4min），3 次后转 FAILED_PERMANENT。
+        </el-alert>
+      </el-form>
+      <template #footer>
+        <el-button @click="scheduleDialogVisible = false">取消</el-button>
+        <el-button
+          type="primary"
+          :loading="scheduleSubmitting"
+          @click="submitSchedule"
+        >
+          创建任务
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
