@@ -7,6 +7,7 @@ import com.socialflow.common.exception.NotFoundException;
 import com.socialflow.common.exception.ParamException;
 import com.socialflow.common.result.R;
 import com.socialflow.common.result.ResultCode;
+import io.github.resilience4j.ratelimiter.RequestNotPermitted;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
@@ -221,6 +222,21 @@ public class GlobalExceptionHandler {
                 .map(ConstraintViolation::getMessage)
                 .collect(Collectors.joining("; "));
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(R.fail(400, msg));
+    }
+
+    /**
+     * 处理 Resilience4j 限流异常。
+     *
+     * 触发场景：当 ai-generate / ai-image 等接口在单位时间内调用次数超过阈值，Resilience4j
+     * 抛出 {@link RequestNotPermitted}。
+     *
+     * HTTP 状态码：429 Too Many Requests
+     */
+    @ExceptionHandler(RequestNotPermitted.class)
+    public ResponseEntity<R<Void>> handleRateLimit(RequestNotPermitted e) {
+        log.warn("rate limit triggered: {}", e.getMessage());
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .body(R.fail(429, "请求过于频繁，请稍后再试"));
     }
 
     /**

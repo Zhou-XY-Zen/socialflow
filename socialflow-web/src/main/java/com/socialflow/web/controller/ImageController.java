@@ -8,6 +8,7 @@ import com.socialflow.model.entity.MediaAsset;
 import com.socialflow.model.vo.ImagePromptVO;
 import com.socialflow.model.vo.ImageTaskStatusVO;
 import com.socialflow.service.media.ImageService;
+import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -66,6 +67,7 @@ public class ImageController {
      */
     @Operation(summary = "提交 AI 文生图任务")
     @PostMapping("/generate")
+    @RateLimiter(name = "ai-image")
     public R<Map<String, String>> generate(@RequestBody Map<String, String> body) {
         try {
             Long userId = StpUtil.getLoginIdAsLong();

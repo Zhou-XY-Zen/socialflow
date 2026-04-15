@@ -16,6 +16,7 @@ import com.socialflow.service.user.UserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -56,6 +57,7 @@ public class UserServiceImpl implements UserService {
      * @throws BusinessException 邮箱已被注册时抛出
      */
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public UserVO register(RegisterDTO dto) {
         // 第一步：检查邮箱是否已存在 —— 保证邮箱全局唯一
         Long existCount = sysUserMapper.selectCount(
@@ -133,6 +135,7 @@ public class UserServiceImpl implements UserService {
      * @throws NotFoundException 用户不存在时抛出
      */
     @Override
+    @Transactional(readOnly = true)
     public UserVO currentUser(Long userId) {
         SysUser user = sysUserMapper.selectById(userId);
         if (user == null) {
@@ -167,6 +170,7 @@ public class UserServiceImpl implements UserService {
      * @throws NotFoundException 用户不存在时抛出
      */
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public UserVO updateProfile(Long userId, String nickname, String avatarUrl) {
         SysUser user = sysUserMapper.selectById(userId);
         if (user == null) {
@@ -195,6 +199,7 @@ public class UserServiceImpl implements UserService {
      * @throws NotFoundException 用户不存在时抛出
      */
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public String uploadAvatar(Long userId, MultipartFile file) {
         SysUser user = sysUserMapper.selectById(userId);
         if (user == null) {

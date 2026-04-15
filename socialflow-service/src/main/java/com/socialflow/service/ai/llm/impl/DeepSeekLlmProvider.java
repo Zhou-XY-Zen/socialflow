@@ -8,6 +8,8 @@ import com.socialflow.service.ai.llm.ChatMessage;
 import com.socialflow.service.ai.llm.LlmConfig;
 import com.socialflow.service.ai.llm.LlmProviderService;
 import com.socialflow.service.ai.llm.LlmResponse;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import io.github.resilience4j.retry.annotation.Retry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -63,6 +65,8 @@ public class DeepSeekLlmProvider implements LlmProviderService {
     }
 
     @Override
+    @CircuitBreaker(name = "llm-deepseek", fallbackMethod = "chatFallback")
+    @Retry(name = "llm-deepseek")
     public LlmResponse chat(List<ChatMessage> messages, LlmConfig config) {
         String apiKey = resolveApiKey(config);
         String model = (config.getModel() != null && !config.getModel().isBlank()) ? config.getModel() : defaultModel;
@@ -159,6 +163,15 @@ public class DeepSeekLlmProvider implements LlmProviderService {
                 .filter(s -> !s.isEmpty())
                 .onErrorMap(WebClientResponseException.class,
                         e -> new AiCallException("DeepSeek stream error: " + e.getResponseBodyAsString(), e));
+    }
+
+    /**
+     * 熔断/重试耗尽后的兜底 —— 直接抛 AiCallException 让上层（GlobalExceptionHandler）
+     * 转成统一的 5xx 错误响应。后续 Wave 3.4 会改造 LlmRouter 自动 fallback 到 next provider。
+     */
+    public LlmResponse chatFallback(List<ChatMessage> messages, LlmConfig config, Throwable t) {
+        log.error("DeepSeek 熔断/重试已耗尽, 触发降级: {}", t.toString());
+        throw new AiCallException("DeepSeek 暂时不可用，请稍后重试或切换其他模型: " + t.getMessage(), t);
     }
 
     @Override

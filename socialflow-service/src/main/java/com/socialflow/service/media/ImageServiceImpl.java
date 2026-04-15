@@ -12,6 +12,7 @@ import com.socialflow.service.ai.llm.LlmConfig;
 import com.socialflow.service.ai.llm.LlmResponse;
 import com.socialflow.service.ai.llm.LlmRouter;
 import com.socialflow.service.storage.StorageService;
+import io.github.resilience4j.retry.annotation.Retry;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -175,6 +176,7 @@ public class ImageServiceImpl implements ImageService {
      * 返回任务 ID（output.task_id），前端通过轮询获取结果。
      */
     @Override
+    @Retry(name = "wanx-image")
     public String submitGeneration(Long userId, String prompt) {
         log.info("提交文生图任务: userId={}, prompt={}", userId, prompt.substring(0, Math.min(80, prompt.length())));
 
@@ -241,6 +243,7 @@ public class ImageServiceImpl implements ImageService {
      * SUCCEEDED 时 output.results 包含图片 URL 列表。
      */
     @Override
+    @Retry(name = "wanx-image")
     public ImageTaskStatusVO getTaskStatus(String taskId) {
         try {
             HttpRequest request = HttpRequest.newBuilder()

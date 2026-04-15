@@ -3,8 +3,10 @@ package com.socialflow.service.ai.embedding;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.socialflow.common.exception.AiCallException;
 import com.socialflow.common.util.JsonUtil;
+import io.github.resilience4j.retry.annotation.Retry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -77,7 +79,17 @@ public class EmbeddingServiceImpl implements EmbeddingService {
      * @param text 要嵌入的文本
      * @return 浮点数向量，长度等于 dimension
      */
+    /**
+     * 单条文本嵌入。
+     *
+     * <p>缓存策略：以 {@code SHA-256(text)} 为 key 缓存 24h（{@link com.socialflow.config.CacheConfig}）。
+     * 这是最大的成本节约点 —— 同一段文案的重复嵌入将直接命中缓存，不消耗 API token。</p>
+     *
+     * <p>注解叠加顺序：Spring AOP 先执行 @Cacheable（命中直接返回），未命中再走 @Retry。</p>
+     */
     @Override
+    @Cacheable(value = "embeddingCache", key = "T(cn.hutool.crypto.SecureUtil).sha256(#text)")
+    @Retry(name = "embedding-api")
     public float[] embed(String text) {
         if (text == null || text.isBlank()) {
             throw new AiCallException("嵌入文本不能为空");

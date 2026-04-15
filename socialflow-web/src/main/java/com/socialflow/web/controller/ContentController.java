@@ -13,6 +13,7 @@ import com.socialflow.model.vo.ContentVO;
 import com.socialflow.dao.mapper.ContentVersionMapper;
 import com.socialflow.service.content.ContentService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -89,6 +90,7 @@ public class ContentController {
      */
     @Operation(summary = "single platform generation")
     @PostMapping("/generate")
+    @RateLimiter(name = "ai-generate")
     public R<ContentVO> generate(@Valid @RequestBody ContentGenerateDTO dto) {
         return R.ok(contentService.generate(StpUtil.getLoginIdAsLong(), dto));
     }
@@ -126,6 +128,7 @@ public class ContentController {
      */
     @Operation(summary = "multi-platform batch generation")
     @PostMapping("/generate-batch")
+    @RateLimiter(name = "ai-generate")
     public R<Map<String, ContentVO>> generateBatch(@Valid @RequestBody ContentBatchGenerateDTO dto) {
         return R.ok(contentService.generateBatch(StpUtil.getLoginIdAsLong(), dto));
     }
@@ -183,6 +186,7 @@ public class ContentController {
      */
     @Operation(summary = "rewrite an existing content row")
     @PostMapping("/rewrite")
+    @RateLimiter(name = "ai-generate")
     public R<ContentVO> rewrite(@Valid @RequestBody ContentRewriteDTO dto) {
         return R.ok(contentService.rewrite(StpUtil.getLoginIdAsLong(), dto));
     }

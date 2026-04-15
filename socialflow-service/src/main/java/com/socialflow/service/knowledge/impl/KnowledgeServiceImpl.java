@@ -21,6 +21,7 @@ import com.socialflow.service.storage.StorageService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.ArrayList;
@@ -96,6 +97,7 @@ public class KnowledgeServiceImpl implements KnowledgeService {
      * @return 知识库列表
      */
     @Override
+    @Transactional(readOnly = true)
     public List<KbVO> list(Long userId) {
         LambdaQueryWrapper<KnowledgeBase> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(KnowledgeBase::getUserId, userId)
@@ -116,6 +118,7 @@ public class KnowledgeServiceImpl implements KnowledgeService {
      * @return 知识库视图对象
      */
     @Override
+    @Transactional(readOnly = true)
     public KbVO get(Long userId, Long kbId) {
         KnowledgeBase kb = baseMapper.selectById(kbId);
         checkOwnership(kb, userId);
@@ -129,6 +132,7 @@ public class KnowledgeServiceImpl implements KnowledgeService {
      * @param kbId   知识库 ID
      */
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void delete(Long userId, Long kbId) {
         KnowledgeBase kb = baseMapper.selectById(kbId);
         checkOwnership(kb, userId);
@@ -225,6 +229,7 @@ public class KnowledgeServiceImpl implements KnowledgeService {
      * @return 匹配的文档片段列表
      */
     @Override
+    @Transactional(readOnly = true)
     public List<ChunkSearchVO> search(Long userId, Long kbId, KbSearchDTO dto) {
         // 校验知识库所有权
         KnowledgeBase kb = baseMapper.selectById(kbId);
@@ -240,6 +245,7 @@ public class KnowledgeServiceImpl implements KnowledgeService {
      * @param docId  文档 ID
      */
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void deleteDocument(Long userId, Long kbId, Long docId) {
         // 校验知识库所有权
         KnowledgeBase kb = baseMapper.selectById(kbId);
@@ -293,6 +299,7 @@ public class KnowledgeServiceImpl implements KnowledgeService {
      * @return 文档列表，按创建时间倒序
      */
     @Override
+    @Transactional(readOnly = true)
     public List<KbDocVO> listDocuments(Long userId, Long kbId) {
         // 校验知识库所有权
         KnowledgeBase kb = baseMapper.selectById(kbId);

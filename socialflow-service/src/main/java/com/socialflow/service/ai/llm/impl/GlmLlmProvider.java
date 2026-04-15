@@ -8,6 +8,8 @@ import com.socialflow.service.ai.llm.ChatMessage;
 import com.socialflow.service.ai.llm.LlmConfig;
 import com.socialflow.service.ai.llm.LlmProviderService;
 import com.socialflow.service.ai.llm.LlmResponse;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import io.github.resilience4j.retry.annotation.Retry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -121,6 +123,8 @@ public class GlmLlmProvider implements LlmProviderService {
      * @throws AiCallException 当 API 调用失败时抛出（网络错误、鉴权失败、响应解析异常等）
      */
     @Override
+    @CircuitBreaker(name = "llm-glm", fallbackMethod = "chatFallback")
+    @Retry(name = "llm-glm")
     public LlmResponse chat(List<ChatMessage> messages, LlmConfig config) {
         // 获取有效的 API Key
         String apiKey = resolveApiKey(config);
@@ -267,6 +271,15 @@ public class GlmLlmProvider implements LlmProviderService {
     @Override
     public List<float[]> embedBatch(List<String> texts, String model) {
         throw new UnsupportedOperationException("GLM 的嵌入功能由 EmbeddingService 统一处理，不在此 Provider 中实现");
+    }
+
+    /**
+     * 熔断/重试耗尽后的兜底 —— 抛 AiCallException 让上层处理，
+     * Wave 3.4 会在 LlmRouter 层做 cross-provider fallback。
+     */
+    public LlmResponse chatFallback(List<ChatMessage> messages, LlmConfig config, Throwable t) {
+        log.error("GLM 熔断/重试已耗尽, 触发降级: {}", t.toString());
+        throw new AiCallException("GLM 暂时不可用，请稍后重试或切换其他模型: " + t.getMessage(), t);
     }
 
     // ============================== 私有辅助方法 ==============================

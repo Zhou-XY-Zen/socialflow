@@ -5,13 +5,11 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.socialflow.common.exception.NotFoundException;
 import com.socialflow.common.result.PageResult;
 import com.socialflow.dao.mapper.ContentMapper;
-import com.socialflow.dao.mapper.ContentVersionMapper;
 import com.socialflow.model.dto.ContentBatchGenerateDTO;
 import com.socialflow.model.dto.ContentGenerateDTO;
 import com.socialflow.model.dto.ContentRewriteDTO;
 import com.socialflow.model.dto.MultiAgentGenerateDTO;
 import com.socialflow.model.entity.Content;
-import com.socialflow.model.entity.ContentVersion;
 import com.socialflow.model.vo.ContentVO;
 import com.socialflow.common.constant.CommonConstants;
 import com.socialflow.service.ai.agent.MultiAgentService;
@@ -26,11 +24,13 @@ import com.socialflow.service.ai.llm.LlmRouter;
 import com.socialflow.service.ai.prompt.PromptService;
 import com.socialflow.service.ai.rag.RagPipelineService;
 import com.socialflow.service.content.ContentService;
+import com.socialflow.service.content.support.ContentPersister;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import reactor.core.publisher.Flux;
 
@@ -68,8 +68,8 @@ public class ContentServiceImpl implements ContentService {
     /** 内容表数据库映射器 */
     private final ContentMapper contentMapper;
 
-    /** 内容版本表数据库映射器，用于记录每次内容变更的版本快照 */
-    private final ContentVersionMapper contentVersionMapper;
+    /** 内容持久化 Helper —— 将 Content + ContentVersion 多表写操作收敛到独立事务，避免 LLM 长调用占用 DB 连接 */
+    private final ContentPersister contentPersister;
 
     /** 提示词模板服务，将用户输入 + 模板 + RAG 上下文组装成最终的 AI 提示词 */
     private final PromptService promptService;
@@ -333,7 +333,7 @@ public class ContentServiceImpl implements ContentService {
         LlmResponse response = provider.chat(messages, config);
         log.info("文案改写完成, userId={}, originalId={}, model={}", userId, dto.getContentId(), response.getModel());
 
-        // 第五步：保存改写后的新内容
+        // 第五步：组装改写后的新内容实体
         Content newContent = new Content();
         newContent.setUserId(userId);
         newContent.setTitle(original.getTitle());
@@ -345,10 +345,9 @@ public class ContentServiceImpl implements ContentService {
         newContent.setTemplateId(original.getTemplateId());
         newContent.setKbId(original.getKbId());
         newContent.setTags(original.getTags());
-        contentMapper.insert(newContent);
 
-        // 第六步：保存版本记录
-        saveVersion(newContent.getId(), response.getContent(), "AI_REWRITE - 改写为" + targetTone + "风格");
+        // 第六步：走独立事务持久化（Content + 版本快照原子提交）
+        contentPersister.insertWithVersion(newContent, "AI_REWRITE - 改写为" + targetTone + "风格");
 
         return toVo(newContent);
     }
@@ -435,6 +434,7 @@ public class ContentServiceImpl implements ContentService {
      * @return 按相似度排序的内容列表
      */
     @Override
+    @Transactional(readOnly = true)
     public List<ContentVO> similar(Long userId, String text, int topK) {
         try {
             // 第一步：将查询文本转换为向量
@@ -484,6 +484,7 @@ public class ContentServiceImpl implements ContentService {
      * @throws NotFoundException 内容不存在或不属于当前用户
      */
     @Override
+    @Transactional(readOnly = true)
     public ContentVO get(Long userId, Long id) {
         Content entity = contentMapper.selectById(id);
         if (entity == null || !userId.equals(entity.getUserId())) {
@@ -517,10 +518,9 @@ public class ContentServiceImpl implements ContentService {
         entity.setTitle(title);
         entity.setBody(body);
         entity.setTags(tags);
-        contentMapper.updateById(entity);
 
-        // 保存版本快照（记录手动编辑历史）
-        saveVersion(id, body, "MANUAL_EDIT - 手动编辑");
+        // 走独立事务：Content 更新 + 版本快照原子提交
+        contentPersister.updateWithVersion(entity, "MANUAL_EDIT - 手动编辑");
 
         return get(userId, id);
     }
@@ -541,7 +541,7 @@ public class ContentServiceImpl implements ContentService {
         if (entity == null || !userId.equals(entity.getUserId())) {
             throw new NotFoundException("content not found: " + id);
         }
-        contentMapper.deleteById(id);
+        contentPersister.softDelete(id);
         log.info("内容已删除, userId={}, contentId={}", userId, id);
     }
 
@@ -561,6 +561,7 @@ public class ContentServiceImpl implements ContentService {
      * @return 分页结果
      */
     @Override
+    @Transactional(readOnly = true)
     public PageResult<ContentVO> list(Long userId, Integer pageNum, Integer pageSize,
                                       String platform, String status, String keyword, String tags) {
         // 设置默认分页参数
@@ -702,13 +703,11 @@ public class ContentServiceImpl implements ContentService {
         // 保存生成参数快照（JSON 格式，便于复现和追溯）
         entity.setGenerationParams(buildParamsSnapshot(dto));
 
-        contentMapper.insert(entity);
+        // 走独立事务持久化 Content + 初始版本（事务边界仅覆盖 DB 操作，不占用 LLM 调用期间的连接）
+        contentPersister.insertWithVersion(entity, "AI_GENERATE - AI 首次生成");
         log.info("内容已保存, userId={}, contentId={}", userId, entity.getId());
 
-        // 保存初始版本
-        saveVersion(entity.getId(), generatedText, "AI_GENERATE - AI 首次生成");
-
-        // 异步嵌入并存储内容向量到 content_vectors（用于相似内容推荐）
+        // 异步嵌入并存储内容向量到 content_vectors（事务外执行，失败不影响主流程）
         try {
             float[] contentVector = embeddingService.embed(cleanText);
             Map<String, Object> vectorMeta = new HashMap<>();
@@ -723,31 +722,6 @@ public class ContentServiceImpl implements ContentService {
         }
 
         return entity;
-    }
-
-    /**
-     * 保存内容版本快照。
-     *
-     * 在内容首次生成、手动编辑、AI 改写等场景下调用，
-     * 记录当前版本的正文内容和变更说明。
-     *
-     * @param contentId  内容 ID
-     * @param body       当前版本的正文内容
-     * @param changeDesc 变更描述
-     */
-    private void saveVersion(Long contentId, String body, String changeDesc) {
-        // 查询当前最大版本号
-        Long maxVersion = contentVersionMapper.selectCount(
-                new LambdaQueryWrapper<ContentVersion>()
-                        .eq(ContentVersion::getContentId, contentId)
-        );
-
-        ContentVersion version = new ContentVersion();
-        version.setContentId(contentId);
-        version.setVersionNum(maxVersion.intValue() + 1);
-        version.setBodySnapshot(body);
-        version.setChangeDesc(changeDesc);
-        contentVersionMapper.insert(version);
     }
 
     /**

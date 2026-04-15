@@ -9,6 +9,7 @@ import com.socialflow.service.storage.StorageService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -76,6 +77,7 @@ public class MediaServiceImpl implements MediaService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public PageResult<MediaAsset> list(Long userId, Integer pageNum, Integer pageSize,
                                        String fileType, String keyword) {
         LambdaQueryWrapper<MediaAsset> wrapper = new LambdaQueryWrapper<>();

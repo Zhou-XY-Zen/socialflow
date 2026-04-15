@@ -45,6 +45,18 @@ spring:
           max-active: 16
           max-idle: 8
           min-idle: 2
+  # Flyway DB 迁移
+  # baseline-on-migrate=true + baseline-version=2 表示：
+  #   - 现有生产环境（已有 schema + seed 数据）会被标记为 V2 baseline，跳过 V1/V2 不重复执行
+  #   - 新部署（空 DB）会正常执行 V1__init_schema + V2__seed_templates
+  #   - 后续业务表结构变更从 V3 开始累加（Wave 4 的 KB FTS / 图像缓存 / 内容乐观锁等都将 V3+）
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    baseline-version: 2
+    table: flyway_schema_history
+    validate-on-migrate: true
 
 mybatis-plus:
   mapper-locations: classpath*:mapper/**/*.xml
@@ -171,3 +183,84 @@ logging:
     com.socialflow: DEBUG
   pattern:
     console: "%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+
+# ============================================================
+# Resilience4j —— LLM/Image/HTTP 外部调用的重试 + 熔断配置
+# ============================================================
+# 设计原则：
+#   - retry-exceptions：仅对临时性故障重试（IO / Timeout / AiCallException）
+#   - ignore-exceptions：业务异常（护栏命中 / 配额超限 / 参数错误）不重试
+#   - 熔断阈值放宽（50% / 10 个采样窗口），避免单次抖动触发
+resilience4j:
+  retry:
+    instances:
+      llm-deepseek: &llm-retry
+        max-attempts: 3
+        wait-duration: 1s
+        exponential-backoff-multiplier: 2
+        retry-exceptions:
+          - java.io.IOException
+          - java.util.concurrent.TimeoutException
+          - com.socialflow.common.exception.AiCallException
+        ignore-exceptions:
+          - com.socialflow.common.exception.GuardrailException
+          - com.socialflow.common.exception.QuotaExceededException
+          - com.socialflow.common.exception.ParamException
+      llm-qwen: *llm-retry
+      llm-glm: *llm-retry
+      llm-openai: *llm-retry
+      llm-claude: *llm-retry
+      wanx-image:
+        max-attempts: 3
+        wait-duration: 2s
+        exponential-backoff-multiplier: 2
+        retry-exceptions:
+          - java.io.IOException
+          - java.util.concurrent.TimeoutException
+          - java.lang.RuntimeException
+      wechat-mp:
+        max-attempts: 3
+        wait-duration: 1s
+        exponential-backoff-multiplier: 2
+      weibo-open:
+        max-attempts: 3
+        wait-duration: 1s
+        exponential-backoff-multiplier: 2
+      embedding-api:
+        max-attempts: 2
+        wait-duration: 500ms
+        retry-exceptions:
+          - java.io.IOException
+          - java.util.concurrent.TimeoutException
+          - com.socialflow.common.exception.AiCallException
+      cos-upload:
+        max-attempts: 3
+        wait-duration: 1s
+  circuitbreaker:
+    instances:
+      llm-deepseek: &llm-cb
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+      llm-qwen: *llm-cb
+      llm-glm: *llm-cb
+      llm-openai: *llm-cb
+      llm-claude: *llm-cb
+      wanx-image: *llm-cb
+  ratelimiter:
+    instances:
+      # AI 文本生成：每秒最多 10 次调用，等待 200ms（容忍突发，超出则抛 RequestNotPermitted）
+      ai-generate:
+        limit-for-period: 10
+        limit-refresh-period: 1s
+        timeout-duration: 200ms
+        register-health-indicator: false
+      # AI 图像生成：成本更高，每秒最多 3 次
+      ai-image:
+        limit-for-period: 3
+        limit-refresh-period: 1s
+        timeout-duration: 500ms
+        register-health-indicator: false
