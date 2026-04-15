@@ -17,7 +17,9 @@
     <springProfile name="prod">
         <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
             <file>logs/${appName}.log</file>
-            <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <!-- 用 SizeAndTimeBasedRollingPolicy 才支持 %i（按大小+时间双轮转）
+                 原 TimeBasedRollingPolicy 只能按时间切，不认 %i -->
+            <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
                 <fileNamePattern>logs/${appName}.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
                 <maxFileSize>100MB</maxFileSize>
                 <maxHistory>30</maxHistory>
