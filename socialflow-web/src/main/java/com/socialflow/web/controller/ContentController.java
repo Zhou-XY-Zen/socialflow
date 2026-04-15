@@ -95,6 +95,46 @@ public class ContentController {
         return R.ok(contentService.generate(StpUtil.getLoginIdAsLong(), dto));
     }
 
+    // ========== Wave 4.3: 内容库 UX 端点 ==========
+
+    /**
+     * Autosave 草稿（Wave 4.3）—— 前端定时调用，不写版本快照。
+     * 请求体：{title, body, tags}，三者均可选。
+     */
+    @Operation(summary = "autosave draft (no version snapshot)")
+    @PutMapping("/{id}/draft")
+    public R<ContentVO> saveDraft(@PathVariable Long id, @RequestBody Map<String, String> body) {
+        return R.ok(contentService.saveDraft(StpUtil.getLoginIdAsLong(), id,
+                body.get("title"), body.get("body"), body.get("tags")));
+    }
+
+    /** 批量软删（Wave 4.3）。请求体：{ids: [1,2,3]}，返回实际删除条数。 */
+    @Operation(summary = "bulk soft-delete contents")
+    @PostMapping("/bulk/delete")
+    public R<Map<String, Object>> bulkDelete(@RequestBody Map<String, List<Long>> body) {
+        int affected = contentService.bulkDelete(StpUtil.getLoginIdAsLong(), body.get("ids"));
+        return R.ok(Map.of("affected", affected));
+    }
+
+    /** 批量改状态（Wave 4.3）。请求体：{ids: [...], status: "DRAFT"} */
+    @Operation(summary = "bulk update status")
+    @PostMapping("/bulk/status")
+    public R<Map<String, Object>> bulkStatus(@RequestBody Map<String, Object> body) {
+        @SuppressWarnings("unchecked")
+        List<Long> ids = ((List<?>) body.get("ids")).stream()
+                .map(o -> Long.valueOf(o.toString())).toList();
+        String status = (String) body.get("status");
+        int affected = contentService.bulkUpdateStatus(StpUtil.getLoginIdAsLong(), ids, status);
+        return R.ok(Map.of("affected", affected));
+    }
+
+    /** 克隆（Wave 4.3）—— 复制头表数据为新草稿，不复制版本/发布任务/媒体关联。 */
+    @Operation(summary = "clone content as a new draft")
+    @PostMapping("/{id}/clone")
+    public R<ContentVO> clone(@PathVariable Long id) {
+        return R.ok(contentService.clone(StpUtil.getLoginIdAsLong(), id));
+    }
+
     /**
      * 单平台内容生成（SSE 流式方式）。
      *

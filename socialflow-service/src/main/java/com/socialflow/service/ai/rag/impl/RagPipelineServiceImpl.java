@@ -148,23 +148,29 @@ public class RagPipelineServiceImpl implements RagPipelineService {
         // 使用 Cross-Encoder Reranker 模型对候选片段进行精细化排序。
         // 粗排阶段可能返回 10-20 个片段，精排后只保留最相关的 topK 个。
         // 如果未启用重排序或候选为空，则直接按融合顺序截取前 topK 个。
+        // Wave 4.1：保留 reranker 返回的相关度得分透传到 VO。
         List<KnowledgeChunk> finalChunks = fused;
+        Map<Long, Double> chunkScores = new HashMap<>();
         if (enableRerank && !fused.isEmpty()) {
-            // 提取所有候选片段的文本内容，送入 Reranker 模型
             List<String> texts = fused.stream().map(KnowledgeChunk::getContentText).toList();
-            // Reranker 返回按相关度排序的索引列表
             List<RerankerService.ScoredIndex> reranked = rerankerService.rerank(query, texts, topK);
-            // 根据排序后的索引，从原始列表中按新顺序取出对应的片段
-            finalChunks = reranked.stream().map(idx -> fused.get(idx.index())).toList();
+            if (!reranked.isEmpty()) {
+                finalChunks = reranked.stream().map(idx -> fused.get(idx.index())).toList();
+                for (RerankerService.ScoredIndex si : reranked) {
+                    chunkScores.put(fused.get(si.index()).getId(), si.score());
+                }
+            } else if (topK < fused.size()) {
+                finalChunks = fused.subList(0, topK);
+            }
         } else if (topK < fused.size()) {
-            // 未启用重排序时，简单截取前 topK 个
             finalChunks = fused.subList(0, topK);
         }
 
-        // ============ 第 8 步：转换为 VO ============
-        // 将数据库实体（Entity）转换为视图对象（VO），过滤掉内部字段，
-        // 只保留前端 / 业务层需要的信息。
-        return finalChunks.stream().map(this::toVo).collect(Collectors.toList());
+        // ============ 第 8 步：转换为 VO（带 snippet + score）============
+        final Map<Long, Double> scoresFinal = chunkScores;
+        return finalChunks.stream()
+                .map(c -> toVo(c, query, scoresFinal.get(c.getId())))
+                .collect(Collectors.toList());
     }
 
     /**
@@ -293,20 +299,64 @@ public class RagPipelineServiceImpl implements RagPipelineService {
     }
 
     /**
-     * 将数据库实体 KnowledgeChunk 转换为视图对象 ChunkSearchVO。
+     * 将 KnowledgeChunk 实体转换为 ChunkSearchVO（Wave 4.1 升级：带 snippet + score）。
      *
-     * VO（View Object）只包含前端需要展示的字段，不暴露内部实现细节。
-     *
-     * @param c 数据库片段实体
-     * @return 前端视图对象
+     * @param c     片段实体
+     * @param query 用户原始查询，用于 snippet 提取
+     * @param score 重排序模型返回的相关度（可为 null）
+     */
+    protected ChunkSearchVO toVo(KnowledgeChunk c, String query, Double score) {
+        ChunkSearchVO vo = new ChunkSearchVO();
+        vo.setChunkId(c.getId());
+        vo.setDocId(c.getDocId());
+        vo.setKbId(c.getKbId());
+        vo.setChunkIndex(c.getChunkIndex());
+        vo.setContentText(c.getContentText());
+        vo.setScore(score);
+        vo.setSnippet(extractSnippet(c.getContentText(), query, 80));
+        return vo;
+    }
+
+    /**
+     * 兼容旧调用 —— 不带 query/score 的转换。
      */
     protected ChunkSearchVO toVo(KnowledgeChunk c) {
-        ChunkSearchVO vo = new ChunkSearchVO();
-        vo.setChunkId(c.getId());       // 片段 ID
-        vo.setDocId(c.getDocId());       // 所属文档 ID
-        vo.setKbId(c.getKbId());         // 所属知识库 ID
-        vo.setChunkIndex(c.getChunkIndex()); // 片段在文档中的序号
-        vo.setContentText(c.getContentText()); // 片段文本内容
-        return vo;
+        return toVo(c, null, null);
+    }
+
+    /**
+     * 摘录提取（Wave 4.1）—— 在 contentText 中找到 query 第一个出现位置，前后各取 N 字符。
+     * 找不到匹配则返回首部截断。
+     *
+     * @param text     片段全文
+     * @param query    查询关键词
+     * @param halfWindow 单侧字符数
+     * @return 摘录字符串（含省略号标记），text 为空时返回空串
+     */
+    protected String extractSnippet(String text, String query, int halfWindow) {
+        if (text == null || text.isEmpty()) return "";
+        int totalWindow = halfWindow * 2;
+        if (text.length() <= totalWindow) return text;
+
+        int hit = -1;
+        if (query != null && !query.isBlank()) {
+            // 简单实现：查找 query 任一关键词的首次出现（不分词，先按整串匹配）
+            hit = text.indexOf(query);
+            if (hit < 0) {
+                // 退化按 query 首字符匹配
+                hit = text.indexOf(query.substring(0, Math.min(2, query.length())));
+            }
+        }
+        if (hit < 0) {
+            // 没有命中：返回开头
+            return text.substring(0, totalWindow) + "…";
+        }
+        int start = Math.max(0, hit - halfWindow);
+        int end = Math.min(text.length(), hit + halfWindow);
+        StringBuilder sb = new StringBuilder();
+        if (start > 0) sb.append("…");
+        sb.append(text, start, end);
+        if (end < text.length()) sb.append("…");
+        return sb.toString();
     }
 }

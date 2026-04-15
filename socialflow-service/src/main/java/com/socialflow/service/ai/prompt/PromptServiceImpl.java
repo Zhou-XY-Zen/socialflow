@@ -191,6 +191,54 @@ public class PromptServiceImpl implements PromptService {
      * @param platform   平台编码，可为 null
      * @return 匹配的模板实体；未找到时返回 null
      */
+    /**
+     * 模板预览（Wave 4.4）—— 把 systemPrompt 和 userPromptTemplate 用 sampleVars
+     * 试渲染一遍，并扫描所有 {{var}} / {{#var}} 出现的变量名，给出"缺失/未使用"诊断。
+     */
+    @Override
+    public com.socialflow.model.vo.TemplatePreviewVO preview(Long templateId, Map<String, Object> sampleVars) {
+        PromptTemplate template = loadTemplate(templateId, null);
+        if (template == null) {
+            throw new com.socialflow.common.exception.NotFoundException("模板不存在: " + templateId);
+        }
+        String sysTpl = template.getSystemPrompt() != null ? template.getSystemPrompt() : "";
+        String userTpl = template.getUserPromptTemplate() != null ? template.getUserPromptTemplate() : "";
+
+        // 1. 扫描所有占位符变量名
+        java.util.Set<String> declared = new java.util.LinkedHashSet<>();
+        java.util.regex.Matcher m1 = java.util.regex.Pattern.compile("\\{\\{(\\w+)}}").matcher(sysTpl + "\n" + userTpl);
+        while (m1.find()) declared.add(m1.group(1));
+        java.util.regex.Matcher m2 = java.util.regex.Pattern.compile("\\{\\{#(\\w+)}}").matcher(sysTpl + "\n" + userTpl);
+        while (m2.find()) declared.add(m2.group(1));
+
+        Map<String, Object> safeVars = sampleVars == null ? java.util.Map.of() : sampleVars;
+
+        // 2. 计算 used / missing / unused
+        java.util.List<String> missing = declared.stream()
+                .filter(v -> !safeVars.containsKey(v) || safeVars.get(v) == null
+                        || (safeVars.get(v) instanceof String && ((String) safeVars.get(v)).isEmpty()))
+                .toList();
+        java.util.List<String> used = declared.stream()
+                .filter(v -> safeVars.containsKey(v) && safeVars.get(v) != null)
+                .toList();
+        java.util.List<String> unused = safeVars.keySet().stream()
+                .filter(v -> !declared.contains(v))
+                .toList();
+
+        // 3. 渲染（缺失变量按原样保留，便于前端高亮）
+        String renderedSys = replaceVariables(sysTpl, safeVars);
+        String renderedUser = replaceVariables(userTpl, safeVars);
+
+        return com.socialflow.model.vo.TemplatePreviewVO.builder()
+                .renderedSystemPrompt(renderedSys)
+                .renderedUserPrompt(renderedUser)
+                .declaredVariables(new java.util.ArrayList<>(declared))
+                .usedVariables(used)
+                .missingVariables(missing)
+                .unusedVariables(unused)
+                .build();
+    }
+
     private PromptTemplate loadTemplate(Long templateId, String platform) {
         // 优先按 ID 查找
         if (templateId != null) {

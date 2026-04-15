@@ -172,4 +172,33 @@ public interface ContentService {
      */
     PageResult<ContentVO> list(Long userId, Integer pageNum, Integer pageSize,
                                 String platform, String status, String keyword, String tags);
+
+    // ==================== Wave 4.3: 内容库 UX ====================
+
+    /**
+     * Autosave 草稿（Wave 4.3）—— 仅更新 body/title/tags，不改 status，不写版本快照。
+     *
+     * <p>前端可以每隔 N 秒在用户编辑时自动调用，避免崩溃丢失。MyBatis-Plus
+     * 的 @Version 自动校验防止并发覆盖。</p>
+     *
+     * @return 更新后的 ContentVO（包含新 version 号）
+     */
+    ContentVO saveDraft(Long userId, Long id, String title, String body, String tags);
+
+    /**
+     * 批量软删（Wave 4.3）—— 按 id 列表批量软删，返回实际删除的条数。
+     */
+    int bulkDelete(Long userId, List<Long> ids);
+
+    /**
+     * 批量改状态（Wave 4.3）—— 给一组 content 设置同一个 status（DRAFT/SCHEDULED/PUBLISHED 等）。
+     * 返回实际更新的条数。
+     */
+    int bulkUpdateStatus(Long userId, List<Long> ids, String status);
+
+    /**
+     * 克隆内容（Wave 4.3）—— 按现有 content 的快照创建一份新的 DRAFT，
+     * 不复制版本历史/发布任务/媒体关联（仅头表数据）。
+     */
+    ContentVO clone(Long userId, Long id);
 }

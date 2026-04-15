@@ -727,6 +727,82 @@ public class ContentServiceImpl implements ContentService {
         return entity;
     }
 
+    // ==================== Wave 4.3: 内容库 UX 方法实现 ====================
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public ContentVO saveDraft(Long userId, Long id, String title, String body, String tags) {
+        Content entity = contentMapper.selectById(id);
+        if (entity == null || !userId.equals(entity.getUserId())) {
+            throw new NotFoundException("content not found: " + id);
+        }
+        // autosave 只更新内容字段，不写版本快照（避免每次 autosave 都新建一个 version 行）
+        if (StringUtils.hasText(title)) entity.setTitle(title);
+        if (body != null) entity.setBody(body);
+        if (tags != null) entity.setTags(tags);
+        contentMapper.updateById(entity);
+        log.debug("[autosave] userId={}, contentId={}, version={}", userId, id, entity.getVersion());
+        return toVo(entity);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public int bulkDelete(Long userId, List<Long> ids) {
+        if (ids == null || ids.isEmpty()) return 0;
+        // 先校验所有 id 都属于当前用户，避免越权
+        List<Content> owned = contentMapper.selectList(
+                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<Content>()
+                        .in(Content::getId, ids)
+                        .eq(Content::getUserId, userId));
+        if (owned.isEmpty()) return 0;
+        List<Long> ownedIds = owned.stream().map(Content::getId).toList();
+        int affected = contentMapper.deleteBatchIds(ownedIds);
+        log.info("[bulkDelete] userId={}, requested={}, owned={}, affected={}",
+                userId, ids.size(), ownedIds.size(), affected);
+        return affected;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public int bulkUpdateStatus(Long userId, List<Long> ids, String status) {
+        if (ids == null || ids.isEmpty() || !StringUtils.hasText(status)) return 0;
+        // 用 update wrapper 一次性 UPDATE，避免 N+1
+        com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<Content> u =
+                new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<>();
+        u.in(Content::getId, ids)
+                .eq(Content::getUserId, userId)
+                .set(Content::getStatus, status);
+        int affected = contentMapper.update(null, u);
+        log.info("[bulkUpdateStatus] userId={}, ids={}, status={}, affected={}",
+                userId, ids.size(), status, affected);
+        return affected;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public ContentVO clone(Long userId, Long id) {
+        Content original = contentMapper.selectById(id);
+        if (original == null || !userId.equals(original.getUserId())) {
+            throw new NotFoundException("content not found: " + id);
+        }
+        Content cloned = new Content();
+        cloned.setUserId(userId);
+        cloned.setTitle(original.getTitle() == null
+                ? "副本" : original.getTitle() + " (副本)");
+        cloned.setBody(original.getBody());
+        cloned.setPlatform(original.getPlatform());
+        cloned.setStatus("DRAFT"); // 克隆出来一律是草稿
+        cloned.setTemplateId(original.getTemplateId());
+        cloned.setKbId(original.getKbId());
+        cloned.setTags(original.getTags());
+        cloned.setAiModel(original.getAiModel());
+        cloned.setGenerationParams(original.getGenerationParams());
+        // 不复制：scheduledTime/publishedTime/publishedUrl/evalScore/tokenUsage
+        contentPersister.insertWithVersion(cloned, "CLONE - 从 #" + id + " 克隆");
+        log.info("[clone] userId={}, sourceId={}, newId={}", userId, id, cloned.getId());
+        return toVo(cloned);
+    }
+
     /**
      * 将 Content 实体转换为 ContentVO 视图对象。
      *

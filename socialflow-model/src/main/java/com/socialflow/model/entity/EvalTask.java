@@ -95,4 +95,17 @@ public class EvalTask extends BaseEntity {
      * completedCases / totalCases 可以计算出任务进度百分比。
      */
     private Integer completedCases;
+
+    /**
+     * 配对 t-test 的 p-value（Wave 4.6）。
+     *
+     * <p>对所有 (totalScoreA - totalScoreB) 配对差做单样本 t 检验，
+     * 反映 A/B 两组得分差异在统计意义上是否显著。一般规则：</p>
+     * <ul>
+     *   <li>p &lt; 0.05 - 显著差异，A/B 真的不一样</li>
+     *   <li>p &gt;= 0.05 - 差异不显著，差异可能只是随机波动</li>
+     * </ul>
+     * <p>样本数 &lt; 2 时为 null。</p>
+     */
+    private java.math.BigDecimal pValue;
 }

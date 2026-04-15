@@ -1,5 +1,6 @@
 package com.socialflow.service.media;
 
+import cn.hutool.crypto.SecureUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.socialflow.common.result.PageResult;
@@ -8,11 +9,16 @@ import com.socialflow.model.entity.MediaAsset;
 import com.socialflow.service.storage.StorageService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import net.coobird.thumbnailator.Thumbnails;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.util.UUID;
 
@@ -31,44 +37,97 @@ public class MediaServiceImpl implements MediaService {
     private final StorageService storageService;
 
     /**
-     * 上传媒体文件并保存元信息到数据库。
+     * 上传媒体文件并保存元信息到数据库（Wave 4.5 升级：去重 + 缩略图 + 尺寸）。
+     *
+     * <p>流程：</p>
+     * <ol>
+     *   <li>读取文件字节流到内存（用于 hash + 缩略图）</li>
+     *   <li>SHA-256 → 查 (user_id, sha256) 命中直接返回旧记录（节省存储 + 带宽）</li>
+     *   <li>上传原图到 COS</li>
+     *   <li>图片：ImageIO 提取 width/height + Thumbnailator 生成 240×240 缩略图上传</li>
+     *   <li>写 MediaAsset 入库，含 sha256/width/height/thumbnailUrl</li>
+     * </ol>
      */
     @Override
     public MediaAsset upload(Long userId, MultipartFile file, String tags) {
         try {
             String originalFilename = file.getOriginalFilename();
             String mimeType = file.getContentType();
+            String fileType = (mimeType != null && mimeType.startsWith("video/")) ? "VIDEO" : "IMAGE";
 
-            // 生成对象键：media/{userId}/{UUID}_{原始文件名}
-            String objectKey = "media/" + userId + "/" + UUID.randomUUID() + "_" + originalFilename;
+            // 1. 读取字节 + 计算 SHA-256
+            byte[] bytes = file.getBytes();
+            String sha256 = SecureUtil.sha256(new ByteArrayInputStream(bytes));
 
-            // 上传文件到对象存储（COS 或 MinIO）
-            try (InputStream inputStream = file.getInputStream()) {
-                storageService.upload(objectKey, inputStream, file.getSize(), mimeType);
+            // 2. 去重命中检查
+            MediaAsset existing = mediaAssetMapper.selectOne(
+                    new LambdaQueryWrapper<MediaAsset>()
+                            .eq(MediaAsset::getUserId, userId)
+                            .eq(MediaAsset::getSha256, sha256)
+                            .last("LIMIT 1"));
+            if (existing != null) {
+                log.info("[Media DEDUP HIT] userId={}, sha256={}, existingId={}",
+                        userId, sha256, existing.getId());
+                return existing;
             }
 
-            // 获取公开访问 URL
+            // 3. 上传原图
+            String objectKey = "media/" + userId + "/" + UUID.randomUUID() + "_" + originalFilename;
+            try (InputStream is = new ByteArrayInputStream(bytes)) {
+                storageService.upload(objectKey, is, file.getSize(), mimeType);
+            }
             String fileUrl = storageService.getPublicUrl(objectKey);
 
-            // 根据 MIME 类型判断文件类型
-            String fileType = "IMAGE";
-            if (mimeType != null && mimeType.startsWith("video/")) {
-                fileType = "VIDEO";
+            // 4. 图片：尺寸 + 缩略图
+            Integer width = null;
+            Integer height = null;
+            String thumbnailUrl = fileUrl; // 默认 = 原图（视频/音频 fallback）
+            if ("IMAGE".equals(fileType)) {
+                try (InputStream dimStream = new ByteArrayInputStream(bytes)) {
+                    BufferedImage img = ImageIO.read(dimStream);
+                    if (img != null) {
+                        width = img.getWidth();
+                        height = img.getHeight();
+                        // 大图才生成缩略图，<300px 的图本身就够小
+                        if (width > 300 || height > 300) {
+                            ByteArrayOutputStream thumbOut = new ByteArrayOutputStream();
+                            Thumbnails.of(new ByteArrayInputStream(bytes))
+                                    .size(240, 240)
+                                    .outputFormat("jpg")
+                                    .outputQuality(0.85)
+                                    .toOutputStream(thumbOut);
+                            byte[] thumbBytes = thumbOut.toByteArray();
+                            String thumbKey = "media/" + userId + "/thumb_"
+                                    + UUID.randomUUID() + ".jpg";
+                            storageService.upload(thumbKey,
+                                    new ByteArrayInputStream(thumbBytes),
+                                    thumbBytes.length, "image/jpeg");
+                            thumbnailUrl = storageService.getPublicUrl(thumbKey);
+                        }
+                    }
+                } catch (Exception e) {
+                    log.warn("[Media] 缩略图/尺寸提取失败（不影响主流程）: {}", e.getMessage());
+                }
             }
 
-            // 构建媒体资产实体并写入数据库
+            // 5. 写 DB
             MediaAsset asset = new MediaAsset();
             asset.setUserId(userId);
             asset.setFileName(originalFilename);
             asset.setFileType(fileType);
             asset.setMimeType(mimeType);
             asset.setFileUrl(fileUrl);
-            asset.setThumbnailUrl(fileUrl);
+            asset.setThumbnailUrl(thumbnailUrl);
             asset.setFileSize(file.getSize());
             asset.setTags(tags);
-
+            asset.setSha256(sha256);
+            asset.setWidth(width);
+            asset.setHeight(height);
             mediaAssetMapper.insert(asset);
-            log.info("素材上传成功: userId={}, fileName={}, url={}", userId, originalFilename, fileUrl);
+
+            log.info("素材上传成功: userId={}, fileName={}, sha256={}, dim={}x{}, thumb={}",
+                    userId, originalFilename, sha256.substring(0, 8),
+                    width, height, !thumbnailUrl.equals(fileUrl));
             return asset;
         } catch (Exception e) {
             log.error("素材上传失败: userId={}", userId, e);

@@ -1,18 +1,27 @@
 package com.socialflow.web.controller;
 
 import cn.dev33.satoken.stp.StpUtil;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.socialflow.common.constant.CommonConstants;
+import com.socialflow.common.exception.NotFoundException;
 import com.socialflow.common.result.R;
+import com.socialflow.dao.mapper.EvalResultMapper;
+import com.socialflow.dao.mapper.EvalTaskMapper;
 import com.socialflow.model.dto.EvalTaskCreateDTO;
+import com.socialflow.model.entity.EvalResult;
 import com.socialflow.model.entity.EvalTask;
 import com.socialflow.model.vo.EvalReportVO;
 import com.socialflow.service.ai.eval.EvalService;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -140,5 +149,67 @@ public class EvalController {
     public R<Void> deleteTask(@PathVariable Long taskId) {
         evalService.deleteTask(StpUtil.getLoginIdAsLong(), taskId);
         return R.ok();
+    }
+
+    private final EvalTaskMapper evalTaskMapper;
+    private final EvalResultMapper evalResultMapper;
+
+    /**
+     * Wave 4.6 - 导出评估报告为 CSV。
+     *
+     * <p>每行 = 一条 EvalResult，列：topic / platform / scoreA / scoreB / winner /
+     * judgeReasoning。前端可直接下载到 Excel 打开。</p>
+     *
+     * <p>默认 CSV 格式（轻量、无需 POI 依赖）。如需 xlsx 后续可加 commons-csv 或 POI 实现。</p>
+     */
+    @Operation(summary = "export eval report as CSV (Wave 4.6)")
+    @GetMapping("/task/{taskId}/export")
+    public ResponseEntity<byte[]> exportReport(@PathVariable Long taskId) {
+        Long userId = StpUtil.getLoginIdAsLong();
+        EvalTask task = evalTaskMapper.selectById(taskId);
+        if (task == null || !task.getUserId().equals(userId)) {
+            throw new NotFoundException("评估任务不存在或无权访问: " + taskId);
+        }
+        List<EvalResult> results = evalResultMapper.selectList(
+                new LambdaQueryWrapper<EvalResult>()
+                        .eq(EvalResult::getEvalTaskId, taskId)
+                        .orderByAsc(EvalResult::getCreateTime));
+
+        StringBuilder csv = new StringBuilder();
+        // BOM 让 Excel 识别 UTF-8（中文不乱码）
+        csv.append('\uFEFF');
+        csv.append("topic,platform,total_score_a,total_score_b,winner,reasoning\n");
+        for (EvalResult r : results) {
+            csv.append(csvEscape(r.getInputTopic())).append(',')
+                    .append(csvEscape(r.getInputPlatform())).append(',')
+                    .append(r.getTotalScoreA() == null ? "" : r.getTotalScoreA()).append(',')
+                    .append(r.getTotalScoreB() == null ? "" : r.getTotalScoreB()).append(',')
+                    .append(csvEscape(r.getWinner())).append(',')
+                    .append(csvEscape(r.getJudgeReasoning())).append('\n');
+        }
+        // 末尾追加汇总信息（含 p-value）
+        csv.append("\nSUMMARY\n");
+        csv.append("task_name,").append(csvEscape(task.getName())).append('\n');
+        csv.append("status,").append(csvEscape(task.getStatus())).append('\n');
+        csv.append("total_cases,").append(task.getTotalCases() == null ? "" : task.getTotalCases()).append('\n');
+        csv.append("completed_cases,").append(task.getCompletedCases() == null ? "" : task.getCompletedCases()).append('\n');
+        csv.append("p_value,").append(task.getPValue() == null ? "" : task.getPValue()).append('\n');
+
+        byte[] body = csv.toString().getBytes(StandardCharsets.UTF_8);
+
+        String filename = "eval_" + taskId + ".csv";
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType("text/csv;charset=utf-8"))
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                .body(body);
+    }
+
+    /** CSV 字段转义：含逗号/引号/换行的字段用双引号包裹，内部引号 → 双引号 */
+    private static String csvEscape(String s) {
+        if (s == null) return "";
+        boolean needsQuote = s.indexOf(',') >= 0 || s.indexOf('"') >= 0
+                || s.indexOf('\n') >= 0 || s.indexOf('\r') >= 0;
+        String escaped = s.replace("\"", "\"\"");
+        return needsQuote ? "\"" + escaped + "\"" : escaped;
     }
 }

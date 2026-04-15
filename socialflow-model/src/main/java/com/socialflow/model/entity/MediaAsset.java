@@ -99,4 +99,18 @@ public class MediaAsset extends BaseEntity {
      * 未向量化时为空。
      */
     private String vectorId;
+
+    /**
+     * 文件内容 SHA-256 哈希（Wave 4.5）。
+     *
+     * <p>上传时先按文件字节流计算 SHA-256；同一用户上传相同文件直接复用现有记录，
+     * 节省 COS 存储空间和上传带宽。</p>
+     */
+    private String sha256;
+
+    /** 图像宽度（像素）—— Wave 4.5。视频/音频留空。 */
+    private Integer width;
+
+    /** 图像高度（像素）—— Wave 4.5。视频/音频留空。 */
+    private Integer height;
 }

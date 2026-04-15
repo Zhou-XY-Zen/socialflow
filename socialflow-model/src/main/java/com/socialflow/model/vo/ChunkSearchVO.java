@@ -89,4 +89,12 @@ public class ChunkSearchVO implements Serializable {
      * 分数越高表示越相关，结果按分数从高到低排列。
      */
     private Double score;
+
+    /**
+     * 命中片段的高亮摘录（Wave 4.1 新增）。
+     *
+     * <p>从 contentText 中提取与 query 匹配位置 ±80 字符的子串，便于前端展示
+     * "为什么这条结果被检索到"。如果 contentText 较短直接全文返回。</p>
+     */
+    private String snippet;
 }

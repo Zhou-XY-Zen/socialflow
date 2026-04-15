@@ -185,8 +185,14 @@ public class EvalServiceImpl implements EvalService {
 
             // 全部主题评测完成
             task.setStatus("COMPLETED");
+            // Wave 4.6: 计算配对 t-test p-value
+            BigDecimal pValue = computePairedTTest(task.getId());
+            if (pValue != null) {
+                task.setPValue(pValue);
+            }
             evalTaskMapper.updateById(task);
-            log.info("评测任务全部完成: taskId={}, name={}", task.getId(), task.getName());
+            log.info("评测任务全部完成: taskId={}, name={}, pValue={}",
+                    task.getId(), task.getName(), pValue);
 
         } catch (Exception e) {
             // 任何未捕获的异常导致任务失败
@@ -440,5 +446,50 @@ public class EvalServiceImpl implements EvalService {
             avgMap.put(entry.getKey(), entry.getValue().divide(divisor, 2, RoundingMode.HALF_UP));
         }
         return avgMap;
+    }
+
+    /**
+     * 配对 t 检验（Wave 4.6）—— 对 task 下所有 (totalScoreA, totalScoreB) 配对差做单样本 t 检验。
+     *
+     * <p>原假设 H0：两组得分均值相等（差异 = 0）。p &lt; 0.05 拒绝 H0，认为差异显著。</p>
+     *
+     * <p>样本数 &lt; 2 或方差为 0 时返回 null（无法计算）。</p>
+     */
+    private BigDecimal computePairedTTest(Long taskId) {
+        List<EvalResult> results = evalResultMapper.selectList(
+                new LambdaQueryWrapper<EvalResult>().eq(EvalResult::getEvalTaskId, taskId));
+        if (results.size() < 2) {
+            return null;
+        }
+        // 计算配对差 di = scoreA - scoreB
+        double[] diffs = new double[results.size()];
+        for (int i = 0; i < results.size(); i++) {
+            EvalResult r = results.get(i);
+            double a = r.getTotalScoreA() == null ? 0.0 : r.getTotalScoreA().doubleValue();
+            double b = r.getTotalScoreB() == null ? 0.0 : r.getTotalScoreB().doubleValue();
+            diffs[i] = a - b;
+        }
+
+        // 均值 + 样本标准差
+        double mean = 0.0;
+        for (double d : diffs) mean += d;
+        mean /= diffs.length;
+
+        double sumSq = 0.0;
+        for (double d : diffs) sumSq += (d - mean) * (d - mean);
+        double std = Math.sqrt(sumSq / (diffs.length - 1));
+        if (std < 1e-9) {
+            // 所有差完全一致 — 完美一致 (p=1) 或完美差异（mean!=0 → p≈0）
+            return mean == 0.0 ? BigDecimal.valueOf(1.0) : BigDecimal.valueOf(0.0);
+        }
+
+        double t = mean / (std / Math.sqrt(diffs.length));
+        org.apache.commons.math3.distribution.TDistribution dist =
+                new org.apache.commons.math3.distribution.TDistribution(diffs.length - 1);
+        // 双尾：p = 2 * (1 - CDF(|t|))
+        double p = 2.0 * (1.0 - dist.cumulativeProbability(Math.abs(t)));
+        // 限制到 [0, 1] 并保留 4 位精度
+        p = Math.max(0.0, Math.min(1.0, p));
+        return BigDecimal.valueOf(p).setScale(4, RoundingMode.HALF_UP);
     }
 }

@@ -1,6 +1,7 @@
 package com.socialflow.model.entity;
 
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.baomidou.mybatisplus.annotation.Version;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
@@ -161,4 +162,14 @@ public class Content extends BaseEntity {
      * 未经过评估的文案该字段为空。
      */
     private BigDecimal evalScore;
+
+    /**
+     * 乐观锁版本号（Wave 4.3）。
+     *
+     * <p>MyBatis-Plus 在 update 时会自动 {@code WHERE version = ?} 并在 SET 中递增。
+     * 如果两个请求并发更新同一篇文案，第二个请求会因为 version 不匹配而 affected=0，
+     * 从而避免后写覆盖先写。</p>
+     */
+    @Version
+    private Integer version;
 }

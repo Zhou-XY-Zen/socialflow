@@ -162,8 +162,10 @@ socialflow:
     rerank-top-k: 5
     enable-hyde: true
     enable-hybrid-search: true
-    enable-rerank: false
-    rerank-model: bge-reranker-v2-m3
+    # Wave 4.1：Reranker 真实实现（DashScope gte-rerank）已就位，默认开启
+    enable-rerank: true
+    rerank-model: gte-rerank
+    rerank-api-url: https://dashscope.aliyuncs.com/api/v1/services/rerank/text-rerank/text-rerank
   image:
     dashscope-api-key: ${DASHSCOPE_API_KEY:your-dashscope-key}
     dashscope-base-url: https://dashscope.aliyuncs.com/api/v1

@@ -62,4 +62,19 @@ public interface ImageService {
      * @return 保存后的 MediaAsset 实体
      */
     MediaAsset downloadAndSave(Long userId, String imageUrl, String tags);
+
+    // ==================== Wave 4.2: 去重缓存 ====================
+
+    /**
+     * 查询去重缓存：如果同一用户的同 prompt+model+size 已经生成过，直接返回缓存的 MediaAsset 列表。
+     *
+     * @return 命中时返回非空列表，未命中返回空列表
+     */
+    java.util.List<com.socialflow.model.entity.MediaAsset> lookupCache(Long userId, String prompt,
+                                                                       String model, String size);
+
+    /**
+     * 写入去重缓存：在用户最终选定 1 个变体并下载完成后调用。
+     */
+    void saveCache(Long userId, String prompt, String model, String size, java.util.List<Long> mediaIds);
 }

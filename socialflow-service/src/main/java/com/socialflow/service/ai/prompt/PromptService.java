@@ -64,4 +64,15 @@ public interface PromptService {
      * @return 替换占位符后的纯文本字符串
      */
     String renderInline(String template, Map<String, Object> variables);
+
+    /**
+     * 模板预览（Wave 4.4）—— 用样例变量"试渲染"模板，并返回变量诊断（缺失/未使用）。
+     *
+     * <p>不写库，纯函数。前端在用户编辑模板时可调用，看渲染效果 + 验证完整性。</p>
+     *
+     * @param templateId 模板 ID（必填）
+     * @param sampleVars 用户提供的样例变量
+     * @return 包含渲染结果和变量诊断的 VO
+     */
+    com.socialflow.model.vo.TemplatePreviewVO preview(Long templateId, Map<String, Object> sampleVars);
 }

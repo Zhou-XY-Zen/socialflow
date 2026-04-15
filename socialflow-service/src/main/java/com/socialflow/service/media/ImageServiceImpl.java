@@ -1,9 +1,14 @@
 package com.socialflow.service.media;
 
+import cn.hutool.crypto.SecureUtil;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.socialflow.common.enums.LlmProvider;
 import com.socialflow.common.util.JsonUtil;
+import com.socialflow.dao.mapper.ImageAssetCacheMapper;
 import com.socialflow.dao.mapper.MediaAssetMapper;
+import com.socialflow.model.entity.ImageAssetCache;
 import com.socialflow.model.entity.MediaAsset;
 import com.socialflow.model.vo.ImagePromptVO;
 import com.socialflow.model.vo.ImageTaskStatusVO;
@@ -50,6 +55,7 @@ public class ImageServiceImpl implements ImageService {
     private final MediaAssetMapper mediaAssetMapper;
     private final LlmRouter llmRouter;
     private final StorageService storageService;
+    private final ImageAssetCacheMapper imageAssetCacheMapper;
 
     // ==================== DashScope 文生图配置 ====================
 
@@ -439,5 +445,76 @@ public class ImageServiceImpl implements ImageService {
         }
 
         return prompt.toString();
+    }
+
+    // ==================== Wave 4.2: 去重缓存 ====================
+
+    @Override
+    public List<MediaAsset> lookupCache(Long userId, String prompt, String model, String size) {
+        String hash = promptHash(prompt, model, size);
+        ImageAssetCache cache = imageAssetCacheMapper.selectOne(
+                new LambdaQueryWrapper<ImageAssetCache>()
+                        .eq(ImageAssetCache::getUserId, userId)
+                        .eq(ImageAssetCache::getPromptHash, hash));
+        if (cache == null || cache.getMediaIds() == null) {
+            return List.of();
+        }
+        try {
+            List<Long> ids = JsonUtil.mapper().readValue(cache.getMediaIds(),
+                    new TypeReference<List<Long>>() {});
+            if (ids.isEmpty()) return List.of();
+            List<MediaAsset> assets = mediaAssetMapper.selectBatchIds(ids);
+            // 命中计数自增（best-effort，失败不影响主流程）
+            try {
+                cache.setHitCount((cache.getHitCount() == null ? 0 : cache.getHitCount()) + 1);
+                imageAssetCacheMapper.updateById(cache);
+            } catch (Exception e) {
+                log.debug("更新 hit_count 失败（忽略）: {}", e.getMessage());
+            }
+            log.info("[ImageCache HIT] userId={}, hash={}, assetIds={}", userId, hash, ids);
+            return assets;
+        } catch (Exception e) {
+            log.warn("[ImageCache] 解析 mediaIds JSON 失败, hash={}: {}", hash, e.getMessage());
+            return List.of();
+        }
+    }
+
+    @Override
+    public void saveCache(Long userId, String prompt, String model, String size, List<Long> mediaIds) {
+        if (mediaIds == null || mediaIds.isEmpty()) return;
+        String hash = promptHash(prompt, model, size);
+        try {
+            ImageAssetCache existing = imageAssetCacheMapper.selectOne(
+                    new LambdaQueryWrapper<ImageAssetCache>()
+                            .eq(ImageAssetCache::getUserId, userId)
+                            .eq(ImageAssetCache::getPromptHash, hash));
+            String mediaIdsJson = JsonUtil.toJson(mediaIds);
+            if (existing != null) {
+                existing.setMediaIds(mediaIdsJson);
+                imageAssetCacheMapper.updateById(existing);
+            } else {
+                ImageAssetCache cache = new ImageAssetCache();
+                cache.setUserId(userId);
+                cache.setPromptHash(hash);
+                cache.setMediaIds(mediaIdsJson);
+                cache.setPrompt(prompt != null && prompt.length() > 1000
+                        ? prompt.substring(0, 1000) : prompt);
+                cache.setModel(model);
+                cache.setImageSize(size);
+                cache.setHitCount(0);
+                imageAssetCacheMapper.insert(cache);
+            }
+            log.info("[ImageCache WRITE] userId={}, hash={}, assetIds={}", userId, hash, mediaIds);
+        } catch (Exception e) {
+            log.warn("[ImageCache] 写入缓存失败（忽略不影响主流程）: {}", e.getMessage());
+        }
+    }
+
+    /** SHA-256(prompt + ":" + model + ":" + size) */
+    private String promptHash(String prompt, String model, String size) {
+        String key = (prompt == null ? "" : prompt) + ":"
+                + (model == null ? "" : model) + ":"
+                + (size == null ? "" : size);
+        return SecureUtil.sha256(key);
     }
 }
