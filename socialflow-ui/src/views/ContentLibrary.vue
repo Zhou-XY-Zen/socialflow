@@ -20,6 +20,8 @@ const md = new MarkdownIt({ html: false, breaks: true, linkify: true })
 function renderMd(text: string) { return md.render(text || '') }
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/stores/user'
+import PageHeader from '@/components/PageHeader.vue'
+import EmptyState from '@/components/EmptyState.vue'
 
 /** 平台选项列表 */
 const platformOptions = [
@@ -367,7 +369,10 @@ onMounted(loadData)
 </script>
 
 <template>
-  <div>
+  <div class="sf-page-container">
+    <!-- 页面头部 -->
+    <PageHeader title="内容库" subtitle="管理所有生成的文案" icon="Files" />
+
     <!-- 筛选栏 -->
     <el-card style="margin-bottom: 16px">
       <el-form :inline="true" @submit.prevent="handleSearch">
@@ -420,8 +425,18 @@ onMounted(loadData)
       </div>
     </el-card>
 
+    <!-- 空状态 -->
+    <EmptyState
+      v-if="!loading && tableData.length === 0"
+      icon="Document"
+      title="暂无内容"
+      description="开始生成你的第一篇文案吧"
+      actionText="去创建"
+      @action="$router.push('/workspace')"
+    />
+
     <!-- 内容表格 -->
-    <el-card v-loading="loading">
+    <el-card v-else v-loading="loading">
       <el-table
         ref="tableRef"
         :data="tableData"

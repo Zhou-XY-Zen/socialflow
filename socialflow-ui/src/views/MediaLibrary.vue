@@ -16,6 +16,8 @@ import { onMounted, ref } from 'vue'
 import { mediaApi, type MediaAssetVO } from '@/api/media'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Delete, UploadFilled } from '@element-plus/icons-vue'
+import PageHeader from '@/components/PageHeader.vue'
+import EmptyState from '@/components/EmptyState.vue'
 
 // ==================== 素材列表数据 ====================
 
@@ -160,7 +162,10 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="media-library">
+  <div class="media-library sf-page-container">
+    <!-- 页面头部 -->
+    <PageHeader title="素材库" subtitle="管理图片、视频等素材文件" icon="Picture" />
+
     <!-- 顶部操作栏 -->
     <el-card class="toolbar-card" shadow="never">
       <div class="toolbar">
@@ -200,13 +205,14 @@ onMounted(() => {
     <!-- 素材网格 -->
     <div v-loading="loading" class="media-grid-wrapper">
       <!-- 空状态 -->
-      <el-empty
+      <EmptyState
         v-if="!loading && mediaList.length === 0"
-        description="暂无素材，点击上传添加"
-        :image-size="160"
-      >
-        <el-button type="primary" @click="openUploadDialog">上传素材</el-button>
-      </el-empty>
+        icon="Picture"
+        title="暂无素材"
+        description="点击上传添加你的第一个素材"
+        actionText="上传素材"
+        @action="openUploadDialog"
+      />
 
       <!-- 素材卡片网格（一行 5 张） -->
       <div v-else class="media-grid">

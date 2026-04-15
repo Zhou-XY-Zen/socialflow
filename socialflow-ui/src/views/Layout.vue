@@ -1,62 +1,22 @@
 <!--
-  ============================================================
   Layout.vue —— 主布局组件（侧边栏 + 顶栏 + 内容区）
-  ============================================================
-  这个组件定义了登录后所有页面的整体布局结构：
-    ┌─────────────────────────────────────────┐
-    │  侧边栏（Logo + 菜单）  │   顶栏（页面标题 + 用户信息）  │
-    │                         │──────────────────────────────│
-    │                         │   内容区（<router-view />）     │
-    │                         │   根据 URL 渲染不同的子页面     │
-    └─────────────────────────────────────────┘
-
-  使用了 Element Plus 的布局组件：
-    el-container  —— 布局容器，自动根据子元素排列方向（水平/垂直）
-    el-aside      —— 侧边栏区域
-    el-header     —— 顶栏区域
-    el-main       —— 主内容区域
-  ============================================================
+  统一的应用外壳：可折叠侧边栏（渐变背景）+ 顶栏（面包屑+用户）+ 内容区
 -->
 
 <script setup lang="ts">
-/**
- * 【本组件功能概述】
- * 1. 左侧侧边栏：显示应用 Logo 和导航菜单，点击菜单项切换页面
- * 2. 顶部栏：显示当前页面标题和用户昵称，点击昵称可退出登录
- * 3. 主内容区：通过 <router-view /> 渲染当前路由对应的子页面
- */
-
-/**
- * computed —— Vue 3 的计算属性。
- * 它接收一个函数，返回值会被自动缓存。
- * 只有当依赖的响应式数据（如 route.path）发生变化时才会重新计算。
- * 适合用来"从现有数据派生出新数据"的场景。
- */
-import { computed } from 'vue'
-
-/**
- * useRouter —— 获取路由实例，可以进行编程式导航（如 router.push / router.replace）
- * useRoute  —— 获取当前路由信息（如当前路径 route.path、路由元信息 route.meta）
- * RouterView —— 路由出口组件，在这里渲染子路由对应的页面
- */
+import { computed, ref } from 'vue'
 import { useRoute, useRouter, RouterView } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { authApi } from '@/api/auth'
 
-/** 路由实例 —— 用于编程式跳转 */
 const router = useRouter()
-/** 当前路由对象 —— 包含当前 URL 路径、参数、meta 等信息 */
 const route = useRoute()
-/** 用户 Store —— 读取用户昵称、清除登录状态 */
 const userStore = useUserStore()
 
-/**
- * menuItems —— 侧边栏菜单配置数组。
- * 每个对象包含：
- *   path  ：点击后跳转的路由路径
- *   label ：菜单显示的文字
- *   icon  ：Element Plus 图标组件名称（已在 main.ts 中全局注册）
- */
+/** 侧边栏是否折叠 */
+const collapsed = ref(false)
+
+/** 菜单配置 */
 const menuItems = [
   { path: '/workspace', label: '工作台', icon: 'EditPen' },
   { path: '/content',   label: '内容库', icon: 'Files' },
@@ -70,89 +30,358 @@ const menuItems = [
   { path: '/settings',  label: '设置',   icon: 'Setting' },
 ]
 
-/**
- * activePath —— 计算属性，返回当前路由路径。
- * 传给 el-menu 的 :default-active 属性，用于高亮当前所在的菜单项。
- */
+/** 当前激活的菜单路径 */
 const activePath = computed(() => route.path)
 
-/**
- * logout —— 退出登录函数。
- * 1. 调用后端 logout 接口（使 Token 失效）——即使失败也不影响前端操作
- * 2. 清除本地存储的用户信息和 Token
- * 3. 跳转到登录页（replace 不会留下浏览器历史记录）
- */
+/** 当前页面标题 */
+const currentTitle = computed(() => {
+  return (route.meta?.title as string) || menuItems.find(m => m.path === route.path)?.label || ''
+})
+
+/** 当前页面对应的 menu item（用于获取图标） */
+const currentMenu = computed(() => menuItems.find(m => m.path === route.path))
+
 async function logout() {
-  try { await authApi.logout() } catch { /* 网络错误也不阻碍退出 */ }
+  try { await authApi.logout() } catch { /* ignore */ }
   userStore.clear()
   router.replace('/login')
 }
 </script>
 
 <template>
-  <!-- 最外层容器，高度占满整个视口 -->
-  <el-container style="height: 100vh">
-
-    <!-- ====== 左侧侧边栏 ====== -->
-    <el-aside width="200px" style="background:#001529; color:#fff">
+  <el-container class="layout-root">
+    <!-- ==================== 侧边栏 ==================== -->
+    <el-aside :width="collapsed ? '64px' : '220px'" class="sidebar">
       <!-- Logo 区域 -->
-      <div style="padding:16px; font-size:18px; font-weight:600">SocialFlow</div>
+      <div class="logo">
+        <div class="logo-icon">S</div>
+        <transition name="fade-text">
+          <span v-if="!collapsed" class="logo-text">SocialFlow</span>
+        </transition>
+      </div>
 
-      <!--
-        el-menu —— Element Plus 的菜单组件。
-        :default-active  绑定当前激活的菜单项（高亮显示）
-        :router="true"   启用路由模式——点击菜单项时自动调用 router.push(path)
-        v-for            遍历 menuItems 数组，为每个菜单项生成一个 el-menu-item
-        :key             Vue 要求列表渲染时为每项提供唯一的 key
-        :index           菜单项的唯一标识，在路由模式下也是跳转路径
-        <component :is>  动态组件——根据 item.icon 的值渲染对应的图标组件
-      -->
+      <!-- 菜单 -->
       <el-menu
         :default-active="activePath"
-        background-color="#001529"
-        text-color="#ffffffcc"
-        active-text-color="#409eff"
+        :collapse="collapsed"
+        :collapse-transition="false"
+        class="sidebar-menu"
+        background-color="transparent"
+        text-color="rgba(255, 255, 255, 0.75)"
+        active-text-color="#ffffff"
         :router="true"
       >
-        <el-menu-item v-for="item in menuItems" :key="item.path" :index="item.path">
+        <el-menu-item
+          v-for="item in menuItems"
+          :key="item.path"
+          :index="item.path"
+          class="menu-item-custom"
+        >
           <el-icon><component :is="item.icon" /></el-icon>
-          <span>{{ item.label }}</span>
+          <template #title>{{ item.label }}</template>
         </el-menu-item>
       </el-menu>
+
+      <!-- 折叠按钮 -->
+      <div class="collapse-btn" @click="collapsed = !collapsed">
+        <el-icon :size="16">
+          <component :is="collapsed ? 'DArrowRight' : 'DArrowLeft'" />
+        </el-icon>
+      </div>
     </el-aside>
 
-    <!-- ====== 右侧区域（顶栏 + 主内容） ====== -->
+    <!-- ==================== 右侧区域 ==================== -->
     <el-container>
-      <!-- 顶栏：左侧显示页面标题，右侧显示用户下拉菜单 -->
-      <el-header style="background:#fff; border-bottom:1px solid #e4e7ed; display:flex; align-items:center; justify-content:space-between">
-        <!-- 页面标题 —— 从路由 meta 中读取 -->
-        <div>{{ route.meta?.title || '' }}</div>
-        <!-- 用户下拉菜单 —— 点击昵称展开，可退出登录 -->
-        <el-dropdown>
-          <div style="display:flex; align-items:center; gap:8px; cursor:pointer">
+      <!-- 顶栏 -->
+      <el-header class="header" height="60px">
+        <!-- 面包屑/标题 -->
+        <div class="header-title">
+          <el-icon v-if="currentMenu" :size="20" class="title-icon">
+            <component :is="currentMenu.icon" />
+          </el-icon>
+          <span class="title-text">{{ currentTitle }}</span>
+        </div>
+
+        <!-- 用户下拉 -->
+        <el-dropdown trigger="click">
+          <div class="user-dropdown">
             <el-avatar
-              :size="32"
+              :size="36"
               :src="userStore.user?.avatarUrl || undefined"
-              style="background:#409eff"
+              class="user-avatar"
             >
               {{ (userStore.user?.nickname || 'U').charAt(0).toUpperCase() }}
             </el-avatar>
-            <span style="font-size:14px; color:#303133">{{ userStore.user?.nickname || 'guest' }}</span>
-            <el-icon :size="12"><ArrowDown /></el-icon>
+            <div class="user-info">
+              <div class="user-name">{{ userStore.user?.nickname || 'guest' }}</div>
+              <div class="user-status">
+                <span class="status-dot"></span>
+                在线
+              </div>
+            </div>
+            <el-icon :size="12" class="dropdown-arrow"><ArrowDown /></el-icon>
           </div>
           <template #dropdown>
             <el-dropdown-menu>
-              <el-dropdown-item @click="$router.push('/settings')">个人设置</el-dropdown-item>
-              <el-dropdown-item divided @click="logout">退出登录</el-dropdown-item>
+              <el-dropdown-item @click="$router.push('/settings')">
+                <el-icon><User /></el-icon>
+                个人设置
+              </el-dropdown-item>
+              <el-dropdown-item divided @click="logout">
+                <el-icon><SwitchButton /></el-icon>
+                退出登录
+              </el-dropdown-item>
             </el-dropdown-menu>
           </template>
         </el-dropdown>
       </el-header>
 
-      <!-- 主内容区 —— 子路由页面渲染在这里 -->
-      <el-main>
-        <router-view />
+      <!-- 主内容区 -->
+      <el-main class="main">
+        <router-view v-slot="{ Component }">
+          <transition name="page-fade" mode="out-in">
+            <component :is="Component" />
+          </transition>
+        </router-view>
       </el-main>
     </el-container>
   </el-container>
 </template>
+
+<style scoped>
+.layout-root {
+  height: 100vh;
+  background: var(--sf-bg);
+}
+
+/* ========== 侧边栏 ========== */
+.sidebar {
+  background: linear-gradient(180deg, #1a2341 0%, #2d2a5a 100%);
+  color: #fff;
+  transition: width var(--sf-transition-base);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+}
+
+/* 侧边栏装饰渐变 */
+.sidebar::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 200px;
+  background: linear-gradient(180deg, rgba(102, 126, 234, 0.25), transparent);
+  pointer-events: none;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 16px;
+  position: relative;
+  z-index: 1;
+}
+
+.logo-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--sf-gradient);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  font-weight: 700;
+  color: #fff;
+  flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.logo-text {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: #fff;
+  white-space: nowrap;
+}
+
+.sidebar-menu {
+  flex: 1;
+  border: none !important;
+  padding: 8px;
+  position: relative;
+  z-index: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+:deep(.menu-item-custom) {
+  border-radius: var(--sf-radius-sm) !important;
+  margin: 4px 0 !important;
+  height: 44px !important;
+  line-height: 44px !important;
+  transition: all var(--sf-transition-fast) !important;
+  position: relative;
+}
+
+:deep(.menu-item-custom:hover) {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: #fff !important;
+}
+
+:deep(.menu-item-custom.is-active) {
+  background: rgba(102, 126, 234, 0.2) !important;
+  color: #fff !important;
+}
+
+:deep(.menu-item-custom.is-active::before) {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+  background: var(--sf-gradient);
+}
+
+:deep(.menu-item-custom .el-icon) {
+  font-size: 18px !important;
+}
+
+/* 折叠按钮 */
+.collapse-btn {
+  padding: 12px;
+  margin: 8px;
+  border-radius: var(--sf-radius-sm);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.5);
+  transition: all var(--sf-transition-fast);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.collapse-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+/* ========== 顶栏 ========== */
+.header {
+  background: #fff;
+  border-bottom: 1px solid var(--sf-border-light);
+  box-shadow: var(--sf-shadow-xs);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--sf-space-5);
+  z-index: 10;
+}
+
+.header-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.title-icon {
+  color: var(--sf-primary);
+}
+
+.title-text {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--sf-text-primary);
+}
+
+/* 用户下拉 */
+.user-dropdown {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  border-radius: var(--sf-radius-md);
+  cursor: pointer;
+  transition: background var(--sf-transition-fast);
+}
+
+.user-dropdown:hover {
+  background: var(--sf-surface-hover);
+}
+
+.user-avatar {
+  background: var(--sf-gradient) !important;
+  flex-shrink: 0;
+}
+
+.user-info {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.3;
+}
+
+.user-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--sf-text-primary);
+}
+
+.user-status {
+  font-size: 11px;
+  color: var(--sf-text-muted);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--sf-success);
+  display: inline-block;
+  box-shadow: 0 0 6px rgba(16, 185, 129, 0.5);
+}
+
+.dropdown-arrow {
+  color: var(--sf-text-muted);
+}
+
+/* ========== 主内容区 ========== */
+.main {
+  padding: var(--sf-space-5) !important;
+  background: var(--sf-bg);
+  overflow-y: auto;
+}
+
+/* ========== 过渡动画 ========== */
+.page-fade-enter-active,
+.page-fade-leave-active {
+  transition: opacity var(--sf-transition-fast), transform var(--sf-transition-fast);
+}
+
+.page-fade-enter-from {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.page-fade-leave-to {
+  opacity: 0;
+}
+
+.fade-text-enter-active,
+.fade-text-leave-active {
+  transition: opacity var(--sf-transition-fast);
+}
+
+.fade-text-enter-from,
+.fade-text-leave-to {
+  opacity: 0;
+}
+</style>

@@ -16,6 +16,7 @@ import { contentApi } from '@/api/content'
 import { publishApi } from '@/api/publish'
 import type { ContentVO } from '@/types/api'
 import type { PublishResult, PublishTaskVO } from '@/api/publish'
+import PageHeader from '@/components/PageHeader.vue'
 
 /** 平台卡片数据 */
 const platforms = [
@@ -313,7 +314,12 @@ onMounted(() => {
 </script>
 
 <template>
-  <div>
+  <div class="sf-page-container">
+    <PageHeader
+      title="分发中心"
+      subtitle="一键发布内容到各大平台"
+      icon="Promotion"
+    />
     <!-- 平台状态卡片 -->
     <el-row :gutter="16" style="margin-bottom: 20px">
       <el-col
@@ -325,7 +331,7 @@ onMounted(() => {
         :lg="6"
         style="margin-bottom: 16px"
       >
-        <el-card shadow="hover" style="height: 100%">
+        <el-card shadow="hover" style="height: 100%" :style="{ borderLeft: `3px solid ${p.color}` }">
           <div style="text-align: center; padding: 12px 0">
             <el-icon :size="40" :color="p.color">
               <component :is="p.icon" />

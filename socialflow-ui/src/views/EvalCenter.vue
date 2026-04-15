@@ -14,6 +14,8 @@ import { onMounted, onUnmounted, ref, reactive, computed } from 'vue'
 import { evalApi, type EvalTaskVO, type EvalReportVO } from '@/api/eval'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Loading } from '@element-plus/icons-vue'
+import PageHeader from '@/components/PageHeader.vue'
+import StatCard from '@/components/StatCard.vue'
 
 /* ==================== 平台选项 ==================== */
 
@@ -299,7 +301,12 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div>
+  <div class="sf-page-container">
+    <PageHeader
+      title="评估中心"
+      subtitle="A/B 测试评估 AI 生成效果"
+      icon="DataAnalysis"
+    />
     <!-- ==================== 任务列表 ==================== -->
     <el-card>
       <template #header>
@@ -498,29 +505,29 @@ onUnmounted(() => {
       <div v-loading="reportLoading" style="min-height: 200px">
         <template v-if="reportData && !reportLoading">
           <!-- 顶部：总体统计卡片 -->
-          <el-row :gutter="16" style="margin-bottom: 24px">
-            <el-col :span="8">
-              <el-card shadow="hover" class="stat-card stat-card--a">
-                <div class="stat-card__label">A 胜</div>
-                <div class="stat-card__value">{{ reportData.winsA }}</div>
-                <div class="stat-card__pct">{{ pct(reportData.winsA, reportData.totalCases) }}</div>
-              </el-card>
-            </el-col>
-            <el-col :span="8">
-              <el-card shadow="hover" class="stat-card stat-card--b">
-                <div class="stat-card__label">B 胜</div>
-                <div class="stat-card__value">{{ reportData.winsB }}</div>
-                <div class="stat-card__pct">{{ pct(reportData.winsB, reportData.totalCases) }}</div>
-              </el-card>
-            </el-col>
-            <el-col :span="8">
-              <el-card shadow="hover" class="stat-card stat-card--tie">
-                <div class="stat-card__label">平局</div>
-                <div class="stat-card__value">{{ reportData.ties }}</div>
-                <div class="stat-card__pct">{{ pct(reportData.ties, reportData.totalCases) }}</div>
-              </el-card>
-            </el-col>
-          </el-row>
+          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px;">
+            <StatCard
+              label="A 胜"
+              :value="reportData.winsA"
+              :hint="pct(reportData.winsA, reportData.totalCases)"
+              icon="Trophy"
+              color="danger"
+            />
+            <StatCard
+              label="B 胜"
+              :value="reportData.winsB"
+              :hint="pct(reportData.winsB, reportData.totalCases)"
+              icon="Trophy"
+              color="info"
+            />
+            <StatCard
+              label="平局"
+              :value="reportData.ties"
+              :hint="pct(reportData.ties, reportData.totalCases)"
+              icon="Medal"
+              color="warning"
+            />
+          </div>
 
           <!-- 中部：各维度平均分对比 -->
           <el-card style="margin-bottom: 24px">

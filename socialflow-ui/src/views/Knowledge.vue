@@ -15,6 +15,8 @@ import { kbApi } from '@/api/knowledge'
 import type { KbVO, KbDocVO, ChunkSearchVO } from '@/types/api'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { UploadInstance } from 'element-plus'
+import PageHeader from '@/components/PageHeader.vue'
+import EmptyState from '@/components/EmptyState.vue'
 
 // ==================== 知识库列表 ====================
 
@@ -268,8 +270,12 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <!-- ====== 第一区域：知识库列表（始终可见） ====== -->
-  <el-card v-loading="kbLoading" style="margin-bottom: 16px">
+  <div class="sf-page-container">
+    <!-- 页面头部 -->
+    <PageHeader title="知识库" subtitle="上传文档供 AI 生成时参考" icon="Reading" />
+
+    <!-- ====== 第一区域：知识库列表（始终可见） ====== -->
+    <el-card v-loading="kbLoading" style="margin-bottom: 16px">
     <template #header>
       <div style="display: flex; justify-content: space-between; align-items: center">
         <span style="font-size: 16px; font-weight: bold">我的知识库</span>
@@ -349,7 +355,13 @@ onUnmounted(() => {
       </el-table-column>
     </el-table>
 
-    <el-empty v-if="docList.length === 0 && !docLoading" description="暂无文档，请上传" />
+    <EmptyState
+      v-if="docList.length === 0 && !docLoading"
+      icon="Document"
+      title="暂无文档"
+      description="请上传文档以供 AI 参考"
+      size="small"
+    />
   </el-card>
 
   <!-- ====== 第三区域：检索测试（选中知识库后显示） ====== -->
@@ -398,7 +410,13 @@ onUnmounted(() => {
       </el-card>
     </div>
 
-    <el-empty v-if="searchResults.length === 0 && !searchLoading" description="输入查询内容开始检索" />
+    <EmptyState
+      v-if="searchResults.length === 0 && !searchLoading"
+      icon="Search"
+      title="开始检索"
+      description="输入查询内容开始检索"
+      size="small"
+    />
   </el-card>
 
   <!-- ====== 创建知识库对话框 ====== -->
@@ -431,6 +449,7 @@ onUnmounted(() => {
       <el-button type="primary" :loading="createLoading" @click="handleCreate">确定</el-button>
     </template>
   </el-dialog>
+  </div>
 </template>
 
 <script lang="ts">

@@ -14,6 +14,7 @@ import { useUserStore } from '@/stores/user'
 import { apiKeyApi, type ApiKeyItem, type SaveApiKeyDTO } from '@/api/apikey'
 import http from '@/api/http'
 import { put } from '@/api/http'
+import PageHeader from '@/components/PageHeader.vue'
 
 /** 获取用户状态 */
 const userStore = useUserStore()
@@ -207,7 +208,12 @@ onMounted(() => {
 </script>
 
 <template>
-  <div>
+  <div class="sf-page-container">
+    <PageHeader
+      title="设置"
+      subtitle="管理账户信息和 API 密钥"
+      icon="Setting"
+    />
     <!-- 账号信息 -->
     <el-card style="margin-bottom: 20px">
       <template #header>
@@ -222,9 +228,9 @@ onMounted(() => {
         </div>
       </template>
 
-      <div style="display: flex; gap: 24px; align-items: flex-start">
-        <!-- 头像区域 -->
-        <div style="flex-shrink: 0; text-align: center">
+      <div style="display: flex; flex-direction: column; gap: 20px; align-items: stretch">
+        <!-- 头像区域（居中置顶） -->
+        <div style="text-align: center; display: flex; flex-direction: column; align-items: center">
           <div
             class="avatar-wrapper"
             @click="triggerAvatarUpload"
@@ -243,7 +249,7 @@ onMounted(() => {
               <el-icon :size="20" color="#fff"><Camera /></el-icon>
             </div>
           </div>
-          <div style="font-size: 12px; color: #909399; margin-top: 6px">点击更换头像</div>
+          <div style="font-size: 12px; color: #909399; margin-top: 8px">点击更换头像</div>
           <!-- 隐藏的文件输入 -->
           <input
             ref="avatarInputRef"
@@ -255,7 +261,7 @@ onMounted(() => {
         </div>
 
         <!-- 账号详情 -->
-        <div style="flex: 1">
+        <div style="width: 100%">
           <el-descriptions :column="1" border>
             <el-descriptions-item label="用户ID">
               {{ userStore.user?.id || '-' }}

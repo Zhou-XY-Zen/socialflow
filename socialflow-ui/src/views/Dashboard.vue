@@ -12,6 +12,8 @@
 import { computed, onMounted, ref } from 'vue'
 import { contentApi } from '@/api/content'
 import type { ContentVO } from '@/types/api'
+import PageHeader from '@/components/PageHeader.vue'
+import StatCard from '@/components/StatCard.vue'
 
 /** 所有内容列表（最多加载 100 条用于统计） */
 const allContent = ref<ContentVO[]>([])
@@ -204,93 +206,28 @@ onMounted(loadData)
 </script>
 
 <template>
-  <div v-loading="loading">
-    <!-- 统计卡片：第一行 -->
-    <el-row :gutter="16" style="margin-bottom: 20px">
-      <el-col :span="6">
-        <el-card shadow="hover">
-          <div style="text-align: center">
-            <div style="font-size: 14px; color: #909399; margin-bottom: 8px">
-              <el-icon style="margin-right: 4px"><Document /></el-icon>
-              总内容数
-            </div>
-            <div style="font-size: 32px; font-weight: 600; color: #409eff">{{ totalCount }}</div>
-          </div>
-        </el-card>
-      </el-col>
-      <el-col :span="6">
-        <el-card shadow="hover">
-          <div style="text-align: center">
-            <div style="font-size: 14px; color: #909399; margin-bottom: 8px">
-              <el-icon style="margin-right: 4px"><Platform /></el-icon>
-              覆盖平台
-            </div>
-            <div style="font-size: 32px; font-weight: 600; color: #67c23a">{{ platformCount }}</div>
-          </div>
-        </el-card>
-      </el-col>
-      <el-col :span="6">
-        <el-card shadow="hover">
-          <div style="text-align: center">
-            <div style="font-size: 14px; color: #909399; margin-bottom: 8px">
-              <el-icon style="margin-right: 4px"><Sunrise /></el-icon>
-              今日生成
-            </div>
-            <div style="font-size: 32px; font-weight: 600; color: #e6a23c">{{ todayCount }}</div>
-          </div>
-        </el-card>
-      </el-col>
-      <el-col :span="6">
-        <el-card shadow="hover">
-          <div style="text-align: center">
-            <div style="font-size: 14px; color: #909399; margin-bottom: 8px">
-              <el-icon style="margin-right: 4px"><Coin /></el-icon>
-              Token 消耗
-            </div>
-            <div style="font-size: 32px; font-weight: 600; color: #f56c6c">{{ totalTokens.toLocaleString() }}</div>
-          </div>
-        </el-card>
-      </el-col>
-    </el-row>
+  <div v-loading="loading" class="dashboard">
+    <PageHeader title="数据看板" subtitle="实时掌握内容生产和 AI 使用情况" icon="TrendCharts" />
 
-    <!-- 统计卡片：第二行 -->
-    <el-row :gutter="16" style="margin-bottom: 20px">
-      <el-col :span="8">
-        <el-card shadow="hover">
-          <div style="text-align: center">
-            <div style="font-size: 14px; color: #909399; margin-bottom: 8px">
-              <el-icon style="margin-right: 4px"><DataAnalysis /></el-icon>
-              平均 Token / 篇
-            </div>
-            <div style="font-size: 28px; font-weight: 600; color: #909399">{{ avgTokens.toLocaleString() }}</div>
-          </div>
-        </el-card>
-      </el-col>
-      <el-col :span="8">
-        <el-card shadow="hover">
-          <div style="text-align: center">
-            <div style="font-size: 14px; color: #909399; margin-bottom: 8px">
-              <el-icon style="margin-right: 4px"><Trophy /></el-icon>
-              最常用平台
-            </div>
-            <div style="font-size: 28px; font-weight: 600; color: #409eff">{{ mostUsedPlatform }}</div>
-          </div>
-        </el-card>
-      </el-col>
-      <el-col :span="8">
-        <el-card shadow="hover">
-          <div style="text-align: center">
-            <div style="font-size: 14px; color: #909399; margin-bottom: 8px">
-              <el-icon style="margin-right: 4px"><Timer /></el-icon>
-              Token 排行最高
-            </div>
-            <div style="font-size: 28px; font-weight: 600; color: #e6a23c">
-              {{ tokenRanking.length > 0 ? (tokenRanking[0].tokenUsage || 0).toLocaleString() : '--' }}
-            </div>
-          </div>
-        </el-card>
-      </el-col>
-    </el-row>
+    <!-- 统计卡片：第一行（4个主要指标） -->
+    <div class="stat-grid">
+      <StatCard label="总内容数" :value="totalCount" icon="Document" color="primary" hint="累计生成" />
+      <StatCard label="覆盖平台" :value="platformCount" icon="Platform" color="success" hint="已发布的平台数" />
+      <StatCard label="今日生成" :value="todayCount" icon="Sunrise" color="warning" hint="今天的内容量" />
+      <StatCard label="Token 消耗" :value="totalTokens.toLocaleString()" icon="Coin" color="danger" hint="累计消耗" />
+    </div>
+
+    <!-- 统计卡片：第二行（3个辅助指标） -->
+    <div class="stat-grid stat-grid--3">
+      <StatCard label="平均 Token / 篇" :value="avgTokens.toLocaleString()" icon="DataAnalysis" color="info" />
+      <StatCard label="最常用平台" :value="mostUsedPlatform" icon="Trophy" color="primary" />
+      <StatCard
+        label="Token 排行最高"
+        :value="tokenRanking.length > 0 ? (tokenRanking[0].tokenUsage || 0).toLocaleString() : '--'"
+        icon="Timer"
+        color="warning"
+      />
+    </div>
 
     <!-- 中间区域：平台分布 + Token 排行 -->
     <el-row :gutter="16" style="margin-bottom: 20px">
@@ -496,3 +433,27 @@ onMounted(loadData)
     </el-dialog>
   </div>
 </template>
+
+<style scoped>
+.dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sf-space-4);
+}
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--sf-space-3);
+}
+
+.stat-grid--3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+@media (max-width: 1200px) {
+  .stat-grid, .stat-grid--3 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+</style>

@@ -2,6 +2,8 @@
 import { onMounted, reactive, ref } from 'vue'
 import { templateApi, type TemplateVO } from '@/api/template'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import PageHeader from '@/components/PageHeader.vue'
+import EmptyState from '@/components/EmptyState.vue'
 
 const templates = ref<TemplateVO[]>([])
 const loading = ref(false)
@@ -107,7 +109,10 @@ onMounted(loadList)
 </script>
 
 <template>
-  <div v-loading="loading">
+  <div v-loading="loading" class="sf-page-container">
+    <!-- 页面头部 -->
+    <PageHeader title="提示词模板" subtitle="预设专业的 AI 生成模板" icon="Collection" />
+
     <!-- 操作栏 -->
     <el-card style="margin-bottom: 16px">
       <div style="display: flex; justify-content: space-between; align-items: center">
@@ -127,7 +132,7 @@ onMounted(loadList)
     <!-- 模板卡片 -->
     <el-row :gutter="16">
       <el-col v-for="tpl in templates" :key="tpl.id" :xs="24" :sm="12" :md="8" :lg="6" style="margin-bottom: 16px">
-        <el-card shadow="hover" style="height: 100%; cursor: pointer" @click="openDetail(tpl)">
+        <el-card class="template-card" shadow="hover" style="height: 100%; cursor: pointer" @click="openDetail(tpl)">
           <template #header>
             <div style="display: flex; justify-content: space-between; align-items: center">
               <span style="font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 150px">
@@ -153,7 +158,14 @@ onMounted(loadList)
       </el-col>
     </el-row>
 
-    <el-empty v-if="!loading && templates.length === 0" description="暂无模板，点击创建" />
+    <EmptyState
+      v-if="!loading && templates.length === 0"
+      icon="Collection"
+      title="暂无模板"
+      description="创建你的第一个 Prompt 模板"
+      actionText="创建模板"
+      @action="openCreate"
+    />
 
     <!-- 创建/编辑对话框 -->
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="700px" :close-on-click-modal="false">
@@ -213,3 +225,13 @@ onMounted(loadList)
     </el-dialog>
   </div>
 </template>
+
+<style scoped>
+.template-card {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.template-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--sf-shadow-md);
+}
+</style>

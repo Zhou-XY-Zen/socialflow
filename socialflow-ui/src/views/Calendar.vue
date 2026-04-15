@@ -12,6 +12,8 @@
 import { computed, onMounted, ref } from 'vue'
 import { contentApi } from '@/api/content'
 import type { ContentVO } from '@/types/api'
+import PageHeader from '@/components/PageHeader.vue'
+import EmptyState from '@/components/EmptyState.vue'
 
 /** 所有内容列表 */
 const allContent = ref<ContentVO[]>([])
@@ -122,7 +124,12 @@ onMounted(loadData)
 </script>
 
 <template>
-  <div v-loading="loading">
+  <div v-loading="loading" class="sf-page-container">
+    <PageHeader
+      title="内容日历"
+      subtitle="按日期查看和管理内容"
+      icon="Calendar"
+    />
     <el-row :gutter="20">
       <!-- 日历区域 -->
       <el-col :span="16">
@@ -137,31 +144,30 @@ onMounted(loadData)
             <template #date-cell="{ data }">
               <div style="height: 100%; position: relative">
                 <span>{{ data.day.split('-')[2] }}</span>
-                <!-- 有内容的日期显示圆点标记 -->
+                <!-- 有内容的日期显示标记 -->
                 <div
                   v-if="hasContent(new Date(data.day))"
                   style="
                     position: absolute;
-                    bottom: 2px;
+                    bottom: 4px;
                     left: 50%;
                     transform: translateX(-50%);
-                    display: flex;
+                    display: inline-flex;
                     align-items: center;
-                    gap: 2px;
+                    justify-content: center;
+                    min-width: 22px;
+                    height: 18px;
+                    padding: 0 6px;
+                    border-radius: 9px;
+                    background: var(--sf-gradient);
+                    color: #fff;
+                    font-size: 11px;
+                    font-weight: 600;
+                    line-height: 1;
+                    box-shadow: var(--sf-shadow-sm);
                   "
                 >
-                  <span
-                    style="
-                      width: 6px;
-                      height: 6px;
-                      border-radius: 50%;
-                      background-color: #409eff;
-                      display: inline-block;
-                    "
-                  />
-                  <span style="font-size: 10px; color: #409eff">
-                    {{ getContentCount(new Date(data.day)) }}
-                  </span>
+                  {{ getContentCount(new Date(data.day)) }}
                 </div>
               </div>
             </template>
@@ -196,7 +202,13 @@ onMounted(loadData)
               </div>
             </div>
           </div>
-          <el-empty v-else description="该日期暂无内容" :image-size="80" />
+          <EmptyState
+            v-else
+            icon="Calendar"
+            title="这天没有内容"
+            description="选择其他日期查看"
+            size="small"
+          />
         </el-card>
       </el-col>
     </el-row>

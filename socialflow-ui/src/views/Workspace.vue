@@ -12,6 +12,7 @@ import { imageApi, type ImageTaskStatusVO } from '@/api/image'
 import { post } from '@/api/http'
 import { ElMessage } from 'element-plus'
 import type { ContentGenerateDTO, KbVO } from '@/types/api'
+import EmptyState from '@/components/EmptyState.vue'
 
 const form = reactive<ContentGenerateDTO>({
   topic: '',
@@ -546,17 +547,17 @@ async function onGenerate() {
           />
 
           <!-- 空状态引导 -->
-          <div v-else class="empty-state">
-            <div class="empty-icon">&#x2728;</div>
-            <h3 class="empty-title">输入主题，开始 AI 创作</h3>
-            <p class="empty-desc">在左侧填写主题和参数，点击生成按钮，AI 将为你撰写专业文案并自动配图</p>
+          <div v-else class="empty-wrap">
+            <EmptyState
+              icon="MagicStick"
+              title="输入主题，开始 AI 创作"
+              description="在左侧填写主题和参数，点击生成按钮，AI 将为你撰写专业文案并自动配图"
+              size="large"
+            />
             <div class="empty-tags">
-              <el-tag size="small" effect="plain" round>小红书种草</el-tag>
-              <el-tag size="small" effect="plain" round>抖音脚本</el-tag>
-              <el-tag size="small" effect="plain" round>旅行攻略</el-tag>
-              <el-tag size="small" effect="plain" round>美食探店</el-tag>
-              <el-tag size="small" effect="plain" round>产品测评</el-tag>
-              <el-tag size="small" effect="plain" round>穿搭分享</el-tag>
+              <el-tag v-for="t in ['小红书种草', '抖音脚本', '旅行攻略', '美食探店', '产品测评', '穿搭分享']" :key="t" size="small" effect="plain" round>
+                {{ t }}
+              </el-tag>
             </div>
           </div>
         </el-card>
@@ -742,48 +743,26 @@ async function onGenerate() {
   opacity: 0.5;
 }
 
-/* 空状态引导 */
-.empty-state {
+/* 空状态 */
+.empty-wrap {
   flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 40px 20px;
-}
-.empty-icon {
-  font-size: 48px;
-  margin-bottom: 16px;
-  animation: float 3s ease-in-out infinite;
-}
-@keyframes float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-8px); }
-}
-.empty-title {
-  font-size: 20px;
-  font-weight: 600;
-  color: #1a1a2e;
-  margin: 0 0 8px;
-}
-.empty-desc {
-  font-size: 14px;
-  color: #909399;
-  margin: 0 0 24px;
-  text-align: center;
-  max-width: 360px;
-  line-height: 1.6;
 }
 .empty-tags {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   justify-content: center;
+  margin-top: 8px;
+  margin-bottom: 32px;
 }
 .empty-tags .el-tag {
   cursor: default;
-  color: #667eea;
-  border-color: #667eea40;
+  color: var(--sf-primary);
+  background: rgba(102, 126, 234, 0.08) !important;
 }
 .media-recommend-grid {
   display: grid;
