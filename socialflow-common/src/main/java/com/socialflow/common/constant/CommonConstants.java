@@ -8,7 +8,7 @@ package com.socialflow.common.constant;
  *
  * 【为什么用 final class + 私有构造方法】
  *   - final class：禁止被继承，因为常量类不需要子类
- *   - 私有构造方法：禁止被实例化，因为只需要通过 CommonConstants.XXX 访问静态常量
+ *   - 私有构造方法：禁止被实例化，因为只需要通过 CommonConstants.API_PREFIX 等静态字段访问
  *
  * 【命名约定】
  *   - API_PREFIX：API路径前缀

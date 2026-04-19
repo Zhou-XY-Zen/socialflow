@@ -1,6 +1,10 @@
 # ============================================================
-# bootstrap.yml.example —— Nacos 配置示例
+# bootstrap.yml.example —— Nacos 配置示例（兼容老版本）
 # ============================================================
+# 说明：Spring Boot 3.3 已推荐用 application.yml 的 spring.config.import
+# 加载 Nacos 配置（本项目的 application.yml 已采用该方式）。
+# 本文件保留作为"如何走传统 bootstrap 模式"的参考示例。
+#
 # 复制此文件为 bootstrap.yml，填入实际的 Nacos 地址和密码：
 #   cp bootstrap.yml.example bootstrap.yml
 #

@@ -5,6 +5,12 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.socialflow.common.exception.NotFoundException;
 import com.socialflow.common.result.PageResult;
 import com.socialflow.dao.mapper.ContentMapper;
+import com.socialflow.dao.mapper.ContentMediaRelMapper;
+import com.socialflow.dao.mapper.ContentVersionMapper;
+import com.socialflow.dao.mapper.MediaAssetMapper;
+import com.socialflow.model.entity.ContentMediaRel;
+import com.socialflow.model.entity.ContentVersion;
+import com.socialflow.model.entity.MediaAsset;
 import com.socialflow.model.dto.ContentBatchGenerateDTO;
 import com.socialflow.model.dto.ContentGenerateDTO;
 import com.socialflow.model.dto.ContentRewriteDTO;
@@ -67,6 +73,15 @@ public class ContentServiceImpl implements ContentService {
 
     /** 内容表数据库映射器 */
     private final ContentMapper contentMapper;
+
+    /** 内容-素材关联 Mapper */
+    private final ContentMediaRelMapper contentMediaRelMapper;
+
+    /** 内容版本历史 Mapper */
+    private final ContentVersionMapper contentVersionMapper;
+
+    /** 素材 Mapper */
+    private final MediaAssetMapper mediaAssetMapper;
 
     /** 内容持久化 Helper —— 将 Content + ContentVersion 多表写操作收敛到独立事务，避免 LLM 长调用占用 DB 连接 */
     private final ContentPersister contentPersister;
@@ -892,5 +907,50 @@ public class ContentServiceImpl implements ContentService {
                 .replace("\n", "\\n")
                 .replace("\r", "\\r")
                 .replace("\t", "\\t");
+    }
+
+    // ==================== 媒体素材绑定 + 版本历史 ====================
+    // 这三个方法从 ContentController 下沉而来，遵循 "Controller 不直接依赖 DAO" 的分层原则
+
+    @Override
+    @Transactional
+    public void bindMedia(Long userId, Long contentId, List<Long> mediaIds) {
+        // 校验归属（get 里已含权限校验 + 未找到抛异常）
+        get(userId, contentId);
+        // 删除旧关联
+        LambdaQueryWrapper<ContentMediaRel> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(ContentMediaRel::getContentId, contentId);
+        contentMediaRelMapper.delete(wrapper);
+        if (mediaIds == null || mediaIds.isEmpty()) return;
+        // 按顺序插入新关联
+        for (int i = 0; i < mediaIds.size(); i++) {
+            ContentMediaRel rel = new ContentMediaRel();
+            rel.setContentId(contentId);
+            rel.setMediaId(mediaIds.get(i));
+            rel.setSortOrder(i);
+            rel.setCreateTime(java.time.LocalDateTime.now());
+            contentMediaRelMapper.insert(rel);
+        }
+    }
+
+    @Override
+    public List<MediaAsset> listBoundMedia(Long userId, Long contentId) {
+        get(userId, contentId);
+        LambdaQueryWrapper<ContentMediaRel> relWrapper = new LambdaQueryWrapper<>();
+        relWrapper.eq(ContentMediaRel::getContentId, contentId)
+                  .orderByAsc(ContentMediaRel::getSortOrder);
+        List<ContentMediaRel> rels = contentMediaRelMapper.selectList(relWrapper);
+        if (rels.isEmpty()) return List.of();
+        List<Long> mediaIds = rels.stream().map(ContentMediaRel::getMediaId).toList();
+        return mediaAssetMapper.selectBatchIds(mediaIds);
+    }
+
+    @Override
+    public List<ContentVersion> listVersions(Long userId, Long contentId) {
+        get(userId, contentId);
+        LambdaQueryWrapper<ContentVersion> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(ContentVersion::getContentId, contentId)
+               .orderByDesc(ContentVersion::getVersionNum);
+        return contentVersionMapper.selectList(wrapper);
     }
 }

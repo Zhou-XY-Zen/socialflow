@@ -46,9 +46,10 @@ socialflow/
 ├── docker-compose.yml                # local infra (MySQL/Redis/pgvector)
 ├── .env.example
 ├── sql/
-│   ├── schema.sql                    # all 18 MySQL tables
-│   ├── init-data.sql                 # seed Prompt templates
-│   └── pgvector-init.sql             # vector collections & HNSW indexes
+│   ├── README.md                     # 说明：Flyway 是 MySQL schema 权威来源
+│   ├── init-data.sql                 # 早期 Prompt 模板（1001-1004）尚未入 Flyway
+│   └── pgvector-init.sql             # pgvector 初始化（可选）
+│   # MySQL schema + V2 种子：socialflow-admin/.../db/migration/V*.sql（Flyway 自动执行）
 ├── socialflow-common/                # R, exceptions, enums, utils
 ├── socialflow-model/                 # Entity / DTO / VO
 ├── socialflow-dao/                   # MyBatis-Plus mappers
@@ -81,8 +82,10 @@ cp .env.example .env
 docker compose up -d
 ```
 
-This starts MySQL (port 3306), Redis (6379), pgvector (5432),
-and seeds MySQL from `sql/schema.sql` + `sql/init-data.sql`.
+This starts MySQL (port 3306), Redis (6379), pgvector (5432).
+MySQL schema and seed data (V2 prompt templates + Wave 4 Wave 5 migrations)
+are applied automatically by Flyway when the Spring Boot app starts, from
+`socialflow-admin/src/main/resources/db/migration/V*.sql`.
 
 ### 3. Initialize pgvector
 

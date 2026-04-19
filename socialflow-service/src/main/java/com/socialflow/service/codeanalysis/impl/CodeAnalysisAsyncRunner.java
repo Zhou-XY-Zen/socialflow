@@ -1,7 +1,7 @@
 package com.socialflow.service.codeanalysis.impl;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.socialflow.common.util.JsonUtil;
 import com.socialflow.common.enums.LlmProvider;
 import com.socialflow.dao.mapper.RepoAnalysisFindingMapper;
 import com.socialflow.dao.mapper.RepoAnalysisMapper;
@@ -47,7 +47,6 @@ public class CodeAnalysisAsyncRunner {
     private final RepoAnalysisFindingMapper findingMapper;
     private final GitRepoService gitRepoService;
     private final LlmRouter llmRouter;
-    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Value("${socialflow.ai.system-api-key:}")
     private String systemApiKey;
@@ -259,7 +258,7 @@ public class CodeAnalysisAsyncRunner {
         if (content == null) throw new RuntimeException("LLM 返回空");
         String cleaned = stripCodeFence(content.trim());
         try {
-            return objectMapper.readTree(cleaned);
+            return JsonUtil.mapper().readTree(cleaned);
         } catch (Exception e) {
             log.warn("[CodeAnalysis] JSON 解析失败，原始输出前 500 字：\n{}",
                     cleaned.substring(0, Math.min(500, cleaned.length())));
@@ -281,7 +280,7 @@ public class CodeAnalysisAsyncRunner {
     private String writeJson(Object obj) {
         if (obj == null) return null;
         try {
-            return objectMapper.writeValueAsString(obj);
+            return JsonUtil.mapper().writeValueAsString(obj);
         } catch (Exception e) {
             return null;
         }

@@ -193,7 +193,7 @@ public class RagPipelineServiceImpl implements RagPipelineService {
         return sb.toString();
     }
 
-    // ------------ 以下为内部辅助方法（部分为 TODO 待完善实现） ------------
+    // ------------ 以下为内部辅助方法（HyDE 重写 / RRF 融合） ------------
 
     /**
      * HyDE 查询重写——用 LLM 生成一个"假设性回答"来替代原始查询进行检索。

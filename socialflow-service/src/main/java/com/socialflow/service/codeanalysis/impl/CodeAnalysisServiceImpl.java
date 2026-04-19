@@ -2,7 +2,7 @@ package com.socialflow.service.codeanalysis.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.socialflow.common.util.JsonUtil;
 import com.socialflow.common.exception.BusinessException;
 import com.socialflow.dao.mapper.RepoAnalysisFindingMapper;
 import com.socialflow.dao.mapper.RepoAnalysisMapper;
@@ -60,8 +60,6 @@ public class CodeAnalysisServiceImpl implements CodeAnalysisService {
     private final GitRepoService gitRepoService;
     /** 异步执行器（独立 bean，让 @Async 代理生效） */
     private final CodeAnalysisAsyncRunner asyncRunner;
-    private final ObjectMapper objectMapper = new ObjectMapper();
-
     /** commit 列表默认条数 */
     private static final int DEFAULT_COMMIT_LIMIT = 50;
 
@@ -391,8 +389,8 @@ public class CodeAnalysisServiceImpl implements CodeAnalysisService {
     private <T> List<T> readJsonList(String json, Class<T> clazz) {
         if (json == null || json.isBlank()) return List.of();
         try {
-            return objectMapper.readValue(json,
-                    objectMapper.getTypeFactory().constructCollectionType(List.class, clazz));
+            return JsonUtil.mapper().readValue(json,
+                    JsonUtil.mapper().getTypeFactory().constructCollectionType(List.class, clazz));
         } catch (Exception e) {
             return List.of();
         }

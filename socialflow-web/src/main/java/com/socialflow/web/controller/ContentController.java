@@ -10,9 +10,7 @@ import com.socialflow.model.dto.ContentRewriteDTO;
 import com.socialflow.model.dto.MultiAgentGenerateDTO;
 import com.socialflow.model.entity.ContentVersion;
 import com.socialflow.model.vo.ContentVO;
-import com.socialflow.dao.mapper.ContentVersionMapper;
 import com.socialflow.service.content.ContentService;
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -68,14 +66,8 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class ContentController {
 
-    /** 内容服务 */
+    /** 内容服务（Controller 不直接依赖 DAO，媒体绑定/版本历史等通过 Service 暴露） */
     private final ContentService contentService;
-    /** 内容-素材关联 Mapper */
-    private final com.socialflow.dao.mapper.ContentMediaRelMapper contentMediaRelMapper;
-    /** 素材 Mapper */
-    private final com.socialflow.dao.mapper.MediaAssetMapper mediaAssetMapper;
-    /** 内容版本 Mapper */
-    private final ContentVersionMapper contentVersionMapper;
 
     /**
      * 单平台内容生成（同步方式）。
@@ -386,23 +378,7 @@ public class ContentController {
     @Operation(summary = "bind media to content")
     @PostMapping("/{id}/bindMedia")
     public R<Void> bindMedia(@PathVariable Long id, @RequestBody java.util.List<Long> mediaIds) {
-        Long userId = StpUtil.getLoginIdAsLong();
-        // 校验文案归属
-        contentService.get(userId, id);
-        // 删除旧关联
-        com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<com.socialflow.model.entity.ContentMediaRel> wrapper =
-            new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<>();
-        wrapper.eq(com.socialflow.model.entity.ContentMediaRel::getContentId, id);
-        contentMediaRelMapper.delete(wrapper);
-        // 插入新关联
-        for (int i = 0; i < mediaIds.size(); i++) {
-            com.socialflow.model.entity.ContentMediaRel rel = new com.socialflow.model.entity.ContentMediaRel();
-            rel.setContentId(id);
-            rel.setMediaId(mediaIds.get(i));
-            rel.setSortOrder(i);
-            rel.setCreateTime(java.time.LocalDateTime.now());
-            contentMediaRelMapper.insert(rel);
-        }
+        contentService.bindMedia(StpUtil.getLoginIdAsLong(), id, mediaIds);
         return R.ok();
     }
 
@@ -412,19 +388,7 @@ public class ContentController {
     @Operation(summary = "get content bound media")
     @GetMapping("/{id}/media")
     public R<java.util.List<com.socialflow.model.entity.MediaAsset>> getMedia(@PathVariable Long id) {
-        Long userId = StpUtil.getLoginIdAsLong();
-        contentService.get(userId, id);
-        // 查关联表
-        com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<com.socialflow.model.entity.ContentMediaRel> relWrapper =
-            new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<>();
-        relWrapper.eq(com.socialflow.model.entity.ContentMediaRel::getContentId, id)
-                  .orderByAsc(com.socialflow.model.entity.ContentMediaRel::getSortOrder);
-        java.util.List<com.socialflow.model.entity.ContentMediaRel> rels = contentMediaRelMapper.selectList(relWrapper);
-        if (rels.isEmpty()) return R.ok(java.util.List.of());
-        // 批量查素材
-        java.util.List<Long> mediaIds = rels.stream().map(com.socialflow.model.entity.ContentMediaRel::getMediaId).toList();
-        java.util.List<com.socialflow.model.entity.MediaAsset> assets = mediaAssetMapper.selectBatchIds(mediaIds);
-        return R.ok(assets);
+        return R.ok(contentService.listBoundMedia(StpUtil.getLoginIdAsLong(), id));
     }
 
     /**
@@ -440,11 +404,7 @@ public class ContentController {
     @Operation(summary = "get content version history")
     @GetMapping("/{id}/versions")
     public R<List<ContentVersion>> getVersions(@PathVariable Long id) {
-        // Verify ownership
-        contentService.get(StpUtil.getLoginIdAsLong(), id);
-        LambdaQueryWrapper<ContentVersion> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(ContentVersion::getContentId, id).orderByDesc(ContentVersion::getVersionNum);
-        return R.ok(contentVersionMapper.selectList(wrapper));
+        return R.ok(contentService.listVersions(StpUtil.getLoginIdAsLong(), id));
     }
 
     /**

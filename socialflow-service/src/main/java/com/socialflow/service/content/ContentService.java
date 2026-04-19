@@ -201,4 +201,20 @@ public interface ContentService {
      * 不复制版本历史/发布任务/媒体关联（仅头表数据）。
      */
     ContentVO clone(Long userId, Long id);
+
+    /**
+     * 绑定一组媒体素材到文案。先清除旧关联再按顺序插入新关联。
+     * 前端在生成配图后让用户勾选保存时调用。
+     */
+    void bindMedia(Long userId, Long contentId, List<Long> mediaIds);
+
+    /**
+     * 查询文案绑定的媒体素材列表（按 sortOrder 升序）。
+     */
+    List<com.socialflow.model.entity.MediaAsset> listBoundMedia(Long userId, Long contentId);
+
+    /**
+     * 查询内容的版本历史列表（按 versionNum 倒序，最新版在前）。
+     */
+    List<com.socialflow.model.entity.ContentVersion> listVersions(Long userId, Long contentId);
 }
