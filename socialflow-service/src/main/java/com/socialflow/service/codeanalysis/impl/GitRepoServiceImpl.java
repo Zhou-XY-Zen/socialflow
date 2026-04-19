@@ -12,6 +12,7 @@ import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.revwalk.RevWalk;
 import org.eclipse.jgit.treewalk.CanonicalTreeParser;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayOutputStream;
@@ -39,6 +40,25 @@ import java.util.stream.Stream;
 @Slf4j
 @Service
 public class GitRepoServiceImpl implements GitRepoService {
+
+    /**
+     * Clone 超时（秒）—— 30s 内 TCP 握手+HTTPS 必须成功，否则认为不可达。
+     * 避免国内机房访问 GitHub 时 JGit 死等几分钟。
+     */
+    @Value("${socialflow.code-analysis.clone-timeout-seconds:30}")
+    private int cloneTimeoutSeconds;
+
+    /**
+     * GitHub 国内加速镜像；为空串则关闭重写。
+     * 国内常用镜像：kkgithub.com / gh.llkk.cc / ghproxy.com
+     * 当直连 https://github.com 失败时自动切换。
+     */
+    @Value("${socialflow.code-analysis.github-mirror:kkgithub.com}")
+    private String githubMirror;
+
+    /** 关闭自动镜像重写 */
+    @Value("${socialflow.code-analysis.mirror-enabled:true}")
+    private boolean mirrorEnabled;
 
     private static final Set<String> DEFAULT_EXCLUDE = Set.of(
             "node_modules", "target", "dist", ".git", ".idea", ".vscode",
@@ -82,20 +102,46 @@ public class GitRepoServiceImpl implements GitRepoService {
     @Override
     public File shallowClone(String gitUrl, String branch, Integer depth) {
         int cloneDepth = (depth == null || depth <= 0) ? 1 : depth;
+        String primaryUrl = gitUrl;
+        String fallbackUrl = mirrorUrl(gitUrl);
+
+        // 如果启用了镜像且原 URL 是 github.com，直接优先用镜像（国内机房直连 github 基本必超时）
+        if (fallbackUrl != null && !fallbackUrl.equals(primaryUrl)) {
+            log.info("[Git] github.com 国内直连通常超时，直接用镜像: {} → {}", primaryUrl, fallbackUrl);
+            try {
+                return doClone(fallbackUrl, branch, cloneDepth);
+            } catch (Exception e) {
+                log.warn("[Git] 镜像克隆失败，回退原 URL: {}", e.getMessage());
+                // 镜像失败回退原 URL 再试（某些企业自建网络能通 github 但不通镜像）
+            }
+        }
+
+        try {
+            return doClone(primaryUrl, branch, cloneDepth);
+        } catch (Exception e) {
+            String friendly = buildFriendlyError(primaryUrl, e);
+            throw new BusinessException(friendly);
+        }
+    }
+
+    /** 单次克隆尝试，带超时 */
+    private File doClone(String url, String branch, int cloneDepth) throws Exception {
         File target;
         try {
             target = Files.createTempDirectory("sfca-" + System.currentTimeMillis() + "-").toFile();
         } catch (IOException e) {
             throw new BusinessException("创建临时目录失败: " + e.getMessage());
         }
-        log.info("[Git] shallow clone url={} branch={} depth={} → {}", gitUrl, branch, cloneDepth, target);
+        log.info("[Git] shallow clone url={} branch={} depth={} timeout={}s → {}",
+                url, branch, cloneDepth, cloneTimeoutSeconds, target);
 
         try {
             var cloneCmd = Git.cloneRepository()
-                    .setURI(gitUrl)
+                    .setURI(url)
                     .setDirectory(target)
                     .setDepth(cloneDepth)
-                    .setCloneAllBranches(false);
+                    .setCloneAllBranches(false)
+                    .setTimeout(cloneTimeoutSeconds);  // JGit 的连接/读取超时（秒）
             if (branch != null && !branch.isBlank()) {
                 cloneCmd.setBranch(branch);
                 cloneCmd.setBranchesToClone(List.of("refs/heads/" + branch));
@@ -106,8 +152,35 @@ public class GitRepoServiceImpl implements GitRepoService {
             return target;
         } catch (Exception e) {
             cleanup(target);
-            throw new BusinessException("克隆仓库失败: " + e.getMessage());
+            throw e;
         }
+    }
+
+    /** 把 github.com 地址改写成镜像地址；非 github 或镜像关闭返回 null */
+    private String mirrorUrl(String gitUrl) {
+        if (!mirrorEnabled || githubMirror == null || githubMirror.isBlank()) return null;
+        if (gitUrl == null) return null;
+        // 只重写 HTTPS 形式的 github.com
+        if (gitUrl.startsWith("https://github.com/")) {
+            return "https://" + githubMirror + gitUrl.substring("https://github.com".length());
+        }
+        if (gitUrl.startsWith("http://github.com/")) {
+            return "https://" + githubMirror + gitUrl.substring("http://github.com".length());
+        }
+        return null;
+    }
+
+    private String buildFriendlyError(String url, Exception e) {
+        String cause = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+        boolean looksNetwork = cause.contains("timed out") || cause.contains("connection")
+                || cause.contains("Connection") || cause.contains("Read timed out")
+                || cause.contains("unreachable");
+        if (looksNetwork && url.contains("github.com")) {
+            return "克隆 GitHub 仓库失败：服务器无法直连 github.com（国内机房常见）。已尝试镜像 " +
+                   githubMirror + " 仍失败。建议：1) 切换到 Gitee 镜像地址；2) 在 Settings 里" +
+                   "关闭镜像配置 kkgithub 换其他；3) 管理员在服务器配置 HTTP/SOCKS 代理。原始错误：" + cause;
+        }
+        return "克隆仓库失败: " + cause;
     }
 
     @Override
