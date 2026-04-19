@@ -23,7 +23,8 @@ const filterLevel = ref<FindingLevel | 'ALL'>('ALL')
 let poller: number | null = null
 
 async function load() {
-  const id = Number(route.params.id)
+  // route.params.id 已经是 string，切勿 Number() 转换（雪花 ID 会丢精度）
+  const id = String(route.params.id)
   try {
     current.value = await codeAnalysisApi.get(id)
     if (current.value.status === 'RUNNING' || current.value.status === 'PENDING') {
@@ -37,7 +38,7 @@ async function load() {
   }
 }
 
-function startPoll(id: number) {
+function startPoll(id: string) {
   stopPoll()
   poller = window.setInterval(async () => {
     try {

@@ -32,7 +32,7 @@ async function start() {
   }
 }
 
-async function poll(id: number) {
+async function poll(id: string) {
   stopPoll()
   const tick = async () => {
     try {

@@ -8,10 +8,13 @@ export type AnalysisStatus = 'PENDING' | 'RUNNING' | 'SUCCESS' | 'FAILED'
 export type FindingLevel = 'HIGH' | 'MEDIUM' | 'LOW'
 export type FindingStatus = 'UNRESOLVED' | 'RESOLVED' | 'IGNORED'
 
-/** 单条审查发现 */
+/** 单条审查发现
+ *  注意：id / analysisId 是 Java Long 雪花 ID（19 位），
+ *  JS Number 精度只有 2^53-1（16 位），所以必须用 string 接。
+ */
 export interface CodeFinding {
-  id: number
-  analysisId: number
+  id: string
+  analysisId: string
   level: FindingLevel
   category?: string
   title: string
@@ -35,7 +38,7 @@ export interface LanguageStat {
 
 /** 代码分析结果 */
 export interface CodeAnalysis {
-  id: number
+  id: string
   gitUrl: string
   branch?: string
   commitSha?: string
@@ -79,7 +82,7 @@ export interface RepoCommit {
 
 /** 仓库书签 */
 export interface RepoBookmark {
-  id: number
+  id: string
   nickname: string
   gitUrl: string
   branch?: string
@@ -117,7 +120,7 @@ export interface AnalyzeRepoDTO {
 }
 
 export interface SaveBookmarkDTO {
-  id?: number
+  id?: string
   nickname: string
   gitUrl: string
   branch?: string
