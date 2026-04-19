@@ -1,0 +1,71 @@
+package com.socialflow.model.vo;
+
+import io.swagger.v3.oas.annotations.media.Schema;
+import lombok.Data;
+
+import java.io.Serial;
+import java.io.Serializable;
+import java.time.LocalDate;
+import java.util.List;
+
+/**
+ * 代码分析仪表盘聚合 VO。
+ */
+@Data
+@Schema(description = "代码分析仪表盘统计")
+public class AnalysisStatsVO implements Serializable {
+
+    @Serial
+    private static final long serialVersionUID = 1L;
+
+    /** 本月分析次数 */
+    private Integer monthlyCount;
+
+    /** 总分析次数 */
+    private Integer totalCount;
+
+    /** 平均评分（仅审查类） */
+    private Double averageScore;
+
+    /** 高风险总数 */
+    private Integer totalHighRisk;
+
+    /** 已解决风险数 */
+    private Integer resolvedCount;
+
+    /** 近 30 天每日分析次数 */
+    private List<DailyPoint> dailyTrend;
+
+    /** 风险等级分布 */
+    private Integer highTotal;
+    private Integer mediumTotal;
+    private Integer lowTotal;
+
+    /** 按类别命中分布 */
+    private List<CategoryStat> categoryStats;
+
+    /** 最常分析仓库 Top 5 */
+    private List<RepoHot> topRepos;
+
+    @Data
+    public static class DailyPoint implements Serializable {
+        @Serial private static final long serialVersionUID = 1L;
+        private LocalDate date;
+        private Integer count;
+    }
+
+    @Data
+    public static class CategoryStat implements Serializable {
+        @Serial private static final long serialVersionUID = 1L;
+        private String category;
+        private Integer count;
+    }
+
+    @Data
+    public static class RepoHot implements Serializable {
+        @Serial private static final long serialVersionUID = 1L;
+        private String gitUrl;
+        private Integer analyzeCount;
+        private Integer lastScore;
+    }
+}

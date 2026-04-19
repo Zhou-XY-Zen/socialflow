@@ -152,5 +152,11 @@
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-math3</artifactId>
         </dependency>
+
+        <!-- Wave 5 代码分析工具：JGit 用于克隆远程仓库、读取 commit 列表和 diff -->
+        <dependency>
+            <groupId>org.eclipse.jgit</groupId>
+            <artifactId>org.eclipse.jgit</artifactId>
+        </dependency>
     </dependencies>
 </project>

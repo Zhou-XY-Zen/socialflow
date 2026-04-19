@@ -116,19 +116,39 @@ def tail_flyway_log(ssh, lines=20):
 def start_backend(ssh, profile="prod"):
     """启动后端并返回新进程 PID。
 
-    用 `< /dev/null` 关闭 stdin 并 `disown` 脱离 shell 作业表，否则 paramiko 的
-    stdout.read() 会一直等到 java 进程继承的 fd 关闭（启动可能持续 30-60s），
-    触发 channel 超时。
+    nohup + disown + </dev/null 仍不能让 paramiko channel 立刻关闭，因为 java
+    进程继承了 channel 的 stdout/stderr，paramiko 要等所有继承 fd 全部关闭才
+    认为 channel 结束。这里的策略：
+      1. 用 readline() 读一行（就是 echo $pid 的输出）再退出读循环
+      2. 若读超时（channel 仍 hang），用 pgrep 反查 PID
+      3. 整个过程不再让 run() 等 exit_status
     """
     start_cmd = (
         f"cd {REMOTE_DIR} && "
         f"SPRING_PROFILES_ACTIVE={profile} "
         f"nohup java -Xms512m -Xmx1536m "
         f"-jar socialflow.jar > {REMOTE_DIR}/logs/app.log 2>&1 < /dev/null & "
-        f"pid=$!; disown; echo $pid"
+        f"pid=$!; disown; echo $pid; exit"
     )
-    out, _, _ = run(ssh, start_cmd)
-    return out.strip().split("\n")[-1]
+    print(f"$ {start_cmd}")
+    _, stdout, _ = ssh.exec_command(start_cmd, timeout=8)
+    stdout.channel.settimeout(8.0)
+    pid = ""
+    try:
+        line = stdout.readline()
+        pid = line.strip() if line else ""
+    except Exception:
+        pass  # 读超时忽略 —— 进程通常已起来，下面 pgrep 反查
+
+    if not pid or not pid.isdigit():
+        time.sleep(2)
+        out, _, _ = run(
+            ssh,
+            "pgrep -f 'java.*socialflow.jar' | grep -v nacos | tail -1",
+            silent=True,
+        )
+        pid = out.strip()
+    return pid or "unknown"
 
 
 def kill_backend(ssh, force_grace=5):

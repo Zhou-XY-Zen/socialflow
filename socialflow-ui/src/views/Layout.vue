@@ -49,7 +49,20 @@ const menuGroups: MenuGroup[] = [
       { path: '/dashboard', label: '看板',          icon: 'TrendCharts' },
     ],
   },
-  // 未来新增的无关方向工具在这里追加一组
+  {
+    label: '代码分析',
+    icon: 'Cpu',
+    children: [
+      { path: '/code-analysis/dashboard', label: '仪表盘',    icon: 'Odometer' },
+      { path: '/code-analysis/project',   label: '项目概览',  icon: 'Reading' },
+      { path: '/code-analysis/review',    label: '提交审查',  icon: 'Search' },
+      { path: '/code-analysis/diff',      label: '对比分析',  icon: 'Connection' },
+      { path: '/code-analysis/history',   label: '历史记录',  icon: 'Clock' },
+      { path: '/code-analysis/bookmarks', label: '仓库收藏',  icon: 'Star' },
+      { path: '/code-analysis/rules',     label: '规约库',    icon: 'DocumentCopy' },
+      { path: '/code-analysis/settings',  label: '设置',      icon: 'Setting' },
+    ],
+  },
 ]
 
 /**
