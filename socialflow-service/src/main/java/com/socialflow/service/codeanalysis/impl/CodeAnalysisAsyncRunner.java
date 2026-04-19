@@ -400,10 +400,14 @@ public class CodeAnalysisAsyncRunner {
             List<ChatMessage> messages = new ArrayList<>();
             messages.add(ChatMessage.system(systemPrompt));
             messages.add(ChatMessage.user(userPrompt));
+            // maxTokens 8192 = DeepSeek V3 的 completion 上限；
+            // 不设会落到服务端默认 4096，FINAL 阶段要求 2000+ 字总结（≈5000+ tokens）就会被截断，
+            // 导致 JSON 没闭合，下游 stripCodeFence + parseJson 也救不回来。
             LlmConfig cfg = LlmConfig.builder()
                     .model(model)
                     .temperature(temperature)
                     .apiKey(systemApiKey)
+                    .maxTokens(8192)
                     .build();
             resp = llmRouter.get(providerEnum).chat(messages, cfg);
             success = true;
@@ -475,12 +479,16 @@ public class CodeAnalysisAsyncRunner {
 
     private JsonNode parseJson(String content) {
         if (content == null) throw new RuntimeException("LLM 返回空");
-        String cleaned = stripCodeFence(content.trim());
+        String raw = content.trim();
+        String cleaned = stripCodeFence(raw);
         try {
             return JsonUtil.mapper().readTree(cleaned);
         } catch (Exception e) {
-            log.warn("[CodeAnalysis] JSON 解析失败，前 500 字：\n{}",
-                    cleaned.substring(0, Math.min(500, cleaned.length())));
+            // 把 raw 和 cleaned 的长度、结尾都打出来，便于判断是"围栏没剥"还是"被截断"
+            int rl = raw.length(), cl = cleaned.length();
+            String cTail = cleaned.substring(Math.max(0, cl - 80));
+            log.warn("[CodeAnalysis] JSON 解析失败 (rawLen={}, cleanedLen={}, cleanedTail={}), cleaned 前 500 字：\n{}",
+                    rl, cl, cTail, cleaned.substring(0, Math.min(500, cl)));
             throw new RuntimeException("LLM 返回 JSON 解析失败: " + e.getMessage());
         }
     }
@@ -548,15 +556,45 @@ public class CodeAnalysisAsyncRunner {
         return sb.toString();
     }
 
+    /**
+     * 剥 LLM 返回里的各种包装，返回可能的 JSON 主体。策略优先级：
+     *  1) 完整 ```...``` 围栏 → 取中间段
+     *  2) 残缺 ```...（只开头没闭合，被 max_tokens 截断常见）→ 砍掉首行
+     *  3) 兜底：找第一个 {/[ 到最后一个 }/] 之间
+     * 无论如何都尽力返回一个可被 Jackson 尝试解析的字符串。
+     */
     private static String stripCodeFence(String s) {
-        if (s.startsWith("```")) {
-            int firstNl = s.indexOf('\n');
-            int lastFence = s.lastIndexOf("```");
+        if (s == null) return "";
+        String t = s.trim();
+
+        // 1) 完整围栏：```json\n{...}\n```
+        if (t.startsWith("```")) {
+            int firstNl = t.indexOf('\n');
+            int lastFence = t.lastIndexOf("```");
             if (firstNl > 0 && lastFence > firstNl) {
-                return s.substring(firstNl + 1, lastFence).trim();
+                t = t.substring(firstNl + 1, lastFence).trim();
+            } else if (firstNl > 0) {
+                // 2) 只有开头围栏没闭合（被截断）→ 砍掉第一行
+                t = t.substring(firstNl + 1).trim();
             }
         }
-        return s;
+
+        // 3) 兜底：提取第一个 {/[ 到最后一个 }/] 之间的内容
+        int startObj = t.indexOf('{');
+        int startArr = t.indexOf('[');
+        int start;
+        if (startObj < 0) start = startArr;
+        else if (startArr < 0) start = startObj;
+        else start = Math.min(startObj, startArr);
+
+        int endObj = t.lastIndexOf('}');
+        int endArr = t.lastIndexOf(']');
+        int end = Math.max(endObj, endArr);
+
+        if (start >= 0 && end > start) {
+            return t.substring(start, end + 1);
+        }
+        return t;
     }
 
     private String writeJson(Object obj) {

@@ -98,7 +98,7 @@ public final class CodeReviewPrompts {
                 给你一个仓库的关键文件 + 目录树 + 语言统计，请产出一份结构化"项目概览报告"，
                 目标读者：第一次接触该项目的工程师。
 
-                要求严格输出 JSON（不要放到 markdown 代码块里，直接给 JSON 对象，不要任何前后缀文字）：
+                ⚠️ 重要格式要求：直接返回纯 JSON 对象，不要 markdown 围栏（不要 ```json 开头也不要 ``` 结尾），不要任何前后缀文字：
 
                 {
                   "projectName": "...",
@@ -127,7 +127,7 @@ public final class CodeReviewPrompts {
                   - 敏感信息泄漏
                   - 数据库未加索引或者索引列被函数包裹
 
-                请严格输出 JSON（不要放 markdown 代码块，直接给 JSON 对象，不要任何前后缀文字）：
+                ⚠️ 重要格式要求：直接返回纯 JSON 对象，不要 markdown 围栏（不要 ```json 开头也不要 ``` 结尾），不要任何前后缀文字：
 
                 {
                   "overallScore": 85,
@@ -271,7 +271,7 @@ public final class CodeReviewPrompts {
         return """
                 你是一位资深技术架构师，目标：为第一次接触该项目的新工程师写一份"项目全景"。
                 你已经看过了该项目每个模块的详细摘要（由你自己之前读全部源码产出）。
-                现在请综合所有摘要 + 技术栈 + 目录结构，输出 JSON（不要任何前后缀文字）：
+                现在请综合所有摘要 + 技术栈 + 目录结构，⚠️ 重要格式要求：直接返回纯 JSON 对象，不要 markdown 围栏（不要 ```json 开头也不要 ``` 结尾），不要任何前后缀文字（包括"以下是..."这类话）：
 
                 {
                   "projectName": "...",
@@ -314,7 +314,7 @@ public final class CodeReviewPrompts {
                 你正在审查**一个文件**的改动。严格按《阿里巴巴 Java 开发手册》识别：
                 违反条款 + 安全隐患 + 代码坏味道。
 
-                输出 JSON（不要任何前后缀文字）：
+                ⚠️ 重要格式要求：直接返回纯 JSON 对象，不要 markdown 围栏（不要 ```json 开头也不要 ``` 结尾），不要任何前后缀文字（包括"以下是..."这类话）：
                 {
                   "findings": [
                     {
@@ -370,7 +370,7 @@ public final class CodeReviewPrompts {
 
                 **不要**再额外添加新 findings，只归纳已有的。
 
-                输出 JSON（不要任何前后缀文字）：
+                ⚠️ 重要格式要求：直接返回纯 JSON 对象，不要 markdown 围栏（不要 ```json 开头也不要 ``` 结尾），不要任何前后缀文字（包括"以下是..."这类话）：
                 { "overallScore": 85, "summaryMd": "..." }
                 """;
     }
