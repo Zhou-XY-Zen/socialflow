@@ -1,17 +1,14 @@
 /**
- * 阿里巴巴 Java 开发手册规约数据 —— 黄山版（最新版 2022.8）
+ * 阿里巴巴 Java 开发手册（黄山版 1.7.1）规约数据 —— 从 PDF 原样抽取
  *
- * 数据来源：《阿里巴巴 Java 开发手册（黄山版）》
- * 版本 1.7.1 → 黄山版相较嵩山版新增：
- *   - 日期时间处理专节
- *   - 前后端协作规约
- *   - 应用性能规约
- *   - 研发效能
- *   - Spring 工程结构增强
+ * 数据来源：《Java 开发手册（黄山版）》v1.7.1 · 2022.02.03
+ * 抽取总量：321 条（强制 191 / 推荐 94 / 参考 36）
+ * 数据主本：socialflow-service/src/main/resources/rules/huangshan_rules.json
  *
- * 分十一大维度：编程规约 / 异常日志 / 单元测试 / 安全规约 / MySQL 数据库 /
- *             工程结构 / 设计规约 / 前后端规约 / 日期时间 / 应用性能 / 研发效能
- * 级别：MANDATORY（强制）/ RECOMMENDED（推荐）/ REFERENCE（参考）
+ * 七大维度：编程规约 / 异常日志 / 单元测试 / 安全规约 / MySQL / 工程结构 / 设计规约
+ * 约束力：MANDATORY（强制）/ RECOMMENDED（推荐）/ REFERENCE（参考）
+ *
+ * ⚠️ 本文件由 _tmp_rules/generate_ts.py 从 JSON 自动生成，不要手动编辑。
  */
 
 export interface Rule {
@@ -25,877 +22,2793 @@ export interface Rule {
 }
 
 export const rules: Rule[] = [
-  // ============ 一、编程规约 - (一) 命名规约 ============
-  { code: '1.1.1', level: 'MANDATORY', category: '编程规约-命名',
-    title: '命名不能以下划线或美元符号开始/结束',
-    content: '代码中的命名均不能以下划线或美元符号开始，也不能以下划线或美元符号结束。',
-    exampleBad: '_name / __name / $Object / name_ / name$ / Object$',
-    exampleGood: 'name / object' },
-  { code: '1.1.2', level: 'MANDATORY', category: '编程规约-命名',
-    title: '禁止使用拼音与英文混合，更不允许直接使用中文',
-    content: '代码中的命名严禁使用拼音与英文混合的方式，更不允许直接使用中文的方式。正确的英文拼写和语法可以让阅读者易于理解，避免歧义。',
-    exampleBad: 'DaZhePromotion[打折] / getPingfenByName()[评分] / int 某变量 = 3',
-    exampleGood: 'discountPromotion / getRatingByName() / int someVar = 3' },
-  { code: '1.1.3', level: 'MANDATORY', category: '编程规约-命名',
-    title: '类名使用 UpperCamelCase 风格',
-    content: '类名使用 UpperCamelCase 风格，必须遵从驼峰形式，但以下情形例外：DO / BO / DTO / VO / AO / PO / UID 等。',
-    exampleBad: 'macroPolo / UserDo / XMLService / TCPUDPDeal / TAPromotion',
-    exampleGood: 'MarcoPolo / UserDO / XmlService / TcpUdpDeal / TaPromotion' },
-  { code: '1.1.4', level: 'MANDATORY', category: '编程规约-命名',
-    title: '方法/参数/成员/局部变量使用 lowerCamelCase',
-    content: '方法名、参数名、成员变量、局部变量都统一使用 lowerCamelCase 风格，必须遵从驼峰形式。',
-    exampleGood: 'localValue / getHttpMessage() / inputUserId' },
-  { code: '1.1.5', level: 'MANDATORY', category: '编程规约-命名',
-    title: '常量命名全部大写 + 下划线分隔',
-    content: '常量命名全部大写，单词间用下划线隔开，力求语义表达完整清楚，不要嫌名字长。',
-    exampleBad: 'MAX_COUNT',
-    exampleGood: 'MAX_STOCK_COUNT' },
-  { code: '1.1.6', level: 'MANDATORY', category: '编程规约-命名',
-    title: '抽象类/异常/测试类命名约定',
-    content: '抽象类命名使用 Abstract 或 Base 开头；异常类命名使用 Exception 结尾；测试类命名以它要测试的类的名称开始，以 Test 结尾。',
-    exampleGood: 'AbstractUserService / BaseController / UserException / UserServiceTest' },
-  { code: '1.1.7', level: 'MANDATORY', category: '编程规约-命名',
-    title: '中括号是数组类型的一部分',
-    content: '类型与中括号紧挨相连来定义数组。',
-    exampleBad: 'String args[];',
-    exampleGood: 'String[] args;' },
-  { code: '1.1.8', level: 'MANDATORY', category: '编程规约-命名',
-    title: 'POJO 布尔属性不加 is 前缀',
-    content: 'POJO 类中布尔类型变量不要加 is 前缀，否则部分框架解析会引起序列化错误。',
-    exampleBad: 'Boolean isDeleted; // getter 会是 isDeleted() 而非 getIsDeleted()',
-    exampleGood: 'Boolean deleted;' },
-  { code: '1.1.9', level: 'MANDATORY', category: '编程规约-命名',
-    title: '包名统一小写',
-    content: '包名统一使用小写，点分隔符之间有且仅有一个自然语义的英语单词。包名统一使用单数形式。',
-    exampleGood: 'com.alibaba.open.util' },
-  { code: '1.1.10', level: 'MANDATORY', category: '编程规约-命名',
-    title: '杜绝完全不规范的缩写',
-    content: '避免望文不知义。任何自定义编程元素在命名时使用尽量完整的单词组合来表达其意。',
-    exampleBad: 'AbsClass / condi',
-    exampleGood: 'AbstractClass / condition' },
-  { code: '1.1.11', level: 'RECOMMENDED', category: '编程规约-命名',
-    title: '接口不加 I 前缀；实现类用 Impl 后缀',
-    content: 'Service / DAO 类暴露给外部的方法一律是接口，内部的实现类用 Impl 的后缀与接口区别。',
-    exampleBad: 'class IUserService / UserServiceImpl',
-    exampleGood: 'interface UserService / class UserServiceImpl' },
-  { code: '1.1.12', level: 'REFERENCE', category: '编程规约-命名',
-    title: '枚举类名用 Enum 结尾、成员大写',
-    content: '枚举类名带上 Enum 后缀，枚举成员名称需要全大写，单词间用下划线隔开。',
-    exampleGood: 'ProcessStatusEnum { SUCCESS, UNKNOWN_REASON }' },
-  { code: '1.1.13', level: 'REFERENCE', category: '编程规约-命名',
-    title: '各层方法命名约定',
-    content: '获取单个对象用 get 前缀；获取多个用 list 前缀；获取统计值用 count 前缀；插入方法用 save/insert 前缀；删除方法用 remove/delete 前缀；修改方法用 update 前缀。',
-    exampleGood: 'getUserById / listByStatus / countByDay / saveOrder / removeById / updateStatus' },
-  { code: '1.1.14', level: 'REFERENCE', category: '编程规约-命名',
-    title: '领域模型命名约定',
-    content: '数据对象 xxxDO（对应数据库表名）；数据传输对象 xxxDTO；展示对象 xxxVO；POJO 是对 DO/DTO/BO/VO 的统称，不要定义 xxxPOJO。' },
+  {
+    code: '1.1.1',
+    level: 'MANDATORY',
+    category: '编程规约-命名风格',
+    title: `所有编程相关的命名均不能以下划线或美元符号开始，也不能以下划线或美元符号结束`,
+    content: `所有编程相关的命名均不能以下划线或美元符号开始，也不能以下划线或美元符号结束。`,
+    exampleBad: `_name / __name / $Object / name_ / name$ / Object$`,
+  },
+  {
+    code: '1.1.2',
+    level: 'MANDATORY',
+    category: '编程规约-命名风格',
+    title: `所有编程相关的命名严禁使用拼音与英文混合的方式，更不允许直接使用中文的方式`,
+    content: `所有编程相关的命名严禁使用拼音与英文混合的方式，更不允许直接使用中文的方式。
 
-  // ============ 一、编程规约 - (二) 常量定义 ============
-  { code: '1.2.1', level: 'MANDATORY', category: '编程规约-常量',
-    title: '不允许任何魔法值出现在代码中',
-    content: '不允许任何"魔法值"（即未经预先定义的常量）直接出现在代码中。',
-    exampleBad: 'String key = "Id#taobao_" + tradeId;',
-    exampleGood: 'static final String KEY_PREFIX = "Id#taobao_";\nString key = KEY_PREFIX + tradeId;' },
-  { code: '1.2.2', level: 'MANDATORY', category: '编程规约-常量',
-    title: 'long 字面量用大写 L',
-    content: 'long 或 Long 初始赋值时必须使用大写的 L，不能是小写的 l。小写容易跟数字 1 混淆。',
-    exampleBad: 'Long a = 2l; // 看着像 21 而非 Long 型的 2',
-    exampleGood: 'Long a = 2L;' },
-  { code: '1.2.3', level: 'RECOMMENDED', category: '编程规约-常量',
-    title: '不要一个常量类维护所有常量',
-    content: '应按常量功能进行归类分开维护，如缓存常量放 CacheConsts，配置相关常量放 ConfigConsts。' },
-  { code: '1.2.4', level: 'RECOMMENDED', category: '编程规约-常量',
-    title: '常量复用层次',
-    content: '如果变量值仅在一个固定范围内变化用 enum 类型来定义。如果还带有名称之外的延伸属性，必须使用 enum 类型。',
-    exampleGood: 'enum SeasonEnum { SPRING(1), SUMMER(2), AUTUMN(3), WINTER(4); ... }' },
+说明：正确的英文拼写和语法可以让阅读者易于理解，避免歧义。注意，即使纯拼音命名方式也要避免采用。`,
+    exampleGood: `ali / alibaba / taobao / kaikeba / aliyun / youku / hangzhou 等国际通用的名称，可视同英文。`,
+    exampleBad: `DaZhePromotion【打折】/ getPingfenByName()【评分】 / String fw【福娃】/ int 变量名 = 3`,
+  },
+  {
+    code: '1.1.3',
+    level: 'MANDATORY',
+    category: '编程规约-命名风格',
+    title: `代码和注释中都要避免使用任何人类语言中的种族歧视性或侮辱性词语`,
+    content: `代码和注释中都要避免使用任何人类语言中的种族歧视性或侮辱性词语。`,
+    exampleGood: `blockList / allowList / secondary`,
+    exampleBad: `blackList / whiteList / slave / SB / WTF`,
+  },
+  {
+    code: '1.1.4',
+    level: 'MANDATORY',
+    category: '编程规约-命名风格',
+    title: `类名使用 UpperCamelCase 风格，以下情形例外：DO / PO / DTO / BO / VO / UID 等`,
+    content: `类名使用 UpperCamelCase 风格，以下情形例外：DO / PO / DTO / BO / VO / UID 等。`,
+    exampleGood: `ForceCode / UserDO / HtmlDTO / XmlService / TcpUdpDeal / TaPromotion`,
+    exampleBad: `forcecode / UserDo / HTMLDto / XMLService / TCPUDPDeal / TAPromotion`,
+  },
+  {
+    code: '1.1.5',
+    level: 'MANDATORY',
+    category: '编程规约-命名风格',
+    title: `方法名、参数名、成员变量、局部变量都统一使用 lowerCamelCase 风格`,
+    content: `方法名、参数名、成员变量、局部变量都统一使用 lowerCamelCase 风格。`,
+    exampleGood: `localValue / getHttpMessage() / inputUserId`,
+  },
+  {
+    code: '1.1.6',
+    level: 'MANDATORY',
+    category: '编程规约-命名风格',
+    title: `常量命名应该全部大写，单词间用下划线隔开，力求语义表达完整清楚，不要嫌名字长`,
+    content: `常量命名应该全部大写，单词间用下划线隔开，力求语义表达完整清楚，不要嫌名字长。`,
+    exampleGood: `MAX_STOCK_COUNT / CACHE_EXPIRED_TIME`,
+    exampleBad: `MAX_COUNT / EXPIRED_TIME`,
+  },
+  {
+    code: '1.1.7',
+    level: 'MANDATORY',
+    category: '编程规约-命名风格',
+    title: `抽象类命名使用 Abstract 或 Base 开头；异常类命名使用 Exception 结尾，测试类命名以它要测试的类的名称开始，以 Test 结尾`,
+    content: `抽象类命名使用 Abstract 或 Base 开头；异常类命名使用 Exception 结尾，测试类命名以它要测试的类的名称开始，以 Test 结尾。`,
+  },
+  {
+    code: '1.1.8',
+    level: 'MANDATORY',
+    category: '编程规约-命名风格',
+    title: `类型与中括号紧挨相连来定义数组`,
+    content: `类型与中括号紧挨相连来定义数组。`,
+    exampleGood: `定义整形数组 int[] arrayDemo。`,
+    exampleBad: `在 main 参数中，使用 String args[] 来定义。`,
+  },
+  {
+    code: '1.1.9',
+    level: 'MANDATORY',
+    category: '编程规约-命名风格',
+    title: `POJO 类中的任何布尔类型的变量，都不要加 is 前缀，否则部分框架解析会引起序列化错误`,
+    content: `POJO 类中的任何布尔类型的变量，都不要加 is 前缀，否则部分框架解析会引起序列化错误。
 
-  // ============ 一、编程规约 - (三) 代码格式 ============
-  { code: '1.3.1', level: 'MANDATORY', category: '编程规约-格式',
-    title: '大括号使用约定',
-    content: '如果大括号内为空，则简洁地写成{}即可，不需要换行；如果是非空代码块，则：左大括号前不换行、左大括号后换行、右大括号前换行、右大括号后还有 else 等代码则不换行。' },
-  { code: '1.3.2', level: 'MANDATORY', category: '编程规约-格式',
-    title: '左小括号和字符之间不出现空格',
-    content: '左小括号和字符之间不出现空格；同样，右小括号和字符之间也不出现空格。',
-    exampleBad: 'if ( isOk ) {}',
-    exampleGood: 'if (isOk) {}' },
-  { code: '1.3.3', level: 'MANDATORY', category: '编程规约-格式',
-    title: '运算符与操作数之间有空格',
-    content: '任何二目、三目运算符的左右两边都需要加一个空格。',
-    exampleBad: 'int c=a+b;',
-    exampleGood: 'int c = a + b;' },
-  { code: '1.3.4', level: 'MANDATORY', category: '编程规约-格式',
-    title: '缩进 4 个空格，禁用 tab',
-    content: '采用 4 个空格缩进，禁止使用 tab 字符。如使用 tab 缩进，必须设置 1 个 tab 为 4 个空格。' },
-  { code: '1.3.5', level: 'MANDATORY', category: '编程规约-格式',
-    title: '单行字符数限制不超过 120',
-    content: '超出需要换行。换行时第二行相对第一行缩进 4 个空格，从第三行开始，不再继续缩进。运算符与下文一起换行，方法调用的点符号与下文一起换行，方法调用中的多个参数需要换行时在逗号后换行，括号前不要换行。' },
-  { code: '1.3.6', level: 'MANDATORY', category: '编程规约-格式',
-    title: '方法参数定义和传入时，多参数逗号后加空格',
-    content: '方法参数在定义和传入时，多个参数逗号后边必须加空格。',
-    exampleBad: 'f(a,b,c);',
-    exampleGood: 'f(a, b, c);' },
-  { code: '1.3.7', level: 'MANDATORY', category: '编程规约-格式',
-    title: 'IDE 的 text file encoding 设置为 UTF-8',
-    content: 'IDE 中文件的换行符使用 Unix 格式，不要使用 Windows 格式。' },
-  { code: '1.3.8', level: 'RECOMMENDED', category: '编程规约-格式',
-    title: '方法体内不同逻辑块用空行隔开',
-    content: '方法体内的执行语句组、变量的定义语句组、不同的业务逻辑之间或者不同的语义之间插入一个空行。相同业务逻辑和语义之间不需要插入空行。' },
-  { code: '1.3.9', level: 'RECOMMENDED', category: '编程规约-格式',
-    title: '注释的双斜线与注释内容之间有且仅有一个空格',
-    content: '单行注释双斜线和后面内容间有一个空格；星号和注释内容间也有一个空格。' },
+说明：本文 MySQL 规约中的建表约定第 1 条，表达是与否的变量采用 is_xxx 的命名方式，所以需要在<resultMap> 设置从 is_xxx 到 xxx 的映射关系。`,
+    exampleBad: `定义为布尔类型 Boolean isDeleted 的字段，它的 getter 方法也是 isDeleted()，部分框架在反向解析时，“误以为”对应的字段名称是 deleted，导致字段获取不到，得到意料之外的结果或抛出异常。`,
+  },
+  {
+    code: '1.1.10',
+    level: 'MANDATORY',
+    category: '编程规约-命名风格',
+    title: `包名统一使用小写，点分隔符之间有且仅有一个自然语义的英语单词`,
+    content: `包名统一使用小写，点分隔符之间有且仅有一个自然语义的英语单词。包名统一使用单数形式，但是类名如果有复数含义，类名可以使用复数形式。`,
+    exampleGood: `应用工具类包名为 com.alibaba.ei.kunlun.aap.util；类名为 MessageUtils（此规则参考 spring 的框架结构）。`,
+  },
+  {
+    code: '1.1.11',
+    level: 'MANDATORY',
+    category: '编程规约-命名风格',
+    title: `避免在子父类的成员变量之间、或者不同代码块的局部变量之间采用完全相同的命名，使可理解性降低`,
+    content: `避免在子父类的成员变量之间、或者不同代码块的局部变量之间采用完全相同的命名，使可理解性降低。
 
-  // ============ 一、编程规约 - (四) OOP 规约 ============
-  { code: '1.4.1', level: 'MANDATORY', category: '编程规约-OOP',
-    title: '避免通过一个类的对象引用访问此类的静态变量或静态方法',
-    content: '访问静态变量或静态方法应通过类名访问，避免对象的无谓浪费。',
-    exampleBad: 'new MyClass().STATIC_FIELD',
-    exampleGood: 'MyClass.STATIC_FIELD' },
-  { code: '1.4.2', level: 'MANDATORY', category: '编程规约-OOP',
-    title: '所有的覆写方法必须加 @Override',
-    content: '子类的覆写方法必须加 @Override 注解。加 @Override 可以准确判断是否覆写成功，编译阶段及时发现命名错误。' },
-  { code: '1.4.3', level: 'MANDATORY', category: '编程规约-OOP',
-    title: '相同参数类型、业务含义，才使用 Java 可变参数',
-    content: '避免使用 Object。可变参数必须放置在参数列表的最后。提倡使用 List 传递更多参数。' },
-  { code: '1.4.4', level: 'MANDATORY', category: '编程规约-OOP',
-    title: '接口过时必须加 @Deprecated 注解',
-    content: '对外提供的接口过时必须加上 @Deprecated 注解，并清晰说明采用的新接口或新服务是什么。' },
-  { code: '1.4.5', level: 'MANDATORY', category: '编程规约-OOP',
-    title: '不要使用过时的类或方法',
-    content: '介绍过时的类或方法前应做好版本兼容调研，建议禁用或及时替换。' },
-  { code: '1.4.6', level: 'MANDATORY', category: '编程规约-OOP',
-    title: 'Object 的 equals 方法容易抛空指针异常',
-    content: 'Object 的 equals 方法易抛空指针异常，应使用常量或确定有值的对象来调用 equals。推荐使用 JDK7 引入的 java.util.Objects#equals。',
-    exampleBad: 'user.equals("foo")',
-    exampleGood: '"foo".equals(user) // 或 Objects.equals(user, "foo")' },
-  { code: '1.4.7', level: 'MANDATORY', category: '编程规约-OOP',
-    title: '包装类对象之间用 equals 比较',
-    content: '所有整型包装类对象之间值的比较，全部使用 equals 方法比较。==在两侧均为基本类型时比较值，但包装类 -128~127 范围内用 == 会命中 Integer 缓存，超过则是对象比较，不安全。' },
-  { code: '1.4.8', level: 'MANDATORY', category: '编程规约-OOP',
-    title: '基本类型和包装类型选择',
-    content: '所有 POJO 类属性必须使用包装数据类型；RPC 方法的返回值和参数必须使用包装数据类型；所有局部变量使用基本数据类型。\n【说明】DB 查询结果可能是 null，用基本类型会 NPE；局部变量用基本类型减少自动拆装箱成本。' },
-  { code: '1.4.9', level: 'MANDATORY', category: '编程规约-OOP',
-    title: '定义 DO/DTO/VO 等 POJO 类时，不要设定任何属性默认值',
-    content: '不设定默认值是为了避免应用场景误用。',
-    exampleBad: 'private Integer count = 0;',
-    exampleGood: 'private Integer count;' },
-  { code: '1.4.10', level: 'MANDATORY', category: '编程规约-OOP',
-    title: '序列化对象改造注意 serialVersionUID',
-    content: 'serialVersionUID 不一致会抛出序列化运行时异常。如果完全不兼容升级应修改 serialVersionUID。' },
-  { code: '1.4.11', level: 'MANDATORY', category: '编程规约-OOP',
-    title: '构造方法里禁止加入任何业务逻辑',
-    content: '如果有初始化逻辑，请放在 init 方法中。构造函数应简洁，复杂初始化会增加维护难度。' },
-  { code: '1.4.12', level: 'MANDATORY', category: '编程规约-OOP',
-    title: 'POJO 类必须重写 toString 方法',
-    content: '使用 IDE 的中工具 source > generate toString 时，如继承了另一个 POJO 类，记得在前面加一个 super.toString()。抛异常时打印对象信息方便排查。' },
+说明：子类、父类成员变量名相同，即使是 public 也是能够通过编译，而局部变量在同一方法内的不同代码块中同名也是合法的，但是要避免使用。对于非 setter / getter 的参数名称也要避免与成员变量名称相同。`,
+    exampleBad: `public class ConfusingName { protected int stock; protected String alibaba; // 非 setter/getter 的参数名称，不允许与本类成员变量同名 public void access(String alibaba) { if (condition) { final int money = 666; // ... } for (int i = 0; i < 10; i++) { // 在同一方法体中，不允许与其它代码块中的 money 命名相同 final int money = 15978; // ... } } } class Son extends ConfusingName { // 不允许与父类的成员变量名称相同 private int stock; }`,
+  },
+  {
+    code: '1.1.12',
+    level: 'MANDATORY',
+    category: '编程规约-命名风格',
+    title: `杜绝完全不规范的英文缩写，避免望文不知义`,
+    content: `杜绝完全不规范的英文缩写，避免望文不知义。`,
+    exampleBad: `AbstractClass“缩写”成 AbsClass；condition“缩写”成 condi；Function“缩写”成 Fu，此类随意缩写严重降低了代码的可阅读性。`,
+  },
+  {
+    code: '1.1.13',
+    level: 'RECOMMENDED',
+    category: '编程规约-命名风格',
+    title: `为了达到代码自解释的目标，任何自定义编程元素在命名时，使用完整的单词组合来表达`,
+    content: `为了达到代码自解释的目标，任何自定义编程元素在命名时，使用完整的单词组合来表达。`,
+    exampleGood: `在 JDK 中，对某个对象引用的 volatile 字段进行原子更新的类名为 AtomicReferenceFieldUpdater。`,
+    exampleBad: `常见的方法内变量为 int a; 的定义方式。`,
+  },
+  {
+    code: '1.1.14',
+    level: 'RECOMMENDED',
+    category: '编程规约-命名风格',
+    title: `在常量与变量命名时，表示类型的名词放在词尾，以提升辨识度`,
+    content: `在常量与变量命名时，表示类型的名词放在词尾，以提升辨识度。`,
+    exampleGood: `startTime / workQueue / nameList / TERMINATED_THREAD_COUNT`,
+    exampleBad: `startedAt / QueueOfWork / listName / COUNT_TERMINATED_THREAD`,
+  },
+  {
+    code: '1.1.15',
+    level: 'RECOMMENDED',
+    category: '编程规约-命名风格',
+    title: `如果模块、接口、类、方法使用了设计模式，在命名时要体现出具体模式`,
+    content: `如果模块、接口、类、方法使用了设计模式，在命名时要体现出具体模式。
 
-  // ============ 一、编程规约 - (五) 集合处理 ============
-  { code: '1.5.1', level: 'MANDATORY', category: '编程规约-集合',
-    title: '关于 hashCode 和 equals 的处理，遵循三原则',
-    content: '1) 只要重写 equals，就必须重写 hashCode。2) Set 存储的是对象，所以这两个方法都要重写。3) 自定义对象作为 Map 的键，必须重写 hashCode 和 equals。' },
-  { code: '1.5.2', level: 'MANDATORY', category: '编程规约-集合',
-    title: 'ArrayList 的 subList 结果不可强转 ArrayList',
-    content: 'subList 返回的是 ArrayList 的内部类 SubList，不是 ArrayList 本身。对 SubList 的修改会影响原列表，反之亦然。' },
-  { code: '1.5.3', level: 'MANDATORY', category: '编程规约-集合',
-    title: 'Arrays.asList 返回的 List 不可 add/remove',
-    content: 'Arrays.asList 把数组转换成 List，这个 List 不能做修改操作。add/remove/clear 方法会抛 UnsupportedOperationException。',
-    exampleBad: 'List<String> l = Arrays.asList("a","b");\nl.add("c"); // 抛异常',
-    exampleGood: 'List<String> l = new ArrayList<>(Arrays.asList("a","b"));\nl.add("c");' },
-  { code: '1.5.4', level: 'MANDATORY', category: '编程规约-集合',
-    title: '在 subMap、tailMap、headMap 中注意返回结果是否包含边界',
-    content: 'subMap(fromKey, toKey) 结果包含 fromKey 不包含 toKey；tailMap 包含 fromKey；headMap 不包含 toKey。' },
-  { code: '1.5.5', level: 'MANDATORY', category: '编程规约-集合',
-    title: '集合转数组的方法使用 toArray(T[] array)',
-    content: '使用带泛型的 toArray，入参为 new T[0]。传入 new T[list.size()] 是早期 JDK 的不必要优化。',
-    exampleGood: 'String[] arr = list.toArray(new String[0]);' },
-  { code: '1.5.6', level: 'MANDATORY', category: '编程规约-集合',
-    title: '使用 Collection 接口任何实现类的 addAll 方法时，要对输入的集合进行 NPE 判断',
-    content: 'addAll(null) 会抛 NullPointerException。' },
-  { code: '1.5.7', level: 'MANDATORY', category: '编程规约-集合',
-    title: '使用 entrySet 遍历 Map，不要 keySet',
-    content: 'keySet 遍历要先取 key 再 get value，查询 2 次；entrySet 只遍历 1 次即可。JDK8 推荐使用 Map.forEach。',
-    exampleBad: 'for (String k : map.keySet()) { String v = map.get(k); ... }',
-    exampleGood: 'for (Map.Entry<String, String> e : map.entrySet()) { ... }' },
-  { code: '1.5.8', level: 'MANDATORY', category: '编程规约-集合',
-    title: 'foreach 循环里不要进行元素的 remove/add 操作',
-    content: 'foreach 内 remove 会抛 ConcurrentModificationException。remove 元素请使用 Iterator.remove 或 removeIf。',
-    exampleBad: 'for (String s : list) { if (cond) list.remove(s); }',
-    exampleGood: 'list.removeIf(s -> cond);' },
-  { code: '1.5.9', level: 'MANDATORY', category: '编程规约-集合',
-    title: 'Map/Set 中的 key 对象不可改变',
-    content: '在 JDK7 版本及以上，Comparator 要满足 3 个条件：自反性、对称性、传递性，否则 Collections.sort、Arrays.sort 会抛 IllegalArgumentException。' },
+说明：将设计模式体现在名字中，有利于阅读者快速理解架构设计思想。`,
+    exampleGood: `public class OrderFactory; public class LoginProxy; public class ResourceObserver;`,
+  },
+  {
+    code: '1.1.16',
+    level: 'RECOMMENDED',
+    category: '编程规约-命名风格',
+    title: `接口类中的方法和属性不要加任何修饰符号（public 也不要加），保持代码的简洁性，并加上有效的 Javadoc 注释`,
+    content: `接口类中的方法和属性不要加任何修饰符号（public 也不要加），保持代码的简洁性，并加上有效的 Javadoc 注释。尽量不要在接口里定义常量，如果一定要定义，最好确定该常量与接口的方法相关，并且是整个应用的基础常量。
 
-  // ============ 一、编程规约 - (六) 并发处理 ============
-  { code: '1.6.1', level: 'MANDATORY', category: '编程规约-并发',
-    title: '获取单例对象需要保证线程安全',
-    content: '获取单例对象需要保证线程安全，其中的方法也要保证线程安全。资源驱动类、工具类、单例工厂类都需要注意。' },
-  { code: '1.6.2', level: 'MANDATORY', category: '编程规约-并发',
-    title: '创建线程或线程池时请指定有意义的线程名称',
-    content: '方便出错时回溯。使用 Guava 的 ThreadFactoryBuilder 或自定义 ThreadFactory。',
-    exampleGood: 'new ThreadFactoryBuilder().setNameFormat("order-pool-%d").build()' },
-  { code: '1.6.3', level: 'MANDATORY', category: '编程规约-并发',
-    title: '线程资源必须通过线程池提供，不允许在应用中自行显式创建线程',
-    content: '线程池能规避频繁创建销毁带来的资源开销问题；避免频繁创建销毁导致 OOM。' },
-  { code: '1.6.4', level: 'MANDATORY', category: '编程规约-并发',
-    title: '线程池不允许使用 Executors 创建',
-    content: '不允许使用 Executors.newFixedThreadPool / newCachedThreadPool / newSingleThreadExecutor / newScheduledThreadPool；要通过 ThreadPoolExecutor 显式创建，规避资源耗尽风险（默认队列 Integer.MAX_VALUE 或线程数 Integer.MAX_VALUE）。',
-    exampleBad: 'Executors.newFixedThreadPool(10); // 队列无界, OOM 风险',
-    exampleGood: 'new ThreadPoolExecutor(10, 20, 60L, TimeUnit.SECONDS,\n    new LinkedBlockingQueue<>(1000),\n    new CustomThreadFactory("biz-"),\n    new ThreadPoolExecutor.CallerRunsPolicy());' },
-  { code: '1.6.5', level: 'MANDATORY', category: '编程规约-并发',
-    title: 'SimpleDateFormat 是线程不安全的',
-    content: 'SimpleDateFormat 的 format 和 parse 都是非线程安全的，不要定义为 static；推荐 DateTimeFormatter（JDK8，线程安全）。',
-    exampleBad: 'static SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");',
-    exampleGood: 'static DateTimeFormatter FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd");' },
-  { code: '1.6.6', level: 'MANDATORY', category: '编程规约-并发',
-    title: '高并发时，同步调用应该去考量锁的性能损耗',
-    content: '能用无锁数据结构就不要用锁；能锁区块就不要锁方法体；能锁对象就不要锁类。' },
-  { code: '1.6.7', level: 'MANDATORY', category: '编程规约-并发',
-    title: '多线程并行处理定时任务时，Timer 运行多个 TimeTask 时，只要其中之一没有捕获抛出的异常',
-    content: '其它任务便会自动终止运行。使用 ScheduledExecutorService 替代。' },
-  { code: '1.6.8', level: 'MANDATORY', category: '编程规约-并发',
-    title: '对多个资源、数据库表、对象同时加锁时，需要保持一致的加锁顺序',
-    content: '一致的加锁顺序否则可能造成死锁。' },
-  { code: '1.6.9', level: 'MANDATORY', category: '编程规约-并发',
-    title: '在使用阻塞等待获取锁的方式时，必须在 try 代码块之外调用 lock，并在 finally 中 unlock',
-    content: '如果在 try 块之内进行加锁，若加锁失败 finally 会执行 unlock 造成 IllegalMonitorStateException。',
-    exampleGood: 'lock.lock();\ntry {\n    // ...\n} finally {\n    lock.unlock();\n}' },
-  { code: '1.6.10', level: 'MANDATORY', category: '编程规约-并发',
-    title: '并发修改同一记录时，避免更新丢失，应使用乐观锁或悲观锁',
-    content: '乐观锁：在表中增加 version 字段，更新时 WHERE version = #{version}；悲观锁：SELECT ... FOR UPDATE。' },
-  { code: '1.6.11', level: 'MANDATORY', category: '编程规约-并发',
-    title: '多线程场景下使用 Random 实例',
-    content: 'Random 实例在多线程间共享性能差；推荐 ThreadLocalRandom。',
-    exampleBad: 'Random r = new Random(); int n = r.nextInt();',
-    exampleGood: 'int n = ThreadLocalRandom.current().nextInt();' },
-  { code: '1.6.12', level: 'MANDATORY', category: '编程规约-并发',
-    title: '通过双重检查锁实现延迟初始化的优化问题',
-    content: '双重检查锁要求 volatile 修饰对象，防止 JVM 指令重排序。使用 JDK5 之后的静态内部类持有更简洁。' },
-  { code: '1.6.13', level: 'MANDATORY', category: '编程规约-并发',
-    title: 'volatile 保证可见性不保证原子性',
-    content: 'i++ 这类复合操作在多线程下仍需加锁或使用 AtomicInteger；LongAdder 在高并发下比 AtomicLong 性能更好。' },
+说明：JDK8 中接口允许有默认实现，那么这个 default 方法，是对所有实现类都有价值的默认实现。`,
+    exampleGood: `接口方法签名 void commit(); 接口基础常量 String COMPANY = "alibaba";`,
+    exampleBad: `接口方法定义 public abstract void commit();`,
+  },
+  {
+    code: '1.1.17',
+    level: 'MANDATORY',
+    category: '编程规约-命名风格',
+    title: `接口和实现类的命名有两套规则： 1）【强制】对于 Service 和 DAO 类，基于 SOA 的理念，暴露出来的服务一定是接口，内部的实现类用 Impl 的后缀与接口区别`,
+    content: `接口和实现类的命名有两套规则： 1）【强制】对于 Service 和 DAO 类，基于 SOA 的理念，暴露出来的服务一定是接口，内部的实现类用 Impl 的后缀与接口区别。`,
+    exampleGood: `CacheServiceImpl 实现 CacheService 接口。 2）【推荐】如果是形容能力的接口名称，取对应的形容词为接口名（通常是 –able 结尾的形容词）。 AbstractTranslator 实现 Translatable。`,
+  },
+  {
+    code: '1.1.18',
+    level: 'REFERENCE',
+    category: '编程规约-命名风格',
+    title: `枚举类名带上 Enum 后缀，枚举成员名称需要全大写，单词间用下划线隔开`,
+    content: `枚举类名带上 Enum 后缀，枚举成员名称需要全大写，单词间用下划线隔开。
 
-  // ============ 一、编程规约 - (七) 控制语句 ============
-  { code: '1.7.1', level: 'MANDATORY', category: '编程规约-控制',
-    title: 'switch 每个 case 要么通过 break/return 结束，要么注释说明继续执行到哪',
-    content: '在 switch 块内，必须有 default 分支。' },
-  { code: '1.7.2', level: 'MANDATORY', category: '编程规约-控制',
-    title: 'if/else/for/while/do 必须使用大括号',
-    content: '即使只有一行代码，避免使用单行的编码方式。',
-    exampleBad: 'if (condition) statements;',
-    exampleGood: 'if (condition) {\n    statements;\n}' },
-  { code: '1.7.3', level: 'MANDATORY', category: '编程规约-控制',
-    title: '在高并发场景中，避免使用"等于"判断作为中断或退出条件',
-    content: '如果处理不当并发原子操作有误差，会造成死循环。',
-    exampleBad: 'while (counter.get() == 100) {}',
-    exampleGood: 'while (counter.get() >= 100) {}' },
-  { code: '1.7.4', level: 'MANDATORY', category: '编程规约-控制',
-    title: '循环体内字符串的连接方式使用 StringBuilder 的 append 方法',
-    content: '循环体内 + 会反复创建 StringBuilder 对象。',
-    exampleBad: 'String s = "";\nfor (...) { s += "x"; }',
-    exampleGood: 'StringBuilder sb = new StringBuilder();\nfor (...) { sb.append("x"); }' },
-  { code: '1.7.5', level: 'RECOMMENDED', category: '编程规约-控制',
-    title: '多层嵌套应避免超过 3 层',
-    content: '超过 3 层的 if-else 必须用状态设计模式、策略模式、卫语句或 Optional 避免。圈复杂度超过 10 应拆分。' },
-  { code: '1.7.6', level: 'RECOMMENDED', category: '编程规约-控制',
-    title: '除常用方法（如 getXxx/isXxx）等外，不要在条件判断中执行其它复杂的语句',
-    content: '结果赋值给一个有意义的布尔变量，以提高可读性。',
-    exampleBad: 'if ((file.isFile() && file.length() > 0) || (file.isDirectory() && file.list().length > 0)) {...}',
-    exampleGood: 'boolean isNonEmpty = ...;\nif (isNonEmpty) { ... }' },
-  { code: '1.7.7', level: 'MANDATORY', category: '编程规约-控制',
-    title: '循环体中的语句要考量性能',
-    content: '尽量减少在循环体中的对象创建、复杂方法调用、不必要的 try-catch。' },
+说明：枚举其实就是特殊的常量类，且构造方法被默认强制是私有。`,
+    exampleGood: `枚举名字为 ProcessStatusEnum 的成员名称：SUCCESS / UNKNOWN_REASON`,
+  },
+  {
+    code: '1.1.19',
+    level: 'REFERENCE',
+    category: '编程规约-命名风格',
+    title: `各层命名规约： A）Service / DAO 层方法命名规约： 1）获取单个对象的方法用 get 做前缀`,
+    content: `各层命名规约： A）Service / DAO 层方法命名规约： 1）获取单个对象的方法用 get 做前缀。 2）获取多个对象的方法用 list 做前缀，复数结尾，如：listObjects 3）获取统计值的方法用 count 做前缀。 4）插入的方法用 save / insert 做前缀。 5）删除的方法用 remove / delete 做前缀。 6）修改的方法用 update 做前缀。 B）领域模型命名规约： 1）数据对象：xxxDO，xxx 即为数据表名。 2）数据传输对象：xxxDTO，xxx 为业务领域相关的名称。 3）展示对象：xxxVO，xxx 一般为网页名称。 4）POJO 是 DO / DTO / BO / VO 的统称，禁止命名成 xxxPOJO。`,
+  },
+  {
+    code: '1.2.1',
+    level: 'MANDATORY',
+    category: '编程规约-常量定义',
+    title: `不允许任何魔法值（即未经预先定义的常量）直接出现在代码中`,
+    content: `不允许任何魔法值（即未经预先定义的常量）直接出现在代码中。`,
+    exampleBad: `//  开发者 A 定义了缓存的 key。 String key = "Id#taobao_" + tradeId; cache.put(key, value); // 开发者 B 使用缓存时直接复制少了下划线，即 key 是"Id#taobao" + tradeId，导致出现故障。 String key = "Id#taobao" + tradeId; cache.get(key);`,
+  },
+  {
+    code: '1.2.2',
+    level: 'MANDATORY',
+    category: '编程规约-常量定义',
+    title: `long 或 Long 赋值时，数值后使用大写 L，不能是小写 l，小写容易跟数字混淆，造成误解`,
+    content: `long 或 Long 赋值时，数值后使用大写 L，不能是小写 l，小写容易跟数字混淆，造成误解。
 
-  // ============ 一、编程规约 - (八) 注释规约 ============
-  { code: '1.8.1', level: 'MANDATORY', category: '编程规约-注释',
-    title: '类/类属性/类方法的注释必须使用 Javadoc 规范',
-    content: '使用 /** 内容 */ 格式，不得使用 // xxx 方式。IDE 的文档注释会提示。' },
-  { code: '1.8.2', level: 'MANDATORY', category: '编程规约-注释',
-    title: '所有的抽象方法（包括接口中的方法）必须要用 Javadoc 注释',
-    content: '除了返回值、参数、异常说明外，还必须指出该方法做什么事情，实现什么功能。' },
-  { code: '1.8.3', level: 'MANDATORY', category: '编程规约-注释',
-    title: '所有的类都必须添加创建者和创建日期',
-    content: '@author / @date 标签，便于后续维护查找。' },
-  { code: '1.8.4', level: 'MANDATORY', category: '编程规约-注释',
-    title: '方法内部单行注释在被注释语句上方另起一行',
-    content: '使用 // 注释。方法内部多行注释使用 /* */ 注释。注意与代码对齐。' },
-  { code: '1.8.5', level: 'MANDATORY', category: '编程规约-注释',
-    title: '所有的枚举类型字段必须要有注释，说明每个数据项的用途',
-    content: '无论是枚举还是常量，都要说明枚举值代表什么含义。' },
-  { code: '1.8.6', level: 'RECOMMENDED', category: '编程规约-注释',
-    title: '与其"半吊子"英文来注释，不如用中文注释把问题说清楚',
-    content: '注释的质量比数量更重要。专有名词可以保留英文。' },
-  { code: '1.8.7', level: 'RECOMMENDED', category: '编程规约-注释',
-    title: '代码修改的同时，注释也要进行相应的修改',
-    content: '尤其是参数、返回值、异常、核心逻辑等的修改。' },
-  { code: '1.8.8', level: 'REFERENCE', category: '编程规约-注释',
-    title: '对于注释的要求',
-    content: '1) 能够准确反映设计思想和代码逻辑。2) 能够描述业务含义，便于接手的同学快速读懂。' },
-  { code: '1.8.9', level: 'REFERENCE', category: '编程规约-注释',
-    title: '特殊注释标记',
-    content: '待办用 // TODO: [name] 补充说明；临时解决用 // FIXME: [name] 问题描述。命中者要负责解决。' },
+说明：public static final Long NUM = 2l; 写的是数字的 21，还是 Long 型的 2？`,
+  },
+  {
+    code: '1.2.3',
+    level: 'MANDATORY',
+    category: '编程规约-常量定义',
+    title: `浮点数类型的数值后缀统一为大写的 D 或 F`,
+    content: `浮点数类型的数值后缀统一为大写的 D 或 F。`,
+    exampleGood: `public static final double HEIGHT = 175.5D; public static final float WEIGHT = 150.3F;`,
+  },
+  {
+    code: '1.2.4',
+    level: 'RECOMMENDED',
+    category: '编程规约-常量定义',
+    title: `不要使用一个常量类维护所有常量，要按常量功能进行归类，分开维护`,
+    content: `不要使用一个常量类维护所有常量，要按常量功能进行归类，分开维护。
 
-  // ============ 二、异常日志 - (一) 异常处理 ============
-  { code: '2.1.1', level: 'MANDATORY', category: '异常日志-异常',
-    title: '不要捕获 Java 类库中定义的继承自 RuntimeException 的运行时异常类',
-    content: '如 IndexOutOfBoundsException / NullPointerException，应通过预检查避免。',
-    exampleBad: 'try { return arr[i]; } catch (ArrayIndexOutOfBoundsException e) { return null; }',
-    exampleGood: 'if (i >= 0 && i < arr.length) { return arr[i]; } else { return null; }' },
-  { code: '2.1.2', level: 'MANDATORY', category: '异常日志-异常',
-    title: '异常不要用来做流程控制、条件控制',
-    content: '异常设计的初衷是解决程序运行中的各种意外情况，且异常的处理效率比条件判断低很多。' },
-  { code: '2.1.3', level: 'MANDATORY', category: '异常日志-异常',
-    title: 'catch 时请分清稳定代码和非稳定代码',
-    content: '稳定代码指不可能出现异常的代码；非稳定代码 catch 时尽量精确，具体异常捕获，具体处理。' },
-  { code: '2.1.4', level: 'MANDATORY', category: '异常日志-异常',
-    title: '捕获异常是为了处理它，不要捕获了却什么都不处理而抛弃',
-    content: '如果不想处理，请将该异常抛给它的调用者。最外层的业务使用者必须处理异常。',
-    exampleBad: 'try { ... } catch (Exception e) { }',
-    exampleGood: 'try { ... } catch (Exception e) {\n    log.error("操作失败, id={}", id, e);\n    throw new BusinessException("业务异常", e);\n}' },
-  { code: '2.1.5', level: 'MANDATORY', category: '异常日志-异常',
-    title: '有 try 块放到了事务代码中，catch 异常后，如果需要回滚事务',
-    content: '一定要注意手动回滚事务。否则事务不会回滚。',
-    exampleGood: 'TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();' },
-  { code: '2.1.6', level: 'MANDATORY', category: '异常日志-异常',
-    title: 'finally 块必须对资源对象、流对象进行关闭',
-    content: '有异常也要做 try-catch。JDK7 以上版本建议使用 try-with-resources。',
-    exampleGood: 'try (InputStream in = new FileInputStream(...)) {\n    // ...\n}' },
-  { code: '2.1.7', level: 'MANDATORY', category: '异常日志-异常',
-    title: '不要在 finally 块中使用 return',
-    content: 'try 块 return 的语句执行成功后，并不会马上返回，而是继续执行 finally 块中的语句，如果此处有 return 语句，则在此直接返回。',
-    exampleBad: 'try { return 1; } finally { return 2; } // 永远返回 2' },
-  { code: '2.1.8', level: 'MANDATORY', category: '异常日志-异常',
-    title: '捕获异常与抛异常，必须完全匹配，或者捕获异常是抛异常的父类',
-    content: '不要把异常错抛出或压缩到一个不恰当的异常类型。' },
-  { code: '2.1.9', level: 'MANDATORY', category: '异常日志-异常',
-    title: '不能用 System.out 或 e.printStackTrace 输出异常',
-    content: '异常栈信息会写入标准错误输出，会影响查询效率。必须用日志框架输出到日志文件。',
-    exampleBad: 'e.printStackTrace();',
-    exampleGood: 'log.error("操作失败, id={}", id, e);' },
-  { code: '2.1.10', level: 'MANDATORY', category: '异常日志-异常',
-    title: '方法的返回值可以为 null，不强制返回空集合或者空对象等',
-    content: '必须添加注释充分说明什么情况下会返回 null。防止 NPE 是调用者的责任。' },
-  { code: '2.1.11', level: 'MANDATORY', category: '异常日志-异常',
-    title: '防止 NPE',
-    content: '1) 自动拆箱引发的 NPE。2) 数据库查询结果可能为 null。3) 集合元素可能为 null。4) 远程调用返回值要用 Optional 来防止 NPE。' },
+说明：大而全的常量类，杂乱无章，使用查找功能才能定位到要修改的常量，不利于理解，也不利于维护。`,
+    exampleGood: `缓存相关常量放在类 CacheConsts 下；系统配置相关常量放在类 SystemConfigConsts 下。`,
+  },
+  {
+    code: '1.2.5',
+    level: 'RECOMMENDED',
+    category: '编程规约-常量定义',
+    title: `常量的复用层次有五层：跨应用共享常量、应用内共享常量、子工程内共享常量、包内共享常量、类内共享常量`,
+    content: `常量的复用层次有五层：跨应用共享常量、应用内共享常量、子工程内共享常量、包内共享常量、类内共享常量。 1）跨应用共享常量：放置在二方库中，通常是 client.jar 中的 constant 目录下。 2）应用内共享常量：放置在一方库中，通常是子模块中的 constant 目录下。`,
+    exampleBad: `易懂常量也要统一定义成应用内共享常量，两个程序员在两个类中分别定义了表示“是”的常量： 类 A 中：public static final String YES = "yes"; 类 B 中：public static final String YES = "y"; A.YES.equals(B.YES)，预期是 true，但实际返回为 false，导致线上问题。 3）子工程内部共享常量：即在当前子工程的 constant 目录下。 4）包内共享常量：即在当前包下单独的 constant 目录下。 5）类内共享常量：直接在类内部 private static final 定义。`,
+  },
+  {
+    code: '1.2.6',
+    level: 'RECOMMENDED',
+    category: '编程规约-常量定义',
+    title: `如果变量值仅在一个固定范围内变化用 enum 类型来定义`,
+    content: `如果变量值仅在一个固定范围内变化用 enum 类型来定义。
 
-  // ============ 二、异常日志 - (二) 日志规约 ============
-  { code: '2.2.1', level: 'MANDATORY', category: '异常日志-日志',
-    title: '应用中不可直接使用日志系统（Log4j、Logback）中的 API',
-    content: '应依赖使用日志框架 SLF4J 中的 API，使用门面模式的日志框架，有利于维护和各个类的日志处理方式统一。',
-    exampleGood: 'import org.slf4j.Logger;\nimport org.slf4j.LoggerFactory;\nprivate static final Logger log = LoggerFactory.getLogger(Xxx.class);' },
-  { code: '2.2.2', level: 'MANDATORY', category: '异常日志-日志',
-    title: '日志文件至少保存 15 天',
-    content: '因为有些异常具备以"周"为频次发生的特点。线上日志必须符合此规约。' },
-  { code: '2.2.3', level: 'MANDATORY', category: '异常日志-日志',
-    title: '日志打印时禁止直接用 JSON 工具将对象转换成 String',
-    content: '应用 toString。如果对象有死循环或类加载冲突的问题，会抛出异常。' },
-  { code: '2.2.4', level: 'MANDATORY', category: '异常日志-日志',
-    title: '日志输出时，字符串变量之间的拼接使用占位符',
-    content: '用占位符可以减少字符串拼接的对象创建。',
-    exampleBad: 'log.info("用户 " + user + " 登录");',
-    exampleGood: 'log.info("用户 {} 登录", user);' },
-  { code: '2.2.5', level: 'MANDATORY', category: '异常日志-日志',
-    title: '对于 trace/debug/info 级别的日志输出，必须使用条件输出形式或占位符',
-    content: 'trace 和 debug 一定要判断 isDebugEnabled，防止无效的字符串拼接。info 用占位符即可。' },
-  { code: '2.2.6', level: 'MANDATORY', category: '异常日志-日志',
-    title: '异常信息应该包括两类信息：案发现场信息和异常堆栈信息',
-    content: '如果不处理，那么通过关键字 throws 往上抛出。',
-    exampleGood: 'log.error("处理订单失败, orderId={}, userId={}", orderId, userId, e);' },
-  { code: '2.2.7', level: 'RECOMMENDED', category: '异常日志-日志',
-    title: '谨慎地记录日志',
-    content: '生产环境禁止输出 debug 日志；有选择地输出 info 日志。如果大量输出，担心性能开销和磁盘空间。' },
-  { code: '2.2.8', level: 'RECOMMENDED', category: '异常日志-日志',
-    title: '可以使用 warn 日志记录用户输入参数错误的情况',
-    content: '避免用户投诉时查询问题困难。如非必要，请不要在此场景下抛出异常。' },
+说明：如果存在名称之外的延伸属性应使用 enum 类型，下面正例中的数字就是延伸信息，表示一年中的第几个季节。`,
+    exampleGood: `public enum SeasonEnum { SPRING(1), SUMMER(2), AUTUMN(3), WINTER(4); private int seq; SeasonEnum(int seq) { this.seq = seq; } public int getSeq() { return seq; } }`,
+  },
+  {
+    code: '1.3.1',
+    level: 'MANDATORY',
+    category: '编程规约-代码格式',
+    title: `如果大括号内为空，简洁地写成{}即可，大括号中间无需换行和空格；如果是非空代码块，则： 1）左大括号前不换行`,
+    content: `如果大括号内为空，简洁地写成{}即可，大括号中间无需换行和空格；如果是非空代码块，则： 1）左大括号前不换行。 2）左大括号后换行。 3）右大括号前换行。 4）右大括号后还有 else 等代码则不换行；表示终止的右大括号后必须换行。`,
+  },
+  {
+    code: '1.3.2',
+    level: 'MANDATORY',
+    category: '编程规约-代码格式',
+    title: `左小括号和右边相邻字符之间不需要空格；右小括号和左边相邻字符之间也不需要空格；而左大括号前需要加空格`,
+    content: `左小括号和右边相邻字符之间不需要空格；右小括号和左边相邻字符之间也不需要空格；而左大括号前需要加空格。详见第 5 条下方正例提示。`,
+    exampleBad: `if(空格 a == b 空格)`,
+  },
+  {
+    code: '1.3.3',
+    level: 'MANDATORY',
+    category: '编程规约-代码格式',
+    title: `if / for / while / switch / do 等保留字与左右括号之间都必须加空格`,
+    content: `if / for / while / switch / do 等保留字与左右括号之间都必须加空格。`,
+  },
+  {
+    code: '1.3.4',
+    level: 'MANDATORY',
+    category: '编程规约-代码格式',
+    title: `任何二目、三目运算符的左右两边都需要加一个空格`,
+    content: `任何二目、三目运算符的左右两边都需要加一个空格。
 
-  // ============ 三、单元测试 ============
-  { code: '3.1', level: 'MANDATORY', category: '单元测试',
-    title: 'AIR 原则：Automatic、Independent、Repeatable',
-    content: '好的单元测试必须自动执行（断言而非 println）、独立（不依赖其他测试）、可重复（执行多次结果相同）。' },
-  { code: '3.2', level: 'MANDATORY', category: '单元测试',
-    title: '单元测试应该是全自动执行的，并且非交互式的',
-    content: '测试框架通常是定期执行，禁止输出日志需要人工检验。' },
-  { code: '3.3', level: 'MANDATORY', category: '单元测试',
-    title: '保持单元测试的独立性',
-    content: '为了保证单元测试稳定可靠且便于维护，单元测试用例之间不得互相调用，也不得依赖执行的先后次序。' },
-  { code: '3.4', level: 'MANDATORY', category: '单元测试',
-    title: '单元测试是可以重复执行的',
-    content: '不能受到外界环境的影响（如外部数据库、Redis、MQ）。必须用 Mock 方式。' },
-  { code: '3.5', level: 'MANDATORY', category: '单元测试',
-    title: '对于单元测试，要保证测试粒度足够小',
-    content: '有助于精确定位问题。单元测试粒度至多是类级别，一般是方法级别。' },
-  { code: '3.6', level: 'MANDATORY', category: '单元测试',
-    title: '核心业务、核心应用、核心模块的增量代码确保单元测试通过',
-    content: '新增代码及时补充单元测试。新增代码未做单元测试，不允许合并到 master/trunk。' },
-  { code: '3.7', level: 'MANDATORY', category: '单元测试',
-    title: '单元测试代码必须写在如下工程目录：src/test/java',
-    content: '不允许写在业务代码目录下。' },
-  { code: '3.8', level: 'RECOMMENDED', category: '单元测试',
-    title: '单元测试的基本原则是：一个方法对应多种不同的输入',
-    content: 'BCDE 原则：Border 边界值；Correct 正确；Design 设计相符；Error 强制错误信息输入。' },
-  { code: '3.9', level: 'RECOMMENDED', category: '单元测试',
-    title: '对于数据库相关的查询、更新、删除等操作，不要以为结果一定成功',
-    content: '使用程序抽样或日志校验法来验证数据。' },
-  { code: '3.10', level: 'REFERENCE', category: '单元测试',
-    title: '对于不可测的代码建议做必要的重构',
-    content: '使代码变得可测试，避免为了代码而做单元测试。' },
+说明：包括赋值运算符 =、逻辑运算符 &&、加减乘除符号等。`,
+  },
+  {
+    code: '1.3.5',
+    level: 'MANDATORY',
+    category: '编程规约-代码格式',
+    title: `采用 4 个空格缩进，禁止使用 Tab 字符`,
+    content: `采用 4 个空格缩进，禁止使用 Tab 字符。
 
-  // ============ 四、安全规约 ============
-  { code: '4.1', level: 'MANDATORY', category: '安全规约',
-    title: '隶属于用户个人的页面或功能必须进行权限控制校验',
-    content: '防止越权访问。不做校验就可能导致越权数据访问。' },
-  { code: '4.2', level: 'MANDATORY', category: '安全规约',
-    title: '用户敏感数据禁止直接展示，必须脱敏',
-    content: '手机号、身份证、银行卡号、地址、邮箱等敏感字段在前端展示时要脱敏。',
-    exampleBad: 'log.info("手机号: {}", phone);',
-    exampleGood: 'log.info("手机号: {}", DesensitizedUtil.mobile(phone));\n// 显示 138****8888' },
-  { code: '4.3', level: 'MANDATORY', category: '安全规约',
-    title: '用户请求传入的任何参数必须做有效性验证',
-    content: '忽略参数校验可能导致 page size 过大拖慢数据库性能、任意重定向、SQL 注入、反序列化注入、正则 ReDoS 等。' },
-  { code: '4.4', level: 'MANDATORY', category: '安全规约',
-    title: '禁止向 HTML 页面输出未经安全过滤或未正确转义的用户数据',
-    content: '否则易触发 XSS（跨站脚本攻击）。' },
-  { code: '4.5', level: 'MANDATORY', category: '安全规约',
-    title: '表单、AJAX 提交必须执行 CSRF 安全过滤',
-    content: 'CSRF（Cross-site request forgery）攻击通过伪造用户身份构造网络请求。必须带上 csrf token 校验。' },
-  { code: '4.6', level: 'MANDATORY', category: '安全规约',
-    title: '在使用平台资源，譬如短信、邮件、电话、下单、支付，必须实现正确的防重放的机制',
-    content: '限制调用频率：滑动窗口、分布式限流、验证码校验、幂等 key。' },
-  { code: '4.7', level: 'MANDATORY', category: '安全规约',
-    title: '发贴、评论、发送即时消息等用户生成内容，必须实现防刷、文本内容违禁词过滤',
-    content: '涉黄、涉政、涉恐、暴力、敏感词检测在提交入口拦截。' },
-  { code: '4.8', level: 'MANDATORY', category: '安全规约',
-    title: '应用中的密码、私密信息的加密算法避免使用 DES',
-    content: 'DES 加密算法被视作已被破解的加密算法。AES 256/192/128 是推荐算法。' },
-  { code: '4.9', level: 'MANDATORY', category: '安全规约',
-    title: '禁止使用硬编码（hardcode）的方式将密钥或密码写入代码',
-    content: '应通过加密的配置文件、密钥管理服务（KMS）、环境变量等方式管理。项目用 Jasypt 加密 bootstrap.yml 即是此目的。' },
-  { code: '4.10', level: 'MANDATORY', category: '安全规约',
-    title: '用户输入的 SQL 参数严格使用参数绑定',
-    content: '使用 MyBatis 的 #{} 代替 ${}；JDBC 用 PreparedStatement。字符串拼接 SQL 会导致 SQL 注入。',
-    exampleBad: 'String sql = "SELECT * FROM user WHERE id=" + userId;',
-    exampleGood: 'SELECT * FROM user WHERE id = #{userId}' },
-  { code: '4.11', level: 'MANDATORY', category: '安全规约',
-    title: '对于文件上传功能',
-    content: '1) 限制扩展名（白名单）。2) 限制 Content-Type。3) 文件名随机化。4) 存储到非 Web 根目录。5) 限制文件大小。' },
-  { code: '4.12', level: 'MANDATORY', category: '安全规约',
-    title: '反序列化不可信数据易造成 RCE',
-    content: '不要反序列化不可信来源的数据（如 Apache Commons Collections 的 readObject 漏洞）；用白名单过滤可反序列化的类。' },
+说明：如使用 Tab 缩进，必须设置 1 个 Tab 为 4 个空格。IDEA 设置 Tab 为 4 个空格时，请勿勾选 Use tab character；而在 Eclipse 中，找到 tab policy 设置为 Spaces only，Tab size：4，最后必须勾选 insert spaces for tabs`,
+    exampleGood: `（涉及上述中的 1-5 点） public static void main(String[] args) { // 缩进 4 个空格 String say = "hello"; // 运算符的左右必须有一个空格 int flag = 0; // 关键词 if 与括号之间必须有一个空格，括号内的 f 与左括号，0 与右括号不需要空格 if (flag == 0) { System.out.println(say); } // 左大括号前加空格且不换行；左大括号后换行 if (flag == 1) { System.out.println("world"); // 右大括号前换行，右大括号后有 else，不用换行 } else { System.out.println("ok"); // 在右大括号后直接结束，则必须换行 } }`,
+  },
+  {
+    code: '1.3.6',
+    level: 'MANDATORY',
+    category: '编程规约-代码格式',
+    title: `注释的双斜线与注释内容之间有且仅有一个空格`,
+    content: `注释的双斜线与注释内容之间有且仅有一个空格。`,
+    exampleGood: `// 这是示例注释，请注意在双斜线之后有一个空格 String commentString = new String("demo");`,
+  },
+  {
+    code: '1.3.7',
+    level: 'MANDATORY',
+    category: '编程规约-代码格式',
+    title: `在进行类型强制转换时，右括号与强制转换值之间不需要任何空格隔开`,
+    content: `在进行类型强制转换时，右括号与强制转换值之间不需要任何空格隔开。`,
+    exampleGood: `double first = 3.2D; int second = (int)first + 2;`,
+  },
+  {
+    code: '1.3.8',
+    level: 'MANDATORY',
+    category: '编程规约-代码格式',
+    title: `单行字符数限制不超过 120 个，超出需要换行，换行时遵循如下原则： 1）第二行相对第一行缩进 4 个空格，从第三行开始，不再继续缩进，参考示例`,
+    content: `单行字符数限制不超过 120 个，超出需要换行，换行时遵循如下原则： 1）第二行相对第一行缩进 4 个空格，从第三行开始，不再继续缩进，参考示例。 2）运算符与下文一起换行。 3）方法调用的点符号与下文一起换行。 4）方法调用中的多个参数需要换行时，在逗号后进行。 5）在括号前不要换行，见反例。`,
+    exampleGood: `StringBuilder builder = new StringBuilder(); // 超过 120 个字符的情况下，换行缩进 4 个空格，并且方法前的点号一起换行 builder.append("yang").append("hao")... .append("chen")... .append("chen")... .append("chen");`,
+    exampleBad: `StringBuilder builder = new StringBuilder(); // 超过 120 个字符的情况下，不要在括号前换行 builder.append("you").append("are")...append ("lucky"); // 参数很多的方法调用可能超过 120 个字符，逗号后才是换行处 method(args1, args2, args3, ... , argsX);`,
+  },
+  {
+    code: '1.3.9',
+    level: 'MANDATORY',
+    category: '编程规约-代码格式',
+    title: `方法参数在定义和传入时，多个参数逗号后面必须加空格`,
+    content: `方法参数在定义和传入时，多个参数逗号后面必须加空格。`,
+    exampleGood: `下例中实参的 args1 逗号后边必须要有一个空格。 method(args1, args2, args3);`,
+  },
+  {
+    code: '1.3.10',
+    level: 'MANDATORY',
+    category: '编程规约-代码格式',
+    title: `IDE 的 text file encoding 设置为 UTF-8；IDE 中文件的换行符使用 Unix 格式，不要使用 Windows 格式`,
+    content: `IDE 的 text file encoding 设置为 UTF-8；IDE 中文件的换行符使用 Unix 格式，不要使用 Windows 格式。`,
+  },
+  {
+    code: '1.3.11',
+    level: 'RECOMMENDED',
+    category: '编程规约-代码格式',
+    title: `单个方法的总行数不超过 80 行`,
+    content: `单个方法的总行数不超过 80 行。
 
-  // ============ 五、MySQL 数据库 - (一) 建表规约 ============
-  { code: '5.1.1', level: 'MANDATORY', category: 'MySQL-建表',
-    title: '表达是与否概念的字段，必须使用 is_xxx 的方式命名，数据类型 unsigned tinyint',
-    content: '1 表示是，0 表示否。任何字段如果为非负数，必须是 unsigned。' },
-  { code: '5.1.2', level: 'MANDATORY', category: 'MySQL-建表',
-    title: '表名、字段名必须使用小写字母或数字',
-    content: '禁止出现数字开头，禁止两个下划线中间只出现数字。MySQL 在 Windows 不区分大小写，但在 Linux 默认区分。' },
-  { code: '5.1.3', level: 'MANDATORY', category: 'MySQL-建表',
-    title: '表名不使用复数名词',
-    content: '表名应该仅仅表示表里面的实体内容。' },
-  { code: '5.1.4', level: 'MANDATORY', category: 'MySQL-建表',
-    title: '禁用保留字',
-    content: '如 desc / range / match / delayed 等，参考 MySQL 官方保留字。' },
-  { code: '5.1.5', level: 'MANDATORY', category: 'MySQL-建表',
-    title: '主键索引名为 pk_字段名；唯一索引名为 uk_字段名；普通索引名则为 idx_字段名',
-    content: 'pk_ primary key；uk_ unique key；idx_ index。' },
-  { code: '5.1.6', level: 'MANDATORY', category: 'MySQL-建表',
-    title: '小数类型为 decimal，禁止使用 float 和 double',
-    content: 'float 和 double 在存储时存在精度损失问题，很可能在值的比较时得到不正确的结果。如果存储的数据范围超过 decimal 的范围，建议将数据拆成整数和小数分开存储。' },
-  { code: '5.1.7', level: 'MANDATORY', category: 'MySQL-建表',
-    title: '如果存储的字符串长度几乎相等，使用 char 定长字符串类型',
-    content: 'varchar 是可变长字符串，不预先分配存储空间，长度不要超过 5000。超过的建议独立出表，用主键关联。' },
-  { code: '5.1.8', level: 'MANDATORY', category: 'MySQL-建表',
-    title: '表必备三字段：id、create_time、update_time',
-    content: 'id 必为主键，类型为 bigint unsigned、单表时自增、步长为 1。create_time、update_time 的类型均为 datetime。' },
-  { code: '5.1.9', level: 'RECOMMENDED', category: 'MySQL-建表',
-    title: '表的命名最好是加上"业务名称_表的作用"',
-    content: '便于分库分表时自动路由。',
-    exampleGood: 'alipay_task / force_project / trade_config' },
-  { code: '5.1.10', level: 'RECOMMENDED', category: 'MySQL-建表',
-    title: '库名与应用名称尽量一致',
-    content: '数据库名、表名在业务上要保持一致。' },
-  { code: '5.1.11', level: 'RECOMMENDED', category: 'MySQL-建表',
-    title: '如果修改字段含义或对字段表示的状态追加时，需要及时更新字段注释',
-    content: '增加字段注释以保持业务含义清晰。' },
-  { code: '5.1.12', level: 'RECOMMENDED', category: 'MySQL-建表',
-    title: '字段允许适当冗余，以提高查询性能',
-    content: '但必须考虑数据一致性。冗余字段应遵循：1) 不是频繁修改的字段。2) 不是 varchar 超长字段，更不能是 text 字段。' },
-  { code: '5.1.13', level: 'RECOMMENDED', category: 'MySQL-建表',
-    title: '单表行数超过 500 万行或者单表容量超过 2GB，才推荐进行分库分表',
-    content: '如果预计三年后的数据量根本达不到这个级别，请不要在创建表时就分库分表。' },
+说明：除注释之外的方法签名、左右大括号、方法内代码、空行、回车及任何不可见字符的总行数不超过 80 行。`,
+    exampleGood: `代码逻辑分清红花和绿叶，个性和共性，绿叶逻辑单独出来成为额外方法，使主干代码更加晰；共性逻辑抽取成为共性方法，便于复用和维护。`,
+  },
+  {
+    code: '1.3.12',
+    level: 'RECOMMENDED',
+    category: '编程规约-代码格式',
+    title: `没有必要增加若干空格来使变量的赋值等号与上一行对应位置的等号对齐`,
+    content: `没有必要增加若干空格来使变量的赋值等号与上一行对应位置的等号对齐。
 
-  // ============ 五、MySQL 数据库 - (二) 索引规约 ============
-  { code: '5.2.1', level: 'MANDATORY', category: 'MySQL-索引',
-    title: '业务上具有唯一特性的字段，即使是组合字段，也必须建成唯一索引',
-    content: '索引既有助于查询优化器生成高效的执行计划，又能保证数据的唯一性。' },
-  { code: '5.2.2', level: 'MANDATORY', category: 'MySQL-索引',
-    title: '超过三个表禁止 join',
-    content: 'join 的字段，数据类型必须绝对一致；多表关联查询时，保证被关联的字段需要有索引。' },
-  { code: '5.2.3', level: 'MANDATORY', category: 'MySQL-索引',
-    title: '在 varchar 字段上建立索引时，必须指定索引长度',
-    content: '没必要对全字段建立索引，根据实际文本区分度决定索引长度即可。一般对字符串类型数据，长度为 20 的索引区分度可达 90% 以上。' },
-  { code: '5.2.4', level: 'MANDATORY', category: 'MySQL-索引',
-    title: '页面搜索严禁左模糊或者全模糊，如果需要请走搜索引擎来解决',
-    content: 'LIKE %xx 和 LIKE %xx% 都会使索引失效，走全表扫描。' },
-  { code: '5.2.5', level: 'RECOMMENDED', category: 'MySQL-索引',
-    title: '如果有 order by 的场景，请注意利用索引的有序性',
-    content: 'order by 最后的字段是组合索引的一部分，并且放在索引组合顺序的最后，避免出现 file_sort 的情况，影响查询性能。' },
-  { code: '5.2.6', level: 'RECOMMENDED', category: 'MySQL-索引',
-    title: '利用覆盖索引来进行查询操作，避免回表',
-    content: '能够建立索引的种类分为主键索引、唯一索引、普通索引三种。覆盖索引指查询的字段都在索引中。' },
-  { code: '5.2.7', level: 'RECOMMENDED', category: 'MySQL-索引',
-    title: '利用延迟关联或者子查询优化超多分页场景',
-    content: 'MySQL 并不是跳过 offset 行，而是取 offset+N 行然后返回放弃前 offset 行。当 offset 特别大时效率差。',
-    exampleBad: 'SELECT * FROM t WHERE a=1 ORDER BY id LIMIT 100000, 10;',
-    exampleGood: 'SELECT * FROM t a JOIN (SELECT id FROM t WHERE a=1 ORDER BY id LIMIT 100000, 10) b ON a.id = b.id;' },
-  { code: '5.2.8', level: 'RECOMMENDED', category: 'MySQL-索引',
-    title: 'SQL 性能优化的目标：至少要达到 range 级别，要求是 ref 级别，如果可以是 const 最好',
-    content: 'consts 单表中最多只有一个匹配行（主键或唯一索引）；ref 使用普通索引；range 对索引进行范围检索。' },
-  { code: '5.2.9', level: 'RECOMMENDED', category: 'MySQL-索引',
-    title: '建组合索引的时候，区分度最高的在最左边',
-    content: '例如 where a=? and b=? 如果 a 列几乎接近于唯一值，那么只需要单建 idx_a。' },
-  { code: '5.2.10', level: 'REFERENCE', category: 'MySQL-索引',
-    title: '创建索引时避免有如下极端误解',
-    content: '1) 不要宁滥勿缺，认为一个查询就需要建一个索引。2) 不要吝啬索引创建，认为索引会消耗空间。3) 不要抵制唯一索引，认为业务的唯一性一律需要在应用层通过"先查后插"方式完成。' },
+说明：增加 builder 这个变量，如果需要对齐，则给 one、two、three 都要增加几个空格，在变量比较多的情况下，是非常累赘的事情。`,
+    exampleGood: `int one = 1; long two = 2L; float three = 3F; StringBuilder builder = new StringBuilder();`,
+  },
+  {
+    code: '1.3.13',
+    level: 'RECOMMENDED',
+    category: '编程规约-代码格式',
+    title: `不同逻辑、不同语义、不同业务的代码之间插入一个空行，分隔开来以提升可读性`,
+    content: `不同逻辑、不同语义、不同业务的代码之间插入一个空行，分隔开来以提升可读性。
 
-  // ============ 五、MySQL 数据库 - (三) SQL 规约 ============
-  { code: '5.3.1', level: 'MANDATORY', category: 'MySQL-SQL',
-    title: '不要使用 count(列名) 或 count(常量) 来替代 count(*)',
-    content: 'count(*) 是 SQL92 定义的标准统计行数的语法，跟数据库无关，跟 NULL 和非 NULL 无关。count(*) 会统计值为 NULL 的行，而 count(列名) 不会。' },
-  { code: '5.3.2', level: 'MANDATORY', category: 'MySQL-SQL',
-    title: 'count(distinct col) 计算该列除 NULL 之外的不重复行数',
-    content: '注意 count(distinct col1, col2) 如果其中一列全为 NULL，那么即使另一列有不同的值，也返回为 0。' },
-  { code: '5.3.3', level: 'MANDATORY', category: 'MySQL-SQL',
-    title: '当某一列的值全是 NULL 时，count(col) 的返回结果为 0',
-    content: '但 sum(col) 的返回结果为 NULL，因此使用 sum() 时需注意 NPE 问题。',
-    exampleGood: 'SELECT IF(ISNULL(SUM(g)), 0, SUM(g)) FROM table;' },
-  { code: '5.3.4', level: 'MANDATORY', category: 'MySQL-SQL',
-    title: '使用 ISNULL() 来判断是否为 NULL 值',
-    content: 'NULL 与任何值比较都为 NULL。包括 NULL=NULL、NULL<>NULL 的返回结果都是 NULL。' },
-  { code: '5.3.5', level: 'MANDATORY', category: 'MySQL-SQL',
-    title: '在代码中写分页查询逻辑时，若 count 为 0 应直接返回',
-    content: '避免执行后面的分页语句。数据库压力和应用性能都更优。' },
-  { code: '5.3.6', level: 'MANDATORY', category: 'MySQL-SQL',
-    title: '不得使用外键与级联，一切外键概念必须在应用层解决',
-    content: '外键与级联更新不适合分布式、高并发集群。级联更新是强阻塞，存在数据库更新风暴的风险。' },
-  { code: '5.3.7', level: 'MANDATORY', category: 'MySQL-SQL',
-    title: '禁止使用存储过程',
-    content: '存储过程难以调试和扩展，更没有移植性。' },
-  { code: '5.3.8', level: 'MANDATORY', category: 'MySQL-SQL',
-    title: '数据订正时，删除和修改记录时，要先 select，避免出现误删除',
-    content: '确认无误才能执行更新语句。生产环境禁止使用 delete from 不带 where 条件。' },
-  { code: '5.3.9', level: 'RECOMMENDED', category: 'MySQL-SQL',
-    title: 'in 操作能避免则避免，若实在避免不了，需要仔细评估 in 后边的集合元素数量',
-    content: '控制在 1000 个之内。否则 MySQL 会将 IN 查询放到一个临时表，影响性能。' },
-  { code: '5.3.10', level: 'REFERENCE', category: 'MySQL-SQL',
-    title: '因国际化需要，所有的字符存储与表示，均以 utf-8 编码',
-    content: 'utf8mb4 能完整支持 Unicode 编码，包括 emoji；utf8 仅支持 3 字节 UTF-8。' },
+说明：任何情形，没有必要插入多个空行进行隔开。`,
+  },
+  {
+    code: '1.4.1',
+    level: 'MANDATORY',
+    category: '编程规约-OOP 规约',
+    title: `避免通过一个类的对象引用访问此类的静态变量或静态方法，无谓增加编译器解析成本，直接用类名来访问即可`,
+    content: `避免通过一个类的对象引用访问此类的静态变量或静态方法，无谓增加编译器解析成本，直接用类名来访问即可。`,
+  },
+  {
+    code: '1.4.2',
+    level: 'MANDATORY',
+    category: '编程规约-OOP 规约',
+    title: `所有的覆写方法，必须加 @Override 注解`,
+    content: `所有的覆写方法，必须加 @Override 注解。
 
-  // ============ 五、MySQL 数据库 - (四) ORM 映射 ============
-  { code: '5.4.1', level: 'MANDATORY', category: 'MySQL-ORM',
-    title: '在表查询中，一律不要使用 * 作为查询的字段列表',
-    content: '需要哪些字段必须明确写明。1) 增加查询分析器解析成本。2) 增减字段容易与 resultMap 配置不一致。',
-    exampleBad: 'SELECT * FROM user',
-    exampleGood: 'SELECT id, name, email FROM user' },
-  { code: '5.4.2', level: 'MANDATORY', category: 'MySQL-ORM',
-    title: 'POJO 类的布尔属性不能加 is，而数据库字段必须加 is_',
-    content: '要求在 resultMap 中进行字段与属性之间的映射。' },
-  { code: '5.4.3', level: 'MANDATORY', category: 'MySQL-ORM',
-    title: '不要用 resultClass 当返回参数，即使所有类属性名与数据库字段一一对应',
-    content: '也需要定义；反过来，每一个表也必然有一个与之对应的 POJO。' },
-  { code: '5.4.4', level: 'MANDATORY', category: 'MySQL-ORM',
-    title: 'sql.xml 配置参数使用 #{}，#param#',
-    content: '不要使用 ${}，此种方式容易出现 SQL 注入。',
-    exampleBad: 'WHERE name LIKE \'%${name}%\'',
-    exampleGood: 'WHERE name LIKE CONCAT(\'%\', #{name}, \'%\')' },
-  { code: '5.4.5', level: 'MANDATORY', category: 'MySQL-ORM',
-    title: 'iBATIS 自带的 queryForList(String statementName, int start, int size)',
-    content: '不推荐使用。其实现方式是在数据库取到 statementName 对应 SQL 语句的所有记录，再通过 subList 取 start、size 的子集。' },
-  { code: '5.4.6', level: 'MANDATORY', category: 'MySQL-ORM',
-    title: '不允许直接拿 HashMap 与 HashTable 作为查询结果集的输出',
-    content: 'resultClass=hashmap，会置入字段名和属性值，但是值的类型不可控。' },
-  { code: '5.4.7', level: 'MANDATORY', category: 'MySQL-ORM',
-    title: '更新数据表记录时，必须同时更新记录对应的 gmt_modified 字段值为当前时间',
-    content: '或者交由数据库 ON UPDATE CURRENT_TIMESTAMP 自动维护。' },
-  { code: '5.4.8', level: 'RECOMMENDED', category: 'MySQL-ORM',
-    title: '不要写一个大而全的数据更新接口',
-    content: '传入为 POJO 类，不管是不是自己的目标更新字段，都进行 update table set c1=value1, c2=value2 执行时，不仅效率不高，而且易出错。' },
-  { code: '5.4.9', level: 'REFERENCE', category: 'MySQL-ORM',
-    title: '@Transactional 事务不要滥用',
-    content: '事务会影响数据库的 QPS，另外使用事务的地方需要考虑各方面的回滚方案。' },
-  { code: '5.4.10', level: 'REFERENCE', category: 'MySQL-ORM',
-    title: 'iBATIS/MyBatis 中的 <isEqual> 中的 compareValue 是与属性值对比的常量',
-    content: '一般为数字，表示相等时带上此条件；<isNotEmpty> 表示不为空且不为 null 时执行；<isNotNull> 表示不为 null 值时执行。' },
+说明：getObject() 与 get0bject() 的问题。一个是字母的 O，一个是数字的 0，加 @Override 可以准确判断是否覆盖成功。另外，如果在抽象类中对方法签名进行修改，其实现类会马上编译报错。`,
+  },
+  {
+    code: '1.4.3',
+    level: 'MANDATORY',
+    category: '编程规约-OOP 规约',
+    title: `相同参数类型，相同业务含义，才可以使用的可变参数，参数类型避免定义为 Object`,
+    content: `相同参数类型，相同业务含义，才可以使用的可变参数，参数类型避免定义为 Object。
 
-  // ============ 六、工程结构 ============
-  { code: '6.1', level: 'MANDATORY', category: '工程结构',
-    title: '应用分层',
-    content: '分层调用：Controller → Service → Manager → DAO；不能跨层调用（如 Controller 直接调 DAO）；Service 和 Manager 之间的调用不允许循环调用。' },
-  { code: '6.2', level: 'RECOMMENDED', category: '工程结构',
-    title: '分层领域模型规约',
-    content: 'DO（Data Object）：与数据库表结构一一对应。DTO（Data Transfer Object）：数据传输对象。BO（Business Object）：业务对象。AO（Application Object）：应用对象。VO（View Object）：显示层对象。Query：数据查询对象。' },
-  { code: '6.3', level: 'RECOMMENDED', category: '工程结构',
-    title: '二方库命名规约',
-    content: 'GAV 遵从以下规则：GroupID 格式 com.{公司/BU}.{业务线}；ArtifactID 格式 产品线名-模块名；Version 规约：主版本号.次版本号.修订号。' },
-  { code: '6.4', level: 'MANDATORY', category: '工程结构',
-    title: '定义 GAV 遵从以下规则',
-    content: 'GroupID 格式：com.{公司/BU}.业务线.[子业务线]，最多 4 级。ArtifactID 格式：产品线-模块名，语义不重复。Version：主版本号.次版本号.修订号（x.y.z）。' },
-  { code: '6.5', level: 'MANDATORY', category: '工程结构',
-    title: '二方库版本号命名方式：主版本号.次版本号.修订号',
-    content: '1) 主版本号：产品方向改变，或者大规模 API 不兼容，或者架构不兼容升级。2) 次版本号：保持相对兼容性，增加主要功能特性。3) 修订号：保持完全兼容性，修复 bug、新增次要功能特性等。' },
-  { code: '6.6', level: 'MANDATORY', category: '工程结构',
-    title: '线上应用不要依赖 SNAPSHOT 版本',
-    content: '不依赖的话需要更新 maven 依赖到 Release 版本。' },
-  { code: '6.7', level: 'MANDATORY', category: '工程结构',
-    title: '二方库的新增或升级，保持除功能点之外的其它 jar 包仲裁结果不变',
-    content: '如果有改变，必须说明潜在风险与影响。jar 包仲裁冲突时，在 maven dependency:tree 中清晰查找。' },
-  { code: '6.8', level: 'RECOMMENDED', category: '工程结构',
-    title: '二方库里可以定义枚举类型，参数也可以使用枚举类型',
-    content: '但接口返回值不允许使用枚举类型或者包含枚举类型的 POJO 对象。' },
-  { code: '6.9', level: 'RECOMMENDED', category: '工程结构',
-    title: '接口发布规约',
-    content: '1) 公共组件类、底层类型必须声明 @Deprecated 注解，并在 Javadoc 里说明替代的新接口。2) 过时接口必须保证在下一个版本继续支持。' },
-  { code: '6.10', level: 'REFERENCE', category: '工程结构',
-    title: '不要在子项目的 pom 依赖中出现相同的 GroupId，相同的 ArtifactId，但是不同的 Version',
-    content: '这种情况可能导致版本冲突问题，让版本仲裁结果不可预料。' },
+说明：可变参数必须放置在参数列表的最后。（建议开发者尽量不用可变参数编程）`,
+    exampleGood: `public List<User> listUsers(String type, Long... ids) {...}`,
+  },
+  {
+    code: '1.4.4',
+    level: 'MANDATORY',
+    category: '编程规约-OOP 规约',
+    title: `外部正在调用的接口或者二方库依赖的接口，不允许修改方法签名，避免对接口调用方产生影响`,
+    content: `外部正在调用的接口或者二方库依赖的接口，不允许修改方法签名，避免对接口调用方产生影响。接口过时必须加 @Deprecated 注解，并清晰地说明采用的新接口或者新服务是什么。`,
+  },
+  {
+    code: '1.4.5',
+    level: 'MANDATORY',
+    category: '编程规约-OOP 规约',
+    title: `不能使用过时的类或方法`,
+    content: `不能使用过时的类或方法。
 
-  // ============ 七、设计规约 ============
-  { code: '7.1', level: 'MANDATORY', category: '设计规约',
-    title: '存储方案和底层数据结构的设计获得评审一致通过，并沉淀成为文档',
-    content: '有缜密的方案设计要比在添加功能时中途发现问题更要系统、专业、合理。否则迟早会出性能问题或设计反复。' },
-  { code: '7.2', level: 'MANDATORY', category: '设计规约',
-    title: '在需求分析阶段，如果与系统交互的 User 超过一类并且相关的 User Case 超过 5 个',
-    content: '使用用例图来表达更加清晰的结构化需求。' },
-  { code: '7.3', level: 'MANDATORY', category: '设计规约',
-    title: '如果某个业务对象的状态超过 3 个，使用状态图来表达并且明确状态变化的各个触发条件',
-    content: '状态图的核心是对象状态，触发条件和标识转化的行为。' },
-  { code: '7.4', level: 'MANDATORY', category: '设计规约',
-    title: '如果系统中某个功能的调用链路上的涉及对象超过 3 个，使用时序图来表达并且明确各调用环节的输入与输出',
-    content: '时序图反映了一系列对象间的交互与协作关系，清晰立体地反映系统的调用纵深链路。' },
-  { code: '7.5', level: 'MANDATORY', category: '设计规约',
-    title: '如果系统中模型类超过 5 个，并且存在复杂的依赖关系，使用类图来表达并明确类之间的关系',
-    content: '类图像建筑领域的施工图，它的价值与需求文档等价。' },
-  { code: '7.6', level: 'MANDATORY', category: '设计规约',
-    title: '如果系统中超过 2 个对象之间存在协作关系，并且需要表示复杂的处理流程',
-    content: '使用活动图来表示。活动图是流程图的扩展，增加了能够体现协作关系的对象分区、同步条等要素。' },
-  { code: '7.7', level: 'RECOMMENDED', category: '设计规约',
-    title: '类在设计时要遵循六大原则 SOLID',
-    content: '1) 单一职责原则（SRP）2) 开闭原则（OCP）3) 里氏替换原则（LSP）4) 接口隔离原则（ISP）5) 依赖倒置原则（DIP）6) 迪米特法则（LoD）。' },
-  { code: '7.8', level: 'RECOMMENDED', category: '设计规约',
-    title: '在做系统设计时，可以预留扩展接口，方便未来或其它业务方平滑接入',
-    content: '但是，不要过度设计，抽象会导致复杂。' },
-  { code: '7.9', level: 'RECOMMENDED', category: '设计规约',
-    title: '设计时有意识地在代码中体现设计模式',
-    content: '但不要为了用设计模式而用设计模式。' },
-  { code: '7.10', level: 'REFERENCE', category: '设计规约',
-    title: '避免如下误区：NeedsDesign',
-    content: '1) 一切从零开始：已有的解决方案不采用；2) 过度设计：早期即考虑各种复杂场景；3) 僵化设计：认为设计完美无需变更。' },
-  { code: '7.11', level: 'REFERENCE', category: '设计规约',
-    title: '方法行数建议控制在 80 行以内',
-    content: '超过 80 行请考虑拆分；一般而言，一个方法只做一件事。' },
-  { code: '7.12', level: 'REFERENCE', category: '设计规约',
-    title: '圈复杂度控制在 10 以内',
-    content: '圈复杂度越高，代码的可理解性越差，缺陷越多。高于 10 强制拆分。' },
+说明：java.net.URLDecoder 中的方法 decode(String encodeStr) 这个方法已经过时，应该使用双参数 decode(String source, String encode)。接口提供方既然明确是过时接口，那么有义务同时提供新的接口；作为调用方来说，有义务去考证过时方法的新实现是什么。`,
+  },
+  {
+    code: '1.4.6',
+    level: 'MANDATORY',
+    category: '编程规约-OOP 规约',
+    title: `Object 的 equals 方法容易抛空指针异常，应使用常量或确定有值的对象来调用 equals`,
+    content: `Object 的 equals 方法容易抛空指针异常，应使用常量或确定有值的对象来调用 equals。
 
-  // ============ 八、日期时间（黄山版新增）============
-  { code: '8.1', level: 'MANDATORY', category: '日期时间',
-    title: '日期格式化时，传入 pattern 中表示年份统一使用小写的 y',
-    content: '大写 Y 表示 Week Year，容易在跨年的 12 月 31 日到 1 月 2 日之间出现错误结果。',
-    exampleBad: 'new SimpleDateFormat("YYYY-MM-dd"); // 跨年可能出错',
-    exampleGood: 'new SimpleDateFormat("yyyy-MM-dd");' },
-  { code: '8.2', level: 'MANDATORY', category: '日期时间',
-    title: '在日期格式中，分清楚大写的 M 和小写的 m；大写的 H 和小写的 h 分别指代的意义',
-    content: 'M 表示月，m 表示分钟；H 是 24 小时制，h 是 12 小时制。' },
-  { code: '8.3', level: 'MANDATORY', category: '日期时间',
-    title: '获取当前毫秒数：System.currentTimeMillis() 而不是 new Date().getTime()',
-    content: '更简洁，避免不必要的对象创建。需要秒级精度用 Instant.now().getEpochSecond()。' },
-  { code: '8.4', level: 'MANDATORY', category: '日期时间',
-    title: '不允许在程序任何地方中使用：1) java.sql.Date 2) java.sql.Time 3) java.sql.Timestamp',
-    content: '这三个类继承自 java.util.Date，但内部存的是 UTC 时间，与 util.Date 有区别。统一用 java.time 包。' },
-  { code: '8.5', level: 'MANDATORY', category: '日期时间',
-    title: '不要在程序中写死一年为 365 天',
-    content: '有些年份是 366 天（闰年）。用 LocalDate / Period 做日期运算。',
-    exampleBad: 'long oneYear = 365 * 24 * 3600 * 1000L;',
-    exampleGood: 'Period.ofYears(1); // 或 YearMonth.lengthOfYear()' },
-  { code: '8.6', level: 'RECOMMENDED', category: '日期时间',
-    title: '避免公历闰年 2 月出现的日期越界',
-    content: '比如 LocalDate.of(2020, 2, 29).plusYears(1) 会得到 2021-02-28。用 plusYears 时注意非闰年。' },
-  { code: '8.7', level: 'RECOMMENDED', category: '日期时间',
-    title: '使用枚举值来指代月份',
-    content: 'Month 枚举值从 1 开始（1-12）；Calendar 的月份从 0 开始（0-11），容易出错。用 java.time.Month 避免歧义。' },
-  { code: '8.8', level: 'MANDATORY', category: '日期时间',
-    title: '日期时间计算尽量使用 JSR-310 的 LocalDate / LocalDateTime',
-    content: 'JDK8 引入的 java.time 包是不可变的、线程安全的、API 友好的日期时间类，取代老旧的 Date/Calendar。' },
+说明：推荐使用 JDK7 引入的工具类 java.util.Objects#equals(Object a, Object b)`,
+    exampleGood: `"test".equals(param);`,
+    exampleBad: `param.equals("test");`,
+  },
+  {
+    code: '1.4.7',
+    level: 'MANDATORY',
+    category: '编程规约-OOP 规约',
+    title: `所有整型包装类对象之间值的比较，全部使用 equals 方法比较`,
+    content: `所有整型包装类对象之间值的比较，全部使用 equals 方法比较。
 
-  // ============ 九、前后端规约（黄山版新增）============
-  { code: '9.1', level: 'MANDATORY', category: '前后端规约',
-    title: '前后端交互的 API，需要明确协议、域名、路径、请求方法、请求内容、状态码、响应体',
-    content: '1) 协议：生产环境务必使用 HTTPS。2) 路径：代表某功能的资源表述，用 kebab-case。3) 请求方法：符合 RESTful 语义。4) 状态码：2xx 成功，3xx 重定向，4xx 客户端错误，5xx 服务端错误。' },
-  { code: '9.2', level: 'MANDATORY', category: '前后端规约',
-    title: '前后端数据列表相关的接口返回，如果为空，则返回空数组 [] 或空集合 {}',
-    content: '不要返回 null。避免前端再判断 null。' },
-  { code: '9.3', level: 'MANDATORY', category: '前后端规约',
-    title: '服务端发生错误时，返回给前端的响应信息必须包含 HTTP 状态码、errorCode、errorMessage、用户提示信息',
-    content: '错误表意需符合 RESTful 规范，前端可根据这些信息做差异化处理。' },
-  { code: '9.4', level: 'MANDATORY', category: '前后端规约',
-    title: '在 URL 中，用于标识唯一资源的参数，采用 Path Variables 方式',
-    content: 'https://domain/tradeOrderId={}（错）；https://domain/tradeOrder/{tradeOrderId}（对）。过滤、搜索信息用 Query Parameters。' },
-  { code: '9.5', level: 'MANDATORY', category: '前后端规约',
-    title: '对于需要使用超链接的场景，必须使用绝对路径作为 URL',
-    content: '防止前缀丢失或重定向导致的链接失效。' },
-  { code: '9.6', level: 'MANDATORY', category: '前后端规约',
-    title: '页面输出带有敏感类数据：卡号、电话等要考虑脱敏',
-    content: '应用内控制：前后端都要脱敏展示和日志记录。' },
-  { code: '9.7', level: 'MANDATORY', category: '前后端规约',
-    title: '前端提交的数据必须在后端做二次校验，不能仅靠前端校验',
-    content: '前端校验只是为了用户体验，不能作为安全防线。' },
-  { code: '9.8', level: 'MANDATORY', category: '前后端规约',
-    title: '在翻页场景中，用户输入参数的小于 1，则前端返回第一页',
-    content: '参数大于尾页，则前端返回最后一页。避免展示"无数据"的窘况。' },
-  { code: '9.9', level: 'RECOMMENDED', category: '前后端规约',
-    title: '页面上需要对操作进行二次确认（delete / update / save），避免误操作',
-    content: '尤其是删除操作，必须弹框确认。' },
-  { code: '9.10', level: 'RECOMMENDED', category: '前后端规约',
-    title: '在 URL 中，用于操作的动作，采用动词',
-    content: '获取列表用 GET /users；获取单个用 GET /users/{id}；创建用 POST /users；更新用 PUT /users/{id}；删除用 DELETE /users/{id}。' },
+说明：对于 Integer var = ? 在 -128 至 127 之间的赋值，Integer 对象是在 IntegerCache.cache 产生，会复用已有对象，这个区间内的 Integer 值可以直接使用 == 进行判断，但是这个区间之外的所有数据，都会在堆上产生，并不会复用已有对象，这是一个大坑，推荐使用 equals 方法进行判断。`,
+  },
+  {
+    code: '1.4.8',
+    level: 'MANDATORY',
+    category: '编程规约-OOP 规约',
+    title: `任何货币金额，均以最小货币单位且为整型类型进行存储`,
+    content: `任何货币金额，均以最小货币单位且为整型类型进行存储。`,
+  },
+  {
+    code: '1.4.9',
+    level: 'MANDATORY',
+    category: '编程规约-OOP 规约',
+    title: `浮点数之间的等值判断，基本数据类型不能使用 == 进行比较，包装数据类型不能使用 equals 进行判断`,
+    content: `浮点数之间的等值判断，基本数据类型不能使用 == 进行比较，包装数据类型不能使用 equals 进行判断。
 
-  // ============ 十、应用性能（黄山版新增）============
-  { code: '10.1', level: 'MANDATORY', category: '应用性能',
-    title: '关注应用性能，要看以下指标：响应时间、QPS、TPS、最大并发数、事务成功率、PV、UV',
-    content: 'QPS（Queries Per Second）和 TPS（Transactions Per Second）是核心衡量指标。接口 RT（Response Time）一般要求 P99 < 500ms。' },
-  { code: '10.2', level: 'MANDATORY', category: '应用性能',
-    title: '应用性能问题出现时，关注 top 命令的 CPU 和内存、jstack 线程栈、GC 日志',
-    content: '分析工具：jstat（GC）、jmap（heap dump）、jstack（thread dump）、arthas（在线诊断）。' },
-  { code: '10.3', level: 'MANDATORY', category: '应用性能',
-    title: '应用代码中的 Redis 命令避免使用 KEYS 命令',
-    content: 'KEYS * 会阻塞 Redis，随着 key 数量的增加查询耗时线性增加。用 SCAN 增量遍历。' },
-  { code: '10.4', level: 'MANDATORY', category: '应用性能',
-    title: '合理利用缓存，可以在一定程度上提升查询性能',
-    content: '但是要注意缓存失效可能带来的缓存穿透、缓存击穿、缓存雪崩。常见方案：空值缓存、互斥锁、随机过期时间、多级缓存。' },
-  { code: '10.5', level: 'MANDATORY', category: '应用性能',
-    title: '禁止在业务代码中写入 while 死循环，即便有 break 或 continue 分支',
-    content: '用条件严谨的判断替代死循环，避免 CPU 空转。定时任务也应设置最大重试次数。' },
-  { code: '10.6', level: 'RECOMMENDED', category: '应用性能',
-    title: '避免在循环体内查询数据库',
-    content: 'N+1 问题：批量查询一次加载，或用 IN 批量查询替代。',
-    exampleBad: 'for (Long id : ids) {\n    User u = userMapper.selectById(id); // N 次查询\n}',
-    exampleGood: 'List<User> users = userMapper.selectBatchIds(ids); // 1 次查询' },
-  { code: '10.7', level: 'RECOMMENDED', category: '应用性能',
-    title: '对于大数据量的循环批处理，建议使用 for 循环 + 分批处理，避免内存溢出',
-    content: '每批处理 500 条左右，不要一次性加载到内存。' },
-  { code: '10.8', level: 'RECOMMENDED', category: '应用性能',
-    title: '应用接口调用 RPC 远程接口的主流程中，必须设置超时时间和最大重试次数',
-    content: '不设置超时可能导致线程池打满、雪崩效应。推荐 Hystrix / Resilience4j。' },
-  { code: '10.9', level: 'RECOMMENDED', category: '应用性能',
-    title: '避免不必要的对象创建',
-    content: '比如在 for 循环里 new 大对象、字符串 + 拼接（改 StringBuilder）、自动装箱。' },
-  { code: '10.10', level: 'REFERENCE', category: '应用性能',
-    title: '连接池的最大、最小连接数配置要科学合理',
-    content: '数据库连接数 = ((核心数 * 2) + 有效磁盘数)；Redis 连接池按业务并发预估，不宜过大。' },
+说明：浮点数采用“尾数+阶码”的编码方式，类似于科学计数法的“有效数字+指数”的表示方式。二进制无法精确表示大部分的十进制小数，具体原理参考《码出高效》。`,
+    exampleGood: `(1)指定一个误差范围，两个浮点数的差值在此范围之内，则认为是相等的。 float a = 1.0F - 0.9F; float b = 0.9F - 0.8F; float diff = 1e-6F; if (Math.abs(a - b) < diff) { System.out.println("true"); } (2)使用 BigDecimal 来定义值，再进行浮点数的运算操作。 BigDecimal a = new BigDecimal("1.0"); BigDecimal b = new BigDecimal("0.9"); BigDecimal c = new BigDecimal("0.8"); BigDecimal x = a.subtract(b); BigDecimal y = b.subtract(c); if (x.compareTo(y) == 0) { System.out.println("true"); }`,
+    exampleBad: `float a = 1.0F - 0.9F; float b = 0.9F - 0.8F; if (a == b) { // 预期进入此代码块，执行其它业务逻辑 // 但事实上 a == b 的结果为 false } Float x = Float.valueOf(a); Float y = Float.valueOf(b); if (x.equals(y)) { // 预期进入此代码块，执行其它业务逻辑 // 但事实上 equals 的结果为 false }`,
+  },
+  {
+    code: '1.4.10',
+    level: 'MANDATORY',
+    category: '编程规约-OOP 规约',
+    title: `BigDecimal 的等值比较应使用 compareTo() 方法，而不是 equals() 方法`,
+    content: `BigDecimal 的等值比较应使用 compareTo() 方法，而不是 equals() 方法。
 
-  // ============ 十一、研发效能（黄山版新增）============
-  { code: '11.1', level: 'RECOMMENDED', category: '研发效能',
-    title: '研发效能度量需要引入 DevOps 理念',
-    content: '重点关注：部署频率、需求交付周期、服务恢复时间、变更失败率（DORA 四大指标）。' },
-  { code: '11.2', level: 'RECOMMENDED', category: '研发效能',
-    title: '代码仓库使用 Git 进行版本控制，合并请求必须经过 Code Review 后再合并',
-    content: 'PR 描述清晰、单次提交文件不宜过多，便于评审。' },
-  { code: '11.3', level: 'MANDATORY', category: '研发效能',
-    title: '团队仓库必须有完整的自动化构建流程：编译、测试、打包、部署',
-    content: '每次提交 PR 触发 CI；merge 到 main 触发 CD。失败立即通知相关人员。' },
-  { code: '11.4', level: 'MANDATORY', category: '研发效能',
-    title: '分支策略推荐 Git Flow 或 GitHub Flow',
-    content: 'main 分支保护：不允许直接 push；feature 分支开发；develop 合并；release 发布；hotfix 紧急修复。' },
-  { code: '11.5', level: 'RECOMMENDED', category: '研发效能',
-    title: '提交 commit message 遵循规范',
-    content: '推荐 Angular 规范：<type>(<scope>): <subject>。type 取 feat/fix/docs/style/refactor/test/chore 等。' },
+说明：equals() 方法会比较值和精度（1.0 与 1.00 返回结果为 false），而 compareTo() 则会忽略精度。`,
+  },
+  {
+    code: '1.4.11',
+    level: 'MANDATORY',
+    category: '编程规约-OOP 规约',
+    title: `定义数据对象 DO 类时，属性类型要与数据库字段类型相匹配`,
+    content: `定义数据对象 DO 类时，属性类型要与数据库字段类型相匹配。`,
+    exampleGood: `数据库字段的 bigint 必须与类属性的 Long 类型相对应。`,
+    exampleBad: `某业务的数据库表 id 字段定义类型为 bigint unsigned，实际类对象属性为 Integer，随着 id 越来越大，超过 Integer 的表示范围而溢出成为负数，此时数据库 id 不支持存入负数抛出异常产生线上故障。`,
+  },
+  {
+    code: '1.4.12',
+    level: 'MANDATORY',
+    category: '编程规约-OOP 规约',
+    title: `禁止使用构造方法 BigDecimal(double) 的方式把 double 值转化为 BigDecimal 对象`,
+    content: `禁止使用构造方法 BigDecimal(double) 的方式把 double 值转化为 BigDecimal 对象。
 
-  // ============ 十二、Spring 工程规约（黄山版强化）============
-  { code: '12.1', level: 'MANDATORY', category: 'Spring 工程',
-    title: '严禁使用 @Autowired 注解注入属性',
-    content: '推荐基于构造器注入，如果必要使用 @Resource 注解。@Autowired 在字段注入时难以测试、容易 NPE。',
-    exampleBad: '@Autowired\nprivate UserService userService;',
-    exampleGood: '@RequiredArgsConstructor  // Lombok\npublic class XxxService {\n    private final UserService userService;\n}' },
-  { code: '12.2', level: 'MANDATORY', category: 'Spring 工程',
-    title: 'Bean 的命名使用 CamelCase 风格且使用名词',
-    content: '特别注意：被 @Configuration 注解的类的成员变量必须是 static final 或使用 @Bean 声明的方法。' },
-  { code: '12.3', level: 'MANDATORY', category: 'Spring 工程',
-    title: 'Spring 容器中的 Bean 默认是单例的，因此线程安全问题要特别注意',
-    content: '有状态的 Bean 必须使用 @Scope("prototype")；或使用 ThreadLocal 存放线程变量。' },
-  { code: '12.4', level: 'MANDATORY', category: 'Spring 工程',
-    title: 'Spring 事务传播属性使用默认的 REQUIRED',
-    content: '一般场景用默认即可。REQUIRES_NEW 适用于独立业务场景。NEVER / NOT_SUPPORTED 极少使用。' },
-  { code: '12.5', level: 'MANDATORY', category: 'Spring 工程',
-    title: '@Transactional 注解应精确到方法，而不是类',
-    content: '避免整个类的方法都走事务，浪费资源。只读方法加 @Transactional(readOnly = true)。' },
-  { code: '12.6', level: 'MANDATORY', category: 'Spring 工程',
-    title: '@Transactional 事务不要滥用。事务会影响数据库的 QPS',
-    content: '使用事务的地方需考虑各方面的回滚方案，包括缓存回滚、搜索引擎回滚、消息补偿、统计修正等。' },
-  { code: '12.7', level: 'MANDATORY', category: 'Spring 工程',
-    title: '在 @Transactional 标注的方法中，方法内部调用自己的方法不会开启事务',
-    content: '因为 Spring AOP 代理走不到内部调用。需要抽到另一个 Service，或者通过 ApplicationContext 拿自身代理。' },
-  { code: '12.8', level: 'MANDATORY', category: 'Spring 工程',
-    title: '高并发调用 RPC 服务时，不推荐使用 Hystrix',
-    content: 'Hystrix 已停止维护。推荐 Resilience4j（本项目已用）或 Sentinel。配置熔断、限流、重试。' },
-  { code: '12.9', level: 'RECOMMENDED', category: 'Spring 工程',
-    title: '使用 RestTemplate / WebClient 替代原始 HttpURLConnection',
-    content: 'WebClient 是 Spring 5 引入的响应式 HTTP 客户端，性能和 API 都更优。' },
-  { code: '12.10', level: 'RECOMMENDED', category: 'Spring 工程',
-    title: 'Controller 方法参数建议使用 POJO 封装',
-    content: '多于 3 个参数必须用 DTO 封装；单个参数也可以用 POJO 以便后续扩展。' },
-  { code: '12.11', level: 'MANDATORY', category: 'Spring 工程',
-    title: 'Controller 层应该只做参数校验与简单编排，复杂业务逻辑放在 Service 层',
-    content: 'Controller 不应含有业务规则；参数校验用 @Valid + JSR-303 注解。' },
-  { code: '12.12', level: 'RECOMMENDED', category: 'Spring 工程',
-    title: '避免使用 @EnableXXX 配置多个同类增强',
-    content: '如 @EnableAsync 的 AsyncConfigurer 只能有一个，多配置会报错。' },
+说明：BigDecimal(double) 存在精度损失风险，在精确计算或值比较的场景中可能会导致业务逻辑异常。 如： BigDecimal g = new BigDecimal(0.1F)；实际的存储值为：0.100000001490116119384765625`,
+    exampleGood: `优先推荐入参为 String 的构造方法，或使用 BigDecimal 的 valueOf 方法，此方法内部其实执行了 Double 的 toString，而 Double 的 toString 按 double 的实际能表达的精度对尾数进行了截断。 BigDecimal recommend1 = new BigDecimal("0.1"); BigDecimal recommend2 = BigDecimal.valueOf(0.1);`,
+  },
+  {
+    code: '1.4.13',
+    level: 'MANDATORY',
+    category: '编程规约-OOP 规约',
+    title: `关于基本数据类型与包装数据类型的使用标准如下： 1）【强制】所有的 POJO 类属性必须使用包装数据类型`,
+    content: `关于基本数据类型与包装数据类型的使用标准如下： 1）【强制】所有的 POJO 类属性必须使用包装数据类型。 2）【强制】RPC 方法的返回值和参数必须使用包装数据类型。 3）【推荐】所有的局部变量使用基本数据类型。
 
-  // ============ 十三、其他（黄山版补充）============
-  { code: '13.1', level: 'MANDATORY', category: '其他',
-    title: '在使用正则表达式时，利用好其预编译功能，可以有效加快正则匹配速度',
-    content: 'Pattern 对象不要在方法体内定义，每次调用都会重新 compile；应作为类变量预编译。',
-    exampleBad: 'String s = Pattern.compile(REGEX).matcher(input).replaceAll("");',
-    exampleGood: 'private static final Pattern P = Pattern.compile(REGEX);' },
-  { code: '13.2', level: 'MANDATORY', category: '其他',
-    title: 'velocity 调用 POJO 类的属性时，直接使用属性名取值即可',
-    content: '模板引擎自动按规范调用 getXxx。布尔类型变量不加 is 前缀。' },
-  { code: '13.3', level: 'MANDATORY', category: '其他',
-    title: '后台输送给页面的变量必须加 $!{var}',
-    content: '中间的感叹号防止 NPE。${var} 变量值为 null 时会输出字符串 "null"。' },
-  { code: '13.4', level: 'MANDATORY', category: '其他',
-    title: '注意 Math.random() 这个方法返回的是 double 类型',
-    content: '注意范围 0.0 ≤ x < 1.0，要获取整数类型的随机数，不要将 x 放大 10 的若干倍然后取整，直接使用 Random 对象的 nextInt 或 nextLong 方法。' },
-  { code: '13.5', level: 'MANDATORY', category: '其他',
-    title: '获取当前毫秒数 System.currentTimeMillis()',
-    content: '而不是 new Date().getTime()。如果想获取更加精确的纳秒级时间值，用 System.nanoTime() 方式。' },
-  { code: '13.6', level: 'RECOMMENDED', category: '其他',
-    title: '尽量不要在 vm 中加入变量声明、逻辑运算符、以及任何复杂的逻辑',
-    content: '模板只做展示，业务逻辑放在 Controller / Service。' },
-  { code: '13.7', level: 'RECOMMENDED', category: '其他',
-    title: '任何数据结构的构造或初始化，都应指定大小，避免数据结构无限增长吃光内存',
-    content: 'new ArrayList<>(expectedSize)、new HashMap<>(initCap)、new StringBuilder(cap)。' },
-  { code: '13.8', level: 'RECOMMENDED', category: '其他',
-    title: '及时清理不再使用的代码段或配置信息',
-    content: '对于暂时被注释、以后可能重新使用的代码段，在注释上用 // TODO 标明预计恢复时间，便于人员轮换后进行清理。长时间（2 周）不使用的代码进行删除。' },
+说明：POJO 类属性没有初值是提醒使用者在需要使用时，必须自己显式地进行赋值，任何 NPE 问题，或者入库检查，都由使用者来保证。`,
+    exampleGood: `数据库的查询结果可能是 null，因为自动拆箱，用基本数据类型接收有 NPE 风险。`,
+    exampleBad: `某业务的交易报表上显示成交总额涨跌情况，即正负 x%，x 为基本数据类型，调用的 RPC 服务，调用不成功时，返回的是默认值，页面显示为 0%，这是不合理的，应该显示成中划线-。所以包装数据类型的 null 值，能够表示额外的信息，如：远程调用失败，异常退出。`,
+  },
+  {
+    code: '1.4.14',
+    level: 'MANDATORY',
+    category: '编程规约-OOP 规约',
+    title: `定义 DO / PO / DTO / VO 等 POJO 类时，不要设定任何属性默认值`,
+    content: `定义 DO / PO / DTO / VO 等 POJO 类时，不要设定任何属性默认值。`,
+    exampleBad: `某业务的 DO 的 createTime 默认值为 new Date()；但是这个属性在数据提取时并没有置入具体值，在更新其它字段时又附带更新了此字段，导致创建时间被修改成当前时间。`,
+  },
+  {
+    code: '1.4.15',
+    level: 'MANDATORY',
+    category: '编程规约-OOP 规约',
+    title: `序列化类新增属性时，请不要修改 serialVersionUID 字段，避免反序列失败；如果完全不兼容升级，避免反序列化混乱，那么请修改 serialVersionUID 值`,
+    content: `序列化类新增属性时，请不要修改 serialVersionUID 字段，避免反序列失败；如果完全不兼容升级，避免反序列化混乱，那么请修改 serialVersionUID 值。
+
+说明：注意 serialVersionUID 不一致会抛出序列化运行时异常。`,
+  },
+  {
+    code: '1.4.16',
+    level: 'MANDATORY',
+    category: '编程规约-OOP 规约',
+    title: `构造方法里面禁止加入任何业务逻辑，如果有初始化逻辑，请放在 init 方法中`,
+    content: `构造方法里面禁止加入任何业务逻辑，如果有初始化逻辑，请放在 init 方法中。`,
+  },
+  {
+    code: '1.4.17',
+    level: 'MANDATORY',
+    category: '编程规约-OOP 规约',
+    title: `POJO 类必须写 toString 方法`,
+    content: `POJO 类必须写 toString 方法。使用 IDE 中的工具 source > generate toString 时，如果继承了另一个 POJO 类，注意在前面加一下 super.toString()。
+
+说明：在方法执行抛出异常时，可以直接调用 POJO 的 toString() 方法打印其属性值，便于排查问题。`,
+  },
+  {
+    code: '1.4.18',
+    level: 'MANDATORY',
+    category: '编程规约-OOP 规约',
+    title: `禁止在 POJO 类中，同时存在对应属性 xxx 的 isXxx() 和 getXxx() 方法`,
+    content: `禁止在 POJO 类中，同时存在对应属性 xxx 的 isXxx() 和 getXxx() 方法。
+
+说明：框架在调用属性 xxx 的提取方法时，并不能确定哪个方法一定是被优先调用到，神坑之一。`,
+  },
+  {
+    code: '1.4.19',
+    level: 'RECOMMENDED',
+    category: '编程规约-OOP 规约',
+    title: `使用索引访问用 String 的 split 方法得到的数组时，需做最后一个分隔符后有无内容的检查，否则会有抛 IndexOutOfBoundsException 的风险`,
+    content: `使用索引访问用 String 的 split 方法得到的数组时，需做最后一个分隔符后有无内容的检查，否则会有抛 IndexOutOfBoundsException 的风险。
+
+说明：String str = "a,b,c,,"; String[] ary = str.split(","); // 预期大于 3，结果等于 3 System.out.println(ary.length);`,
+  },
+  {
+    code: '1.4.20',
+    level: 'RECOMMENDED',
+    category: '编程规约-OOP 规约',
+    title: `当一个类有多个构造方法，或者多个同名方法，这些方法应该按顺序放置在一起，便于阅读，此条规则优先于下一条`,
+    content: `当一个类有多个构造方法，或者多个同名方法，这些方法应该按顺序放置在一起，便于阅读，此条规则优先于下一条。`,
+    exampleGood: `public int method(int param); protected double method(int param1, int param2); private void method();`,
+  },
+  {
+    code: '1.4.21',
+    level: 'RECOMMENDED',
+    category: '编程规约-OOP 规约',
+    title: `类内方法定义的顺序依次是：公有方法或保护方法 > 私有方法 > getter / setter 方法`,
+    content: `类内方法定义的顺序依次是：公有方法或保护方法 > 私有方法 > getter / setter 方法。
+
+说明：公有方法是类的调用者和维护者最关心的方法，首屏展示最好；保护方法虽然只是子类关心，也可能是“模板设计模式”下的核心方法；而私有方法外部一般不需要特别关心，是一个黑盒实现；因为承载的信息价值较低，所有 Service 和 DAO 的 getter / setter 方法放在类体最后。`,
+  },
+  {
+    code: '1.4.22',
+    level: 'RECOMMENDED',
+    category: '编程规约-OOP 规约',
+    title: `setter 方法中，参数名称与类成员变量名称一致，this.成员名=参数名`,
+    content: `setter 方法中，参数名称与类成员变量名称一致，this.成员名=参数名。在 getter / setter 方法中，不要增加业务逻辑，增加排查问题的难度。`,
+    exampleBad: `public Integer getData() { if (condition) { return this.data + 100; } else { return this.data - 100; } }`,
+  },
+  {
+    code: '1.4.23',
+    level: 'RECOMMENDED',
+    category: '编程规约-OOP 规约',
+    title: `循环体内，字符串的连接方式，使用 StringBuilder 的 append 方法进行扩展`,
+    content: `循环体内，字符串的连接方式，使用 StringBuilder 的 append 方法进行扩展。
+
+说明：反编译出的字节码文件显示每次循环都会 new 出一个 StringBuilder 对象，然后进行 append 操作，最后通过 toString() 返回 String 对象，造成内存资源浪费。`,
+    exampleBad: `String str = "start"; for (int i = 0; i < 100; i++) { str = str + "hello"; }`,
+  },
+  {
+    code: '1.4.24',
+    level: 'RECOMMENDED',
+    category: '编程规约-OOP 规约',
+    title: `final 可以声明类、成员变量、方法、以及本地变量，下列情况使用 final 关键字： 1）不允许被继承的类，如：String 类`,
+    content: `final 可以声明类、成员变量、方法、以及本地变量，下列情况使用 final 关键字： 1）不允许被继承的类，如：String 类。 2）不允许修改引用的域对象，如：POJO 类的域变量。 3）不允许被覆写的方法，如：POJO 类的 setter 方法。 4）不允许运行过程中重新赋值的局部变量。 5）避免上下文重复使用一个变量，使用 final 关键字可以强制重新定义一个变量，方便更好地进行重构。`,
+  },
+  {
+    code: '1.4.25',
+    level: 'RECOMMENDED',
+    category: '编程规约-OOP 规约',
+    title: `慎用 Object 的 clone 方法来拷贝对象`,
+    content: `慎用 Object 的 clone 方法来拷贝对象。
+
+说明：对象 clone 方法默认是浅拷贝，若想实现深拷贝需覆写 clone 方法实现域对象的深度遍历式拷贝。`,
+  },
+  {
+    code: '1.4.26',
+    level: 'RECOMMENDED',
+    category: '编程规约-OOP 规约',
+    title: `类成员与方法访问控制从严： 1）如果不允许外部直接通过 new 来创建对象，那么构造方法必须是 private`,
+    content: `类成员与方法访问控制从严： 1）如果不允许外部直接通过 new 来创建对象，那么构造方法必须是 private。 2）工具类不允许有 public 或 default 构造方法。 3）类非 static 成员变量并且与子类共享，必须是 protected。 4）类非 static 成员变量并且仅在本类使用，必须是 private。 5）类 static 成员变量如果仅在本类使用，必须是 private。 6）若是 static 成员变量，考虑是否为 final。 7）类成员方法只供类内部调用，必须是 private。 8）类成员方法只对继承类公开，那么限制为 protected。
+
+说明：任何类、方法、参数、变量，严控访问范围。过于宽泛的访问范围，不利于模块解耦。思考：如果是一个 private 的方法，想删除就删除，可是一个 public 的 service 成员方法或成员变量，删除一下，不得手心冒点汗吗？ 变量像自己的小孩，尽量在自己的视线内，变量作用域太大，无限制的到处跑，那么你会担心的。`,
+  },
+  {
+    code: '1.5.1',
+    level: 'MANDATORY',
+    category: '编程规约-日期时间',
+    title: `日期格式化时，传入 pattern 中表示年份统一使用小写的 y`,
+    content: `日期格式化时，传入 pattern 中表示年份统一使用小写的 y。
+
+说明：日期格式化时，yyyy 表示当天所在的年，而大写的 YYYY 代表是 week in which year（JDK7 之后引入的概念），意思是当天所在的周属于的年份，一周从周日开始，周六结束，只要本周跨年，返回的 YYYY 就是下一年。`,
+    exampleGood: `表示日期和时间的格式如下所示： new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")`,
+    exampleBad: `某程序员因使用 YYYY/MM/dd 进行日期格式化，2017/12/31 执行结果为 2018/12/31，造成线上故障。`,
+  },
+  {
+    code: '1.5.2',
+    level: 'MANDATORY',
+    category: '编程规约-日期时间',
+    title: `在日期格式中分清楚大写的 M 和小写的 m，大写的 H 和小写的 h 分别指代的意义`,
+    content: `在日期格式中分清楚大写的 M 和小写的 m，大写的 H 和小写的 h 分别指代的意义。
+
+说明：日期格式中的这两对字母表意如下： 1）表示月份是大写的 M 2）表示分钟则是小写的 m 3）24 小时制的是大写的 H 4）12 小时制的则是小写的 h`,
+  },
+  {
+    code: '1.5.3',
+    level: 'MANDATORY',
+    category: '编程规约-日期时间',
+    title: `获取当前毫秒数：System.currentTimeMillis()；而不是 new Date().getTime()`,
+    content: `获取当前毫秒数：System.currentTimeMillis()；而不是 new Date().getTime()。
+
+说明：获取纳秒级时间，则使用 System.nanoTime 的方式。在 JDK8 中，针对统计时间等场景，推荐使用 Instant 类。`,
+  },
+  {
+    code: '1.5.4',
+    level: 'MANDATORY',
+    category: '编程规约-日期时间',
+    title: `不允许在程序任何地方中使用：1）java.sql.Date  2）java.sql.Time  3）java.sql.Timestamp`,
+    content: `不允许在程序任何地方中使用：1）java.sql.Date  2）java.sql.Time  3）java.sql.Timestamp。
+
+说明：第 1 个不记录时间，getHours() 抛出异常；第 2 个不记录日期，getYear() 抛出异常；第 3 个在构造方法 super((time / 1000) * 1000)，在 Timestamp 属性 fastTime 和 nanos 分别存储秒和纳秒信息。`,
+    exampleBad: `java.util.Date.after(Date) 进行时间比较时，当入参是 java.sql.Timestamp 时，会触发 JDK BUG（JDK9 已修复），可能导致比较时的意外结果。`,
+  },
+  {
+    code: '1.5.5',
+    level: 'MANDATORY',
+    category: '编程规约-日期时间',
+    title: `禁止在程序中写死一年为 365 天，避免在公历闰年时出现日期转换错误或程序逻辑错误`,
+    content: `禁止在程序中写死一年为 365 天，避免在公历闰年时出现日期转换错误或程序逻辑错误。`,
+    exampleGood: `// 获取今年的天数 int daysOfThisYear = LocalDate.now().lengthOfYear(); // 获取指定某年的天数 LocalDate.of(2011, 1, 1).lengthOfYear();`,
+    exampleBad: `// 第一种情况：在闰年 366 天时，出现数组越界异常 int[] dayArray = new int[365]; // 第二种情况：一年有效期的会员制，2020 年 1 月 26 日注册，硬编码 365 返回的却是 2021 年 1 月 25 日 Calendar calendar = Calendar.getInstance(); calendar.set(2020, 1, 26); calendar.add(Calendar.DATE, 365);`,
+  },
+  {
+    code: '1.5.6',
+    level: 'RECOMMENDED',
+    category: '编程规约-日期时间',
+    title: `避免公历闰年 2 月问题`,
+    content: `避免公历闰年 2 月问题。闰年的 2 月份有 29 天，一年后的那一天不可能是 2 月 29 日。`,
+  },
+  {
+    code: '1.5.7',
+    level: 'RECOMMENDED',
+    category: '编程规约-日期时间',
+    title: `使用枚举值来指代月份`,
+    content: `使用枚举值来指代月份。如果使用数字，注意 Date，Calendar 等日期相关类的月份 month 取值范围从 0 到 11 之间。
+
+说明：参考 JDK 原生注释，Month value is 0-based. e.g., 0 for January.`,
+    exampleGood: `Calendar.JANUARY，Calendar.FEBRUARY，Calendar.MARCH 等来指代相应月份来进行传参或比较。`,
+  },
+  {
+    code: '1.6.1',
+    level: 'MANDATORY',
+    category: '编程规约-集合处理',
+    title: `关于 hashCode 和 equals 的处理，遵循如下规则： 1）只要覆写 equals，就必须覆写 hashCode`,
+    content: `关于 hashCode 和 equals 的处理，遵循如下规则： 1）只要覆写 equals，就必须覆写 hashCode。 2）因为 Set 存储的是不重复的对象，依据 hashCode 和 equals 进行判断，所以 Set 存储的对象必须覆写这两种方法。 3）如果自定义对象作为 Map 的键，那么必须覆写 hashCode 和 equals。
+
+说明：String 因为覆写了 hashCode 和 equals 方法，所以可以愉快地将 String 对象作为 key 来使用。`,
+  },
+  {
+    code: '1.6.2',
+    level: 'MANDATORY',
+    category: '编程规约-集合处理',
+    title: `判断所有集合内部的元素是否为空，使用 isEmpty() 方法，而不是 size() == 0 的方式`,
+    content: `判断所有集合内部的元素是否为空，使用 isEmpty() 方法，而不是 size() == 0 的方式。
+
+说明：在某些集合中，前者的时间复杂度为 O(1)，而且可读性更好。`,
+    exampleGood: `Map<String, Object> map = new HashMap<>(16); if (map.isEmpty()) { System.out.println("no element in this map."); }`,
+  },
+  {
+    code: '1.6.3',
+    level: 'MANDATORY',
+    category: '编程规约-集合处理',
+    title: `在使用 java.util.stream.Collectors 类的 toMap() 方法转为 Map 集合时，一定要使用参数类型为 BinaryOperato`,
+    content: `在使用 java.util.stream.Collectors 类的 toMap() 方法转为 Map 集合时，一定要使用参数类型为 BinaryOperator，参数名为 mergeFunction 的方法，否则当出现相同 key 时会抛出 IllegalStateException 异常。
+
+说明：参数 mergeFunction 的作用是当出现 key 重复时，自定义对 value 的处理策略。`,
+    exampleGood: `List<Pair<String, Double>> pairArrayList = new ArrayList<>(3); pairArrayList.add(new Pair<>("version", 12.10)); pairArrayList.add(new Pair<>("version", 12.19)); pairArrayList.add(new Pair<>("version", 6.28)); // 生成的 map 集合中只有一个键值对：{version=6.28} Map<String, Double> map = pairArrayList.stream() .collect(Collectors.toMap(Pair::getKey, Pair::getValue, (v1, v2) -> v2));`,
+    exampleBad: `String[] departments = new String[]{"RDC", "RDC", "KKB"}; // 抛出 IllegalStateException 异常 Map<Integer, String> map = Arrays.stream(departments) .collect(Collectors.toMap(String::hashCode, str -> str));`,
+  },
+  {
+    code: '1.6.4',
+    level: 'MANDATORY',
+    category: '编程规约-集合处理',
+    title: `在使用 java.util.stream.Collectors 类的 toMap() 方法转为 Map 集合时，一定要注意当 value 为 null 时会抛 NPE 异常`,
+    content: `在使用 java.util.stream.Collectors 类的 toMap() 方法转为 Map 集合时，一定要注意当 value 为 null 时会抛 NPE 异常。
+
+说明：在 java.util.HashMap 的 merge 方法里会进行如下的判断： if (value == null || remappingFunction == null) throw new NullPointerException();`,
+    exampleBad: `List<Pair<String, Double>> pairArrayList = new ArrayList<>(2); pairArrayList.add(new Pair<>("version1", 8.3)); pairArrayList.add(new Pair<>("version2", null)); // 抛出 NullPointerException 异常 Map<String, Double> map = pairArrayList.stream() .collect(Collectors.toMap(Pair::getKey, Pair::getValue, (v1, v2) -> v2));`,
+  },
+  {
+    code: '1.6.5',
+    level: 'MANDATORY',
+    category: '编程规约-集合处理',
+    title: `ArrayList 的 subList 结果不可强转成 ArrayList，否则会抛出 ClassCastException 异常： java.util.Ran`,
+    content: `ArrayList 的 subList 结果不可强转成 ArrayList，否则会抛出 ClassCastException 异常： java.util.RandomAccessSubList cannot be cast to java.util.ArrayList。
+
+说明：subList() 返回的是 ArrayList 的内部类 SubList，并不是 ArrayList 本身，而是 ArrayList 的一个视图，对于 SubList 的所有操作最终会反映到原列表上。`,
+  },
+  {
+    code: '1.6.6',
+    level: 'MANDATORY',
+    category: '编程规约-集合处理',
+    title: `使用 Map 的方法 keySet() / values() / entrySet() 返回集合对象时，不可以对其进行添加元素操作，否则会抛出 Unsuppor`,
+    content: `使用 Map 的方法 keySet() / values() / entrySet() 返回集合对象时，不可以对其进行添加元素操作，否则会抛出 UnsupportedOperationException 异常。`,
+  },
+  {
+    code: '1.6.7',
+    level: 'MANDATORY',
+    category: '编程规约-集合处理',
+    title: `Collections 类返回的对象，如：emptyList() / singletonList() 等都是 immutable list，不可对其进行添加或者删除元素的操作`,
+    content: `Collections 类返回的对象，如：emptyList() / singletonList() 等都是 immutable list，不可对其进行添加或者删除元素的操作。`,
+    exampleBad: `如果查询无结果，返回 Collections.emptyList() 空集合对象，调用方一旦在返回的集合中进行了添加元素的操作，就会触发 UnsupportedOperationException 异常。`,
+  },
+  {
+    code: '1.6.8',
+    level: 'MANDATORY',
+    category: '编程规约-集合处理',
+    title: `在 subList 场景中，高度注意对父集合元素的增加或删除，均会导致子列表的遍历、增加、删除产生 ConcurrentModificationException 异常`,
+    content: `在 subList 场景中，高度注意对父集合元素的增加或删除，均会导致子列表的遍历、增加、删除产生 ConcurrentModificationException 异常。
+
+说明：抽查表明，90% 的程序员对此知识点都有错误的认知。`,
+  },
+  {
+    code: '1.6.9',
+    level: 'MANDATORY',
+    category: '编程规约-集合处理',
+    title: `使用集合转数组的方法，必须使用集合的 toArray(T[] array)，传入的是类型完全一致、长度为 0 的空数组`,
+    content: `使用集合转数组的方法，必须使用集合的 toArray(T[] array)，传入的是类型完全一致、长度为 0 的空数组。
+
+说明：使用 toArray 带参方法，数组空间大小的 length： 1）等于 0，动态创建与 size 相同的数组，性能最好。 2）大于 0 但小于 size，重新创建大小等于 size 的数组，增加 GC 负担。 3）等于 size，在高并发情况下，数组创建完成之后，size 正在变大的情况下，负面影响与 2 相同。 4）大于 size，空间浪费，且在 size 处插入 null 值，存在 NPE 隐患。`,
+    exampleGood: `List<String> list = new ArrayList<>(2); list.add("guan"); list.add("bao"); String[] array = list.toArray(new String[0]);`,
+    exampleBad: `直接使用 toArray 无参方法存在问题，此方法返回值只能是 Object[]类，若强转其它类型数组将出现 ClassCastException 错误。`,
+  },
+  {
+    code: '1.6.10',
+    level: 'MANDATORY',
+    category: '编程规约-集合处理',
+    title: `使用 Collection 接口任何实现类的 addAll() 方法时，要对输入的集合参数进行 NPE 判断`,
+    content: `使用 Collection 接口任何实现类的 addAll() 方法时，要对输入的集合参数进行 NPE 判断。
+
+说明：在 ArrayList#addAll 方法的第一行代码即 Object[] a = c.toArray()；其中 c 为输入集合参数，如果为 null，则直接抛出异常。`,
+  },
+  {
+    code: '1.6.11',
+    level: 'MANDATORY',
+    category: '编程规约-集合处理',
+    title: `使用工具类 Arrays.asList() 把数组转换成集合时，不能使用其修改集合相关的方法，它的 add / remove / clear 方法会抛出 Uns`,
+    content: `使用工具类 Arrays.asList() 把数组转换成集合时，不能使用其修改集合相关的方法，它的 add / remove / clear 方法会抛出 UnsupportedOperationException 异常。
+
+说明：asList 的返回对象是一个 Arrays 内部类，并没有实现集合的修改方法。Arrays.asList 体现的是适配器模式，只是转换接口，后台的数据仍是数组。 String[] str = new String[]{ "yang", "guan", "bao" }; List list = Arrays.asList(str); 第一种情况：list.add("yangguanbao"); 运行时异常。 第二种情况：str[0] = "change"; list 中的元素也会随之修改，反之亦然。`,
+  },
+  {
+    code: '1.6.12',
+    level: 'MANDATORY',
+    category: '编程规约-集合处理',
+    title: `泛型通配符<? extends T>来接收返回的数据，此写法的泛型集合不能使用 add 方法，而<? super T>不能使用 get 方法，两者在接口调用赋值的场景中容易出错`,
+    content: `泛型通配符<? extends T>来接收返回的数据，此写法的泛型集合不能使用 add 方法，而<? super T>不能使用 get 方法，两者在接口调用赋值的场景中容易出错。
+
+说明：扩展说一下 PECS(Producer Extends Consumer Super) 原则，即频繁往外读取内容的，适合用 <? extends T>，经常往里插入的，适合用<? super T>`,
+  },
+  {
+    code: '1.6.13',
+    level: 'MANDATORY',
+    category: '编程规约-集合处理',
+    title: `在无泛型限制定义的集合赋值给泛型限制的集合时，在使用集合元素时，需要进行 instanceof 判断，避免抛出 ClassCastException 异常`,
+    content: `在无泛型限制定义的集合赋值给泛型限制的集合时，在使用集合元素时，需要进行 instanceof 判断，避免抛出 ClassCastException 异常。
+
+说明：毕竟泛型是在 JDK5 后才出现，考虑到向前兼容，编译器是允许非泛型集合与泛型集合互相赋值。`,
+    exampleBad: `List<String> generics = null; List notGenerics = new ArrayList(10); notGenerics.add(new Object()); notGenerics.add(new Integer(1)); generics = notGenerics; // 此处抛出 ClassCastException 异常 String string = generics.get(0);`,
+  },
+  {
+    code: '1.6.14',
+    level: 'MANDATORY',
+    category: '编程规约-集合处理',
+    title: `不要在 foreach 循环里进行元素的 remove / add 操作`,
+    content: `不要在 foreach 循环里进行元素的 remove / add 操作。remove 元素请使用 iterator 方式，如果并发操作，需要对 iterator 对象加锁。
+
+说明：反例中的执行结果肯定会出乎大家的意料，那么试一下把“1”换成“2”会是同样的结果吗？`,
+    exampleGood: `List<String> list = new ArrayList<>(); list.add("1"); list.add("2"); Iterator<String> iterator = list.iterator(); while (iterator.hasNext()) { String item = iterator.next(); if (删除元素的条件) { iterator.remove(); } }`,
+    exampleBad: `for (String item : list) { if ("1".equals(item)) { list.remove(item); } }`,
+  },
+  {
+    code: '1.6.15',
+    level: 'MANDATORY',
+    category: '编程规约-集合处理',
+    title: `在 JDK7 版本及以上，Comparator 实现类要满足如下三个条件，不然 Arrays.sort， Collections.sort 会抛 Illegal`,
+    content: `在 JDK7 版本及以上，Comparator 实现类要满足如下三个条件，不然 Arrays.sort， Collections.sort 会抛 IllegalArgumentException 异常。
+
+说明：三个条件如下 1）x，y 的比较结果和 y，x 的比较结果相反。 2）x > y，y > z，则 x > z。 3）x = y，则 x，z 比较结果和 y，z 比较结果相同。`,
+    exampleBad: `下例中没有处理相等的情况，交换两个对象判断结果并不互反，不符合第一个条件，在实际使用中可能会出现异常。 new Comparator<Student>() { @Override public int compare(Student o1, Student o2) { return o1.getId() > o2.getId() ? 1 : -1; } };`,
+  },
+  {
+    code: '1.6.16',
+    level: 'RECOMMENDED',
+    category: '编程规约-集合处理',
+    title: `泛型集合使用时，在 JDK7 及以上，使用 diamond 语法或全省略`,
+    content: `泛型集合使用时，在 JDK7 及以上，使用 diamond 语法或全省略。
+
+说明：菱形泛型，即 diamond，直接使用<>来指代前边已经指定的类型。`,
+    exampleGood: `// diamond 方式，即<> HashMap<String, String> userCache = new HashMap<>(16); // 全省略方式 ArrayList<User> users = new ArrayList(10);`,
+  },
+  {
+    code: '1.6.17',
+    level: 'RECOMMENDED',
+    category: '编程规约-集合处理',
+    title: `集合初始化时，指定集合初始值大小`,
+    content: `集合初始化时，指定集合初始值大小。
+
+说明：HashMap 使用构造方法 HashMap(int initialCapacity) 进行初始化时，如果暂时无法确定集合大小，那么指定默认值（16）即可。`,
+    exampleGood: `initialCapacity = (需要存储的元素个数 / 负载因子) + 1。注意负载因子（即 loaderfactor）默认为 0.75，如果暂时无法确定初始值大小，请设置为 16（即默认值）。`,
+    exampleBad: `HashMap 需要放置 1024 个元素，由于没有设置容量初始大小，随着元素增加而被迫不断扩容，resize() 方法总共会调用 8 次，反复重建哈希表和数据迁移。当放置的集合元素个数达 千万级时会影响程序性能。`,
+  },
+  {
+    code: '1.6.18',
+    level: 'RECOMMENDED',
+    category: '编程规约-集合处理',
+    title: `使用 entrySet 遍历 Map 类集合 KV，而不是 keySet 方式进行遍历`,
+    content: `使用 entrySet 遍历 Map 类集合 KV，而不是 keySet 方式进行遍历。
+
+说明：keySet 其实是遍历了 2 次，一次是转为 Iterator 对象，另一次是从 hashMap 中取出 key 所对应的 value。而 entrySet 只是遍历了一次就把 key 和 value 都放到了 entry 中，效率更高。如果是 JDK8，使用 Map.forEach 方法。`,
+    exampleGood: `values() 返回的是 V 值集合，是一个 list 集合对象；keySet() 返回的是 K 值集合，是一个 Set 集合对象； entrySet() 返回的是 K-V 值组合的 Set 集合。`,
+  },
+  {
+    code: '1.6.19',
+    level: 'RECOMMENDED',
+    category: '编程规约-集合处理',
+    title: `高度注意 Map 类集合 K / V 能不能存储 null 值的情况，如下表格： 集合类 Key Value Super 说明 Hashtable 不允许为 n`,
+    content: `高度注意 Map 类集合 K / V 能不能存储 null 值的情况，如下表格： 集合类 Key Value Super 说明 Hashtable 不允许为 null 不允许为 null Dictionary 线程安全 TreeMap 不允许为 null 允许为 null AbstractMap 线程不安全 ConcurrentHashMap 不允许为 null 不允许为 null AbstractMap 锁分段技术（JDK8:CAS） HashMap 允许为 null 允许为 null AbstractMap 线程不安全`,
+    exampleBad: `由于 HashMap 的干扰，很多人认为 ConcurrentHashMap 是可以置入 null 值，而事实上，存储 null 值时会抛出 NPE 异常。`,
+  },
+  {
+    code: '1.6.20',
+    level: 'REFERENCE',
+    category: '编程规约-集合处理',
+    title: `合理利用好集合的有序性（sort）和稳定性（order），避免集合的无序性（unsort）和不稳定性（unorder）带来的负面影响`,
+    content: `合理利用好集合的有序性（sort）和稳定性（order），避免集合的无序性（unsort）和不稳定性（unorder）带来的负面影响。
+
+说明：有序性是指遍历的结果是按某种比较规则依次排列的，稳定性指集合每次遍历的元素次序是一定的。如： ArrayList 是 order / unsort；HashMap 是 unorder / unsort；TreeSet 是 order / sort。`,
+  },
+  {
+    code: '1.6.21',
+    level: 'REFERENCE',
+    category: '编程规约-集合处理',
+    title: `利用 Set 元素唯一的特性，可以快速对一个集合进行去重操作，避免使用 List 的 contains() 进行遍历去重或者判断包含操作`,
+    content: `利用 Set 元素唯一的特性，可以快速对一个集合进行去重操作，避免使用 List 的 contains() 进行遍历去重或者判断包含操作。`,
+  },
+  {
+    code: '1.7.1',
+    level: 'MANDATORY',
+    category: '编程规约-并发处理',
+    title: `获取单例对象需要保证线程安全，其中的方法也要保证线程安全`,
+    content: `获取单例对象需要保证线程安全，其中的方法也要保证线程安全。
+
+说明：资源驱动类、工具类、单例工厂类都需要注意。`,
+  },
+  {
+    code: '1.7.2',
+    level: 'MANDATORY',
+    category: '编程规约-并发处理',
+    title: `创建线程或线程池时请指定有意义的线程名称，方便出错时回溯`,
+    content: `创建线程或线程池时请指定有意义的线程名称，方便出错时回溯。`,
+    exampleGood: `自定义线程工厂，并且根据外部特征进行分组，比如，来自同一机房的调用，把机房编号赋值给 whatFeatureOfGroup： public class UserThreadFactory implements ThreadFactory { private final String namePrefix; private final AtomicInteger nextId = new AtomicInteger(1); // 定义线程组名称，在利用 jstack 来排查问题时，非常有帮助 UserThreadFactory(String whatFeatureOfGroup) { namePrefix = "FromUserThreadFactory's" + whatFeatureOfGroup + "-Worker-"; } @Override public Thread newThread(Runnable task) { String name = namePrefix + nextId.getAndIncrement(); Thread thread = new Thread(null, task, name, 0, false); System.out.println(thread.getName()); return thread; } }`,
+  },
+  {
+    code: '1.7.3',
+    level: 'MANDATORY',
+    category: '编程规约-并发处理',
+    title: `线程资源必须通过线程池提供，不允许在应用中自行显式创建线程`,
+    content: `线程资源必须通过线程池提供，不允许在应用中自行显式创建线程。
+
+说明：线程池的好处是减少在创建和销毁线程上所消耗的时间以及系统资源的开销，解决资源不足的问题。如果不使用线程池，有可能造成系统创建大量同类线程而导致消耗完内存或者“过度切换”的问题。`,
+  },
+  {
+    code: '1.7.4',
+    level: 'MANDATORY',
+    category: '编程规约-并发处理',
+    title: `线程池不允许使用 Executors 去创建，而是通过 ThreadPoolExecutor 的方式，这样的处理方式让写的同学更加明确线程池的运行规则，规避资源耗尽的风险`,
+    content: `线程池不允许使用 Executors 去创建，而是通过 ThreadPoolExecutor 的方式，这样的处理方式让写的同学更加明确线程池的运行规则，规避资源耗尽的风险。
+
+说明：Executors 返回的线程池对象的弊端如下： 1）FixedThreadPool 和 SingleThreadPool： 允许的请求队列长度为 Integer.MAX_VALUE，可能会堆积大量的请求，从而导致 OOM。 2）CachedThreadPool： 允许的创建线程数量为 Integer.MAX_VALUE，可能会创建大量的线程，从而导致 OOM。 3）ScheduledThreadPool： 允许的请求队列长度为 Integer.MAX_VALUE，可能会堆积大量的请求，从而导致 OOM。`,
+  },
+  {
+    code: '1.7.5',
+    level: 'MANDATORY',
+    category: '编程规约-并发处理',
+    title: `SimpleDateFormat 是线程不安全的类，一般不要定义为 static 变量，如果定义为 static，必须加锁，或者使用 DateUtils 工具类`,
+    content: `SimpleDateFormat 是线程不安全的类，一般不要定义为 static 变量，如果定义为 static，必须加锁，或者使用 DateUtils 工具类。
+
+说明：如果是 JDK8 的应用，可以使用 Instant 代替 Date，LocalDateTime 代替 Calendar，DateTimeFormatter 代替 SimpleDateFormat，官方给出的解释：simple beautiful strong immutable thread-safe。`,
+    exampleGood: `注意线程安全，使用 DateUtils。亦推荐如下处理： private static final ThreadLocal<DateFormat> dateStyle = new ThreadLocal<DateFormat>() { @Override protected DateFormat initialValue() { return new SimpleDateFormat("yyyy-MM-dd"); } };`,
+  },
+  {
+    code: '1.7.6',
+    level: 'MANDATORY',
+    category: '编程规约-并发处理',
+    title: `必须回收自定义的 ThreadLocal 变量记录的当前线程的值，尤其在线程池场景下，线程经常会被复用，如果不清理自定义的 ThreadLocal 变量，可能会`,
+    content: `必须回收自定义的 ThreadLocal 变量记录的当前线程的值，尤其在线程池场景下，线程经常会被复用，如果不清理自定义的 ThreadLocal 变量，可能会影响后续业务逻辑和造成内存泄露等问题。 尽量在代码中使用 try-finally 块进行回收。`,
+    exampleGood: `objectThreadLocal.set(userInfo); try { // ... } finally { objectThreadLocal.remove(); }`,
+  },
+  {
+    code: '1.7.7',
+    level: 'MANDATORY',
+    category: '编程规约-并发处理',
+    title: `高并发时，同步调用应该去考量锁的性能损耗`,
+    content: `高并发时，同步调用应该去考量锁的性能损耗。能用无锁数据结构，就不要用锁；能锁区块，就不要锁整个方法体；能用对象锁，就不要用类锁。
+
+说明：尽可能使加锁的代码块工作量尽可能的小，避免在锁代码块中调用 RPC 方法。`,
+  },
+  {
+    code: '1.7.8',
+    level: 'MANDATORY',
+    category: '编程规约-并发处理',
+    title: `对多个资源、数据库表、对象同时加锁时，需要保持一致的加锁顺序，否则可能会造成死锁`,
+    content: `对多个资源、数据库表、对象同时加锁时，需要保持一致的加锁顺序，否则可能会造成死锁。
+
+说明：线程一需要对表 A、B、C 依次全部加锁后才可以进行更新操作，那么线程二的加锁顺序也必须是 A、B、C，否则可能出现死锁。`,
+  },
+  {
+    code: '1.7.9',
+    level: 'MANDATORY',
+    category: '编程规约-并发处理',
+    title: `在使用阻塞等待获取锁的方式中，必须在 try 代码块之外，并且在加锁方法与 try 代码块之间没有任何可能抛出异常的方法调用，避免加锁成功后，在 finally 中无法解锁`,
+    content: `在使用阻塞等待获取锁的方式中，必须在 try 代码块之外，并且在加锁方法与 try 代码块之间没有任何可能抛出异常的方法调用，避免加锁成功后，在 finally 中无法解锁。 说明一：在 lock 方法与 try 代码块之间的方法调用抛出异常，无法解锁，造成其它线程无法成功获取锁。 说明二：如果 lock 方法在 try 代码块之内，可能由于其它方法抛出异常，导致在 finally 代码块中，unlock 对未加锁的对象解锁，它会调用 AQS 的 tryRelease 方法（取决于具体实现类），抛出 IllegalMonitorStateException 异常。 说明三：在 Lock 对象的 lock 方法实现中可能抛出 unchecked 异常，产生的后果与说明二相同。`,
+    exampleGood: `Lock lock = new XxxLock(); // ... lock.lock(); try { doSomething(); doOthers(); } finally { lock.unlock(); }`,
+    exampleBad: `Lock lock = new XxxLock(); // ... try { // 如果此处抛出异常，则直接执行 finally 代码块 doSomething(); // 无论加锁是否成功，finally 代码块都会执行 lock.lock(); doOthers(); } finally { lock.unlock(); }`,
+  },
+  {
+    code: '1.7.10',
+    level: 'MANDATORY',
+    category: '编程规约-并发处理',
+    title: `在使用尝试机制来获取锁的方式中，进入业务代码块之前，必须先判断当前线程是否持有锁`,
+    content: `在使用尝试机制来获取锁的方式中，进入业务代码块之前，必须先判断当前线程是否持有锁。 锁的释放规则与锁的阻塞等待方式相同。
+
+说明：Lock 对象的 unlock 方法在执行时，它会调用 AQS 的 tryRelease 方法（取决于具体实现类），如果当前线程不持有锁，则抛出 IllegalMonitorStateException 异常。`,
+    exampleGood: `Lock lock = new XxxLock(); // ... boolean isLocked = lock.tryLock(); if (isLocked) { try { doSomething(); doOthers(); } finally { lock.unlock(); } }`,
+  },
+  {
+    code: '1.7.11',
+    level: 'MANDATORY',
+    category: '编程规约-并发处理',
+    title: `并发修改同一记录时，避免更新丢失，需要加锁`,
+    content: `并发修改同一记录时，避免更新丢失，需要加锁。要么在应用层加锁，要么在缓存加锁，要么在数据库层使用乐观锁，使用 version 作为更新依据。
+
+说明：如果每次访问冲突概率小于 20%，推荐使用乐观锁，否则使用悲观锁。乐观锁的重试次数不得小于 3 次。`,
+  },
+  {
+    code: '1.7.12',
+    level: 'MANDATORY',
+    category: '编程规约-并发处理',
+    title: `多线程并行处理定时任务时，Timer 运行多个 TimeTask 时，只要其中之一没有捕获抛出的异常，其它任务便会自动终止运行，使用 ScheduledExec`,
+    content: `多线程并行处理定时任务时，Timer 运行多个 TimeTask 时，只要其中之一没有捕获抛出的异常，其它任务便会自动终止运行，使用 ScheduledExecutorService 则没有这个问题。`,
+  },
+  {
+    code: '1.7.13',
+    level: 'RECOMMENDED',
+    category: '编程规约-并发处理',
+    title: `资金相关的金融敏感信息，使用悲观锁策略`,
+    content: `资金相关的金融敏感信息，使用悲观锁策略。
+
+说明：乐观锁在获得锁的同时已经完成了更新操作，校验逻辑容易出现漏洞，另外，乐观锁对冲突的解决策略有较复杂的要求，处理不当容易造成系统压力或数据异常，所以资金相关的金融敏感信息不建议使用乐观锁更新。`,
+    exampleGood: `悲观锁遵循一锁二判三更新四释放的原则。`,
+  },
+  {
+    code: '1.7.14',
+    level: 'RECOMMENDED',
+    category: '编程规约-并发处理',
+    title: `使用 CountDownLatch 进行异步转同步操作，每个线程退出前必须调用 countDown 方法，线程执行代码注意 catch 异常，确保 countD`,
+    content: `使用 CountDownLatch 进行异步转同步操作，每个线程退出前必须调用 countDown 方法，线程执行代码注意 catch 异常，确保 countDown 方法被执行到，避免主线程无法执行至 await 方法，直到超时才返回结果。
+
+说明：注意，子线程抛出异常堆栈，不能在主线程 try-catch 到。`,
+  },
+  {
+    code: '1.7.15',
+    level: 'RECOMMENDED',
+    category: '编程规约-并发处理',
+    title: `避免 Random 实例被多线程使用，虽然共享该实例是线程安全的，但会因竞争同一 seed 导致的性能下降`,
+    content: `避免 Random 实例被多线程使用，虽然共享该实例是线程安全的，但会因竞争同一 seed 导致的性能下降。
+
+说明：Random 实例包括 java.util.Random 的实例或者 Math.random() 的方式。`,
+    exampleGood: `在 JDK7 之后，可以直接使用 API ThreadLocalRandom，而在 JDK7 之前，需要编码保证每个线程持有一个单独的 Random 实例。`,
+  },
+  {
+    code: '1.7.16',
+    level: 'RECOMMENDED',
+    category: '编程规约-并发处理',
+    title: `通过双重检查锁（double-checked locking），实现延迟初始化需要将目标属性声明为 volatile 型，（比如修改 helper 的属性声明为`,
+    content: `通过双重检查锁（double-checked locking），实现延迟初始化需要将目标属性声明为 volatile 型，（比如修改 helper 的属性声明为 private volatile Helper helper = null;）。`,
+    exampleGood: `public class LazyInitDemo { private volatile Helper helper = null; public Helper getHelper() { if (helper == null) { synchronized(this) { if (helper == null) { helper = new Helper(); } } } return helper; } // other methods and fields... }`,
+  },
+  {
+    code: '1.7.17',
+    level: 'REFERENCE',
+    category: '编程规约-并发处理',
+    title: `volatile 解决多线程内存不可见问题对于一写多读，是可以解决变量同步问题，但是如果多写，同样无法解决线程安全问题`,
+    content: `volatile 解决多线程内存不可见问题对于一写多读，是可以解决变量同步问题，但是如果多写，同样无法解决线程安全问题。
+
+说明：如果是 count++操作，使用如下类实现： AtomicInteger count = new AtomicInteger(); count.addAndGet(1); 如果是 JDK8，推荐使用 LongAdder 对象，比 AtomicLong 性能更好（减少乐观锁的重试次数）。`,
+  },
+  {
+    code: '1.7.18',
+    level: 'REFERENCE',
+    category: '编程规约-并发处理',
+    title: `HashMap 在容量不够进行 resize 时由于高并发可能出现死链，导致 CPU 飙升，在开发过程中注意规避此风险`,
+    content: `HashMap 在容量不够进行 resize 时由于高并发可能出现死链，导致 CPU 飙升，在开发过程中注意规避此风险。`,
+  },
+  {
+    code: '1.7.19',
+    level: 'REFERENCE',
+    category: '编程规约-并发处理',
+    title: `ThreadLocal 对象使用 static 修饰，ThreadLocal 无法解决共享对象的更新问题`,
+    content: `ThreadLocal 对象使用 static 修饰，ThreadLocal 无法解决共享对象的更新问题。
+
+说明：这个变量是针对一个线程内所有操作共享的，所以设置为静态变量，所有此类实例共享此静态变量，也就是说在类第一次被使用时装载，只分配一块存储空间，所有此类的对象（只要是这个线程内定义的）都可以操控这个变量。`,
+  },
+  {
+    code: '1.8.1',
+    level: 'MANDATORY',
+    category: '编程规约-控制语句',
+    title: `在一个 switch 块内，每个 case 要么通过 continue / break / return 等来终止，要么注释说明程序将继续执行到哪一个 case`,
+    content: `在一个 switch 块内，每个 case 要么通过 continue / break / return 等来终止，要么注释说明程序将继续执行到哪一个 case 为止；在一个 switch 块内，都必须包含一个 default 语句并且放在最后，即使它什么代码也没有。
+
+说明：注意 break 是退出 switch 语句块，而 return 是退出方法体。`,
+  },
+  {
+    code: '1.8.2',
+    level: 'MANDATORY',
+    category: '编程规约-控制语句',
+    title: `当 switch 括号内的变量类型为 String 并且此变量为外部参数时，必须先进行 null 判断`,
+    content: `当 switch 括号内的变量类型为 String 并且此变量为外部参数时，必须先进行 null 判断。`,
+    exampleBad: `如下的代码输出是什么？ public class SwitchString { public static void main(String[] args) { method(null); } public static void method(String param) { switch (param) { // 肯定不是进入这里 case "sth": System.out.println("it's sth"); break; // 也不是进入这里 case "null": System.out.println("it's null"); break; // 也不是进入这里 default: System.out.println("default"); } } }`,
+  },
+  {
+    code: '1.8.3',
+    level: 'MANDATORY',
+    category: '编程规约-控制语句',
+    title: `在 if / else / for / while / do 语句中必须使用大括号`,
+    content: `在 if / else / for / while / do 语句中必须使用大括号。
+
+说明：即使只有一行代码，也要采用大括号的编码方式。`,
+    exampleBad: `if (condition) statements;`,
+  },
+  {
+    code: '1.8.4',
+    level: 'MANDATORY',
+    category: '编程规约-控制语句',
+    title: `三目运算符 condition ? 表达式 1：表达式 2 中，高度注意表达式 1 和 2 在类型对齐时，可能抛出因自动拆箱导致的 NPE 异常`,
+    content: `三目运算符 condition ? 表达式 1：表达式 2 中，高度注意表达式 1 和 2 在类型对齐时，可能抛出因自动拆箱导致的 NPE 异常。
+
+说明：以下两种场景会触发类型对齐的拆箱操作： 1）表达式 1 或 表达式 2 的值只要有一个是原始类型。 2）表达式 1 或 表达式 2 的值的类型不一致，会强制拆箱升级成表示范围更大的那个类型。`,
+    exampleBad: `Integer a = 1; Integer b = 2; Integer c = null; Boolean flag = false; //  a*b 的结果是 int 类型，那么 c 会强制拆箱成 int 类型，抛出 NPE 异常 Integer result = (flag ? a * b : c);`,
+  },
+  {
+    code: '1.8.5',
+    level: 'MANDATORY',
+    category: '编程规约-控制语句',
+    title: `在高并发场景中，避免使用“等于”判断作为中断或退出的条件`,
+    content: `在高并发场景中，避免使用“等于”判断作为中断或退出的条件。
+
+说明：如果并发控制没有处理好，容易产生等值判断被“击穿”的情况，使用大于或小于的区间判断条件来代替。`,
+    exampleBad: `判断剩余奖品数量等于 0 时，终止发放奖品，但因为并发处理错误导致奖品数量瞬间变成了负数，这样的话，活动无法终止。`,
+  },
+  {
+    code: '1.8.6',
+    level: 'RECOMMENDED',
+    category: '编程规约-控制语句',
+    title: `当方法的代码总行数超过 10 行时，return / throw 等中断逻辑的右大括号后需要加一个空行`,
+    content: `当方法的代码总行数超过 10 行时，return / throw 等中断逻辑的右大括号后需要加一个空行。
+
+说明：这样做逻辑清晰，有利于代码阅读时重点关注。`,
+  },
+  {
+    code: '1.8.7',
+    level: 'RECOMMENDED',
+    category: '编程规约-控制语句',
+    title: `表达异常的分支时，少用 if-else 方式，这种方式可以改写成： if (condition) { ... return obj; } // 接着写 else 的业务逻辑代码`,
+    content: `表达异常的分支时，少用 if-else 方式，这种方式可以改写成： if (condition) { ... return obj; } // 接着写 else 的业务逻辑代码;
+
+说明：如果非使用 if()...else if()...else...方式表达逻辑，避免后续代码维护困难，请勿超过 3 层。`,
+    exampleGood: `超过 3 层的 if-else 的逻辑判断代码可以使用卫语句、策略模式、状态模式等来实现，其中卫语句示例如下： public void findBoyfriend(Man man) { if (man.isUgly()) { System.out.println("本姑娘是外貌协会的资深会员"); return; } if (man.isPoor()) { System.out.println("贫贱夫妻百事哀"); return; } if (man.isBadTemper()) { System.out.println("银河有多远，你就给我滚多远"); return; } System.out.println("可以先交往一段时间看看"); }`,
+  },
+  {
+    code: '1.8.8',
+    level: 'RECOMMENDED',
+    category: '编程规约-控制语句',
+    title: `除常用方法（如 getXxx / isXxx）等外不要在条件判断中执行其它复杂的语句，将复杂逻辑判断的结果赋值给一个有意义的布尔变量名，以提高可读性`,
+    content: `除常用方法（如 getXxx / isXxx）等外不要在条件判断中执行其它复杂的语句，将复杂逻辑判断的结果赋值给一个有意义的布尔变量名，以提高可读性。
+
+说明：很多 if 语句内的逻辑表达式相当复杂，与、或、取反混合运算，甚至各种方法纵深调用，理解成本非常高。如果赋值一个非常好理解的布尔变量名字，则是件令人爽心悦目的事情。`,
+    exampleGood: `// 伪代码如下 final boolean existed = (file.open(fileName, "w") != null) && (...) || (...); if (existed) { ... }`,
+    exampleBad: `public final void acquire(long arg) { if (!tryAcquire(arg) && acquireQueued(addWaiter(Node.EXCLUSIVE), arg)) { selfInterrupt(); } }`,
+  },
+  {
+    code: '1.8.9',
+    level: 'RECOMMENDED',
+    category: '编程规约-控制语句',
+    title: `不要在其它表达式（尤其是条件表达式）中，插入赋值语句`,
+    content: `不要在其它表达式（尤其是条件表达式）中，插入赋值语句。
+
+说明：赋值点类似于人体的穴位，对于代码的理解至关重要，所以赋值语句需要清晰地单独成为一行。`,
+    exampleBad: `public Lock getLock(boolean fair) { // 算术表达式中出现赋值操作，容易忽略 count 值已经被改变 threshold = (count = Integer.MAX_VALUE) - 1; // 条件表达式中出现赋值操作，容易误认为是 sync == fair return (sync = fair) ? new FairSync() : new NonfairSync(); }`,
+  },
+  {
+    code: '1.8.10',
+    level: 'RECOMMENDED',
+    category: '编程规约-控制语句',
+    title: `循环体中的语句要考量性能，以下操作尽量移至循环体外处理，如定义对象、变量、获取数据库连接，进行不必要的 try-catch 操作（这个 try-catch 是否可以移至循环体外）`,
+    content: `循环体中的语句要考量性能，以下操作尽量移至循环体外处理，如定义对象、变量、获取数据库连接，进行不必要的 try-catch 操作（这个 try-catch 是否可以移至循环体外）。`,
+  },
+  {
+    code: '1.8.11',
+    level: 'RECOMMENDED',
+    category: '编程规约-控制语句',
+    title: `避免采用取反逻辑运算符`,
+    content: `避免采用取反逻辑运算符。
+
+说明：取反逻辑不利于快速理解，并且取反逻辑写法一般都存在对应的正向逻辑写法。`,
+    exampleGood: `使用 if(x < 628) 来表达 x 小于 628。`,
+    exampleBad: `使用 if(!(x >= 628)) 来表达 x 小于 628。`,
+  },
+  {
+    code: '1.8.12',
+    level: 'RECOMMENDED',
+    category: '编程规约-控制语句',
+    title: `公开接口需要进行入参保护，尤其是批量操作的接口`,
+    content: `公开接口需要进行入参保护，尤其是批量操作的接口。`,
+    exampleBad: `某业务系统，提供一个用户批量查询的接口，API 文档上有说最多查多少个，但接口实现上没做任何保护，导致调用方传了一个 1000 的用户 id 数组过来后，查询信息后，内存爆了。`,
+  },
+  {
+    code: '1.8.13',
+    level: 'REFERENCE',
+    category: '编程规约-控制语句',
+    title: `下列情形，需要进行参数校验： 1）调用频次低的方法`,
+    content: `下列情形，需要进行参数校验： 1）调用频次低的方法。 2）执行时间开销很大的方法。此情形中，参数校验时间几乎可以忽略不计，但如果因为参数错误导致中间执行回退，或者错误，那得不偿失。 3）需要极高稳定性和可用性的方法。 4）对外提供的开放接口，不管是 RPC / API / HTTP 接口。 5）敏感权限入口。`,
+  },
+  {
+    code: '1.8.14',
+    level: 'REFERENCE',
+    category: '编程规约-控制语句',
+    title: `下列情形，不需要进行参数校验： 1）极有可能被循环调用的方法`,
+    content: `下列情形，不需要进行参数校验： 1）极有可能被循环调用的方法。但在方法说明里必须注明外部参数检查。 2）底层调用频度比较高的方法。毕竟是像纯净水过滤的最后一道，参数错误不太可能到底层才会暴露问题。一般 DAO 层与 Service 层都在同一个应用中，部署在同一台服务器中，所以 DAO 的参数校验，可以省略。 3）被声明成 private 只会被自己代码所调用的方法，如果能够确定调用方法的代码传入参数已经做过检查或者肯定不会有问题，此时可以不校验参数。`,
+  },
+  {
+    code: '1.9.1',
+    level: 'MANDATORY',
+    category: '编程规约-注释规约',
+    title: `类、类属性、类方法的注释必须使用 Javadoc 规范，使用 /** 内容 */ 格式，不得使用 // xxx 方式`,
+    content: `类、类属性、类方法的注释必须使用 Javadoc 规范，使用 /** 内容 */ 格式，不得使用 // xxx 方式。
+
+说明：在 IDE 编辑窗口中，Javadoc 方式会提示相关注释，生成 Javadoc 可以正确输出相应注释；在 IDE 中，工程调用方法时，不进入方法即可悬浮提示方法、参数、返回值的意义，提高阅读效率。`,
+  },
+  {
+    code: '1.9.2',
+    level: 'MANDATORY',
+    category: '编程规约-注释规约',
+    title: `所有的抽象方法（包括接口中的方法）必须要用 Javadoc 注释、除了返回值、参数异常说明外，还必须指出该方法做什么事情，实现什么功能`,
+    content: `所有的抽象方法（包括接口中的方法）必须要用 Javadoc 注释、除了返回值、参数异常说明外，还必须指出该方法做什么事情，实现什么功能。
+
+说明：对子类的实现要求，或者调用注意事项，请一并说明。`,
+  },
+  {
+    code: '1.9.3',
+    level: 'MANDATORY',
+    category: '编程规约-注释规约',
+    title: `所有的类都必须添加创建者和创建日期`,
+    content: `所有的类都必须添加创建者和创建日期。
+
+说明：在设置模板时，注意 IDEA 的@author 为\`\${USER}\`，而 eclipse 的@author 为\`\${user}\`，大小写有区别，而日期的设置统一为 yyyy/MM/dd 的格式。`,
+    exampleGood: `/** * * @author yangguanbao * @date 2021/11/26 * **/`,
+  },
+  {
+    code: '1.9.4',
+    level: 'MANDATORY',
+    category: '编程规约-注释规约',
+    title: `方法内部单行注释，在被注释语句上方另起一行，使用 // 注释`,
+    content: `方法内部单行注释，在被注释语句上方另起一行，使用 // 注释。方法内部多行注释使用 /*  */ 注释，注意与代码对齐。`,
+  },
+  {
+    code: '1.9.5',
+    level: 'MANDATORY',
+    category: '编程规约-注释规约',
+    title: `所有的枚举类型字段必须要有注释，说明每个数据项的用途`,
+    content: `所有的枚举类型字段必须要有注释，说明每个数据项的用途。`,
+  },
+  {
+    code: '1.9.6',
+    level: 'RECOMMENDED',
+    category: '编程规约-注释规约',
+    title: `与其用半吊子英文来注释，不如用中文注释说清楚`,
+    content: `与其用半吊子英文来注释，不如用中文注释说清楚。专有名词与关键字保持英文原文即可。`,
+    exampleBad: `“TCP 连接超时”解释成“传输控制协议连接超时”，理解反而费脑筋。`,
+  },
+  {
+    code: '1.9.7',
+    level: 'RECOMMENDED',
+    category: '编程规约-注释规约',
+    title: `代码修改的同时，注释也要进行相应的修改，尤其是参数、返回值、异常、核心逻辑等`,
+    content: `代码修改的同时，注释也要进行相应的修改，尤其是参数、返回值、异常、核心逻辑等。
+
+说明：代码与注释更新不同步，就像公路网与导航软件更新不同步一样，如果导航软件严重滞后，就失去了导航的意义。`,
+  },
+  {
+    code: '1.9.8',
+    level: 'RECOMMENDED',
+    category: '编程规约-注释规约',
+    title: `在类中删除未使用的任何字段和方法、内部类；在方法中删除未使用的参数声明与内部变量`,
+    content: `在类中删除未使用的任何字段和方法、内部类；在方法中删除未使用的参数声明与内部变量。`,
+  },
+  {
+    code: '1.9.9',
+    level: 'REFERENCE',
+    category: '编程规约-注释规约',
+    title: `谨慎注释掉代码`,
+    content: `谨慎注释掉代码。在上方详细说明，而不是简单地注释掉。如果无用，则删除。
+
+说明：代码被注释掉有两种可能性：1）后续会恢复此段代码逻辑。2）永久不用。前者如果没有备注信息，难以知晓注释动机。后者建议直接删掉即可，假如需要查阅历史代码，登录代码仓库即可。`,
+  },
+  {
+    code: '1.9.10',
+    level: 'REFERENCE',
+    category: '编程规约-注释规约',
+    title: `对于注释的要求：第一、能够准确反映设计思想和代码逻辑；第二、能够描述业务含义，使别的程序员能够迅速了解到代码背后的信息`,
+    content: `对于注释的要求：第一、能够准确反映设计思想和代码逻辑；第二、能够描述业务含义，使别的程序员能够迅速了解到代码背后的信息。完全没有注释的大段代码对于阅读者形同天书，注释是给自己看的，即使隔很长时间，也能清晰理解当时的思路；注释也是给继任者看的，使其能够快速接替自己的工作。`,
+  },
+  {
+    code: '1.9.11',
+    level: 'REFERENCE',
+    category: '编程规约-注释规约',
+    title: `好的命名、代码结构是自解释的，注释力求精简准确、表达到位`,
+    content: `好的命名、代码结构是自解释的，注释力求精简准确、表达到位。避免出现注释的另一个极端：过多过滥的注释，代码的逻辑一旦修改，修改注释又是相当大的负担。`,
+    exampleBad: `// put elephant into fridge put(elephant, fridge); 方法名 put，加上两个有意义的变量名称 elephant 和 fridge，已经说明了这是在干什么，语义清晰的代码不需要额外的注释。`,
+  },
+  {
+    code: '1.9.12',
+    level: 'REFERENCE',
+    category: '编程规约-注释规约',
+    title: `特殊注释标记，请注明标记人与标记时间`,
+    content: `特殊注释标记，请注明标记人与标记时间。注意及时处理这些标记，通过标记扫描，经常清理此类标记。线上故障有时候就是来源于这些标记处的代码。 1）待办事宜（TODO）：（标记人，标记时间，[预计处理时间]）表示需要实现，但目前还未实现的功能。这实际上是一个 Javadoc 的标签，目前的 Javadoc 还没有实现，但已经被广泛使用。只能应用于类，接口和方法（因为它是一个 Javadoc 标签）。 2）错误，不能工作（FIXME）：（标记人，标记时间，[预计处理时间]）在注释中用 FIXME 标记某代码是错误的，而且不能工作，需要及时纠正的情况。`,
+  },
+  {
+    code: '1.10.1',
+    level: 'MANDATORY',
+    category: '编程规约-前后端规约',
+    title: `前后端交互的 API，需要明确协议、域名、路径、请求方法、请求内容、状态码、响应体`,
+    content: `前后端交互的 API，需要明确协议、域名、路径、请求方法、请求内容、状态码、响应体。
+
+说明：1）协议：生产环境必须使用 HTTPS。 2）路径：每一个 API 需对应一个路径，表示 API 具体的请求地址： a）代表一种资源，只能为名词，推荐使用复数，不能为动词，请求方法已经表达动作意义。 b）URL 路径不能使用大写，单词如果需要分隔，统一使用下划线。 c）路径禁止携带表示请求内容类型的后缀，比如".json"，".xml"，通过 accept 头表达即可。 3）请求方法：对具体操作的定义，常见的请求方法如下： a）GET：从服务器取出资源。 b）POST：在服务器新建一个资源。 c）PUT：在服务器更新资源。 d）DELETE：从服务器删除资源。 4）请求内容：URL 带的参数必须无敏感信息或符合安全要求；body 里带参数时必须设置 Content-Type。 5）响应体：响应体 body 可放置多种数据类型，由 Content-Type 头来确定。`,
+  },
+  {
+    code: '1.10.2',
+    level: 'MANDATORY',
+    category: '编程规约-前后端规约',
+    title: `前后端数据列表相关的接口返回，如果为空，则返回空数组[]或空集合{}`,
+    content: `前后端数据列表相关的接口返回，如果为空，则返回空数组[]或空集合{}。
+
+说明：此条约定有利于数据层面上的协作更加高效，减少前端很多琐碎的 null 判断。`,
+  },
+  {
+    code: '1.10.3',
+    level: 'MANDATORY',
+    category: '编程规约-前后端规约',
+    title: `服务端发生错误时，返回给前端的响应信息必须包含 HTTP 状态码，errorCode、 errorMessage、用户提示信息四个部分`,
+    content: `服务端发生错误时，返回给前端的响应信息必须包含 HTTP 状态码，errorCode、 errorMessage、用户提示信息四个部分。
+
+说明：四个部分的涉众对象分别是浏览器、前端开发、错误排查人员、用户。其中输出给用户的提示信息要求：简短清晰、提示友好，引导用户进行下一步操作或解释错误原因，提示信息可以包括错误原因、上下文环境、推荐操作等。 errorCode：参考 。errorMessage：简要描述后端出错原因，便于错误排查人员快速定位问题，注意不要包含敏感数据信息。`,
+    exampleGood: `常见的 HTTP 状态码如下 1）200 OK：表明该请求被成功地完成，所请求的资源发送到客户端。 2）401 Unauthorized：请求要求身份验证，常见对于需要登录而用户未登录的情况。 3）403 Forbidden：服务器拒绝请求，常见于机密信息或复制其它登录用户链接访问服务器的情况。 4）404 NotFound：服务器无法取得所请求的网页，请求资源不存在。 5）500 InternalServerError：服务器内部错误。`,
+  },
+  {
+    code: '1.10.4',
+    level: 'MANDATORY',
+    category: '编程规约-前后端规约',
+    title: `在前后端交互的 JSON 格式数据中，所有的 key 必须为小写字母开始的 lowerCamelCase 风格，符合英文表达习惯，且表意完整`,
+    content: `在前后端交互的 JSON 格式数据中，所有的 key 必须为小写字母开始的 lowerCamelCase 风格，符合英文表达习惯，且表意完整。`,
+    exampleGood: `errorCode / errorMessage / assetStatus / menuList / orderList / configFlag`,
+    exampleBad: `ERRORCODE / ERROR_CODE / error_message / error-message / errormessage`,
+  },
+  {
+    code: '1.10.5',
+    level: 'MANDATORY',
+    category: '编程规约-前后端规约',
+    title: `errorMessage 是前后端错误追踪机制的体现，可以在前端输出到 type="hidden" 文字类控件中，或者用户端的日志中，帮助我们快速地定位出问题`,
+    content: `errorMessage 是前后端错误追踪机制的体现，可以在前端输出到 type="hidden" 文字类控件中，或者用户端的日志中，帮助我们快速地定位出问题。`,
+  },
+  {
+    code: '1.10.6',
+    level: 'MANDATORY',
+    category: '编程规约-前后端规约',
+    title: `对于需要使用超大整数的场景，服务端一律使用 String 字符串类型返回，禁止使用 Long 类型`,
+    content: `对于需要使用超大整数的场景，服务端一律使用 String 字符串类型返回，禁止使用 Long 类型。
+
+说明：Java 服务端如果直接返回 Long 整型数据给前端，Javascript 会自动转换为 Number 类型（注：此类型为双精度浮点数，表示原理与取值范围等同于 Java 中的 Double）。Long 类型能表示的最大值是 263-1，在取值范围之内，超过 253 （9007199254740992）的数值转化为 Javascript 的 Number 时，有些数值会产生精度损失。扩展说明，在 Long 取值范围内，任何 2 的指数次的整数都是绝对不会存在精度损失的，所以说精度损失是一个概率问题。若浮点数尾数位与指数位空间不限，则可以精确表示任何整数，但很不幸，双精度浮点数的尾数位只有 52 位。`,
+    exampleBad: `通常在订单号或交易号大于等于 16 位，大概率会出现前后端订单数据不一致的情况。 比如，后端传输的 "orderId"：362909601374617692，前端拿到的值却是：362909601374617660`,
+  },
+  {
+    code: '1.10.7',
+    level: 'MANDATORY',
+    category: '编程规约-前后端规约',
+    title: `HTTP 请求通过 URL 传递参数时，不能超过 2048 字节`,
+    content: `HTTP 请求通过 URL 传递参数时，不能超过 2048 字节。
+
+说明：不同浏览器对于 URL 的最大长度限制略有不同，并且对超出最大长度的处理逻辑也有差异，2048 字节是取所有浏览器的最小值。`,
+    exampleBad: `某业务将退货的商品 id 列表放在 URL 中作为参数传递，当一次退货商品数量过多时，URL 参数超长，传递到后端的参数被截断，导致部分商品未能正确退货。`,
+  },
+  {
+    code: '1.10.8',
+    level: 'MANDATORY',
+    category: '编程规约-前后端规约',
+    title: `HTTP 请求通过 body 传递内容时，必须控制长度，超出最大长度后，后端解析会出错`,
+    content: `HTTP 请求通过 body 传递内容时，必须控制长度，超出最大长度后，后端解析会出错。
+
+说明：nginx 默认限制是 1MB，tomcat 默认限制为 2MB，当确实有业务需要传较大内容时，可以调大服务器端的限制。`,
+  },
+  {
+    code: '1.10.9',
+    level: 'MANDATORY',
+    category: '编程规约-前后端规约',
+    title: `在翻页场景中，用户输入参数的小于 1，则前端返回第一页参数给后端；后端发现用户输入的参数大于总页数，直接返回最后一页`,
+    content: `在翻页场景中，用户输入参数的小于 1，则前端返回第一页参数给后端；后端发现用户输入的参数大于总页数，直接返回最后一页。`,
+  },
+  {
+    code: '1.10.10',
+    level: 'MANDATORY',
+    category: '编程规约-前后端规约',
+    title: `服务器内部重定向必须使用 forward；外部重定向地址必须使用 URL 统一代理模块生成，否则会因线上采用 HTTPS 协议而导致浏览器提示“不安全”，并且还`,
+    content: `服务器内部重定向必须使用 forward；外部重定向地址必须使用 URL 统一代理模块生成，否则会因线上采用 HTTPS 协议而导致浏览器提示“不安全”，并且还会带来 URL 维护不一致的问题。`,
+  },
+  {
+    code: '1.10.11',
+    level: 'RECOMMENDED',
+    category: '编程规约-前后端规约',
+    title: `服务器返回信息必须被标记是否可以缓存，如果缓存，客户端可能会重用之前的请求结果`,
+    content: `服务器返回信息必须被标记是否可以缓存，如果缓存，客户端可能会重用之前的请求结果。
+
+说明：缓存有利于减少交互次数，减少交互的平均延迟。`,
+    exampleGood: `http1.1 中，s-maxage 告诉服务器进行缓存，时间单位为秒，用法如下， response.setHeader("Cache-Control", "s-maxage=" + cacheSeconds);`,
+  },
+  {
+    code: '1.10.12',
+    level: 'RECOMMENDED',
+    category: '编程规约-前后端规约',
+    title: `服务端返回的数据，使用 JSON 格式而非 XML`,
+    content: `服务端返回的数据，使用 JSON 格式而非 XML。
+
+说明：尽管 HTTP 支持使用不同的输出格式，例如纯文本，JSON，CSV，XML，RSS 甚至 HTML。如果我们使用的面向用户的服务，应该选择 JSON 作为通信中使用的标准数据交换格式，包括请求和响应。此外，application/JSON 是一种通用的 MIME 类型，具有实用、精简、易读的特点。`,
+  },
+  {
+    code: '1.10.13',
+    level: 'RECOMMENDED',
+    category: '编程规约-前后端规约',
+    title: `前后端的时间格式统一为"yyyy-MM-dd HH:mm:ss"，统一为 GMT`,
+    content: `前后端的时间格式统一为"yyyy-MM-dd HH:mm:ss"，统一为 GMT。`,
+  },
+  {
+    code: '1.10.14',
+    level: 'REFERENCE',
+    category: '编程规约-前后端规约',
+    title: `在接口路径中不要加入版本号，版本控制在 HTTP 头信息中体现，有利于向前兼容`,
+    content: `在接口路径中不要加入版本号，版本控制在 HTTP 头信息中体现，有利于向前兼容。
+
+说明：当用户在低版本与高版本之间反复切换工作时，会导致迁移复杂度升高，存在数据错乱风险。`,
+  },
+  {
+    code: '1.11.1',
+    level: 'MANDATORY',
+    category: '编程规约-其他',
+    title: `在使用正则表达式时，利用好其预编译功能，可以有效加快正则匹配速度`,
+    content: `在使用正则表达式时，利用好其预编译功能，可以有效加快正则匹配速度。
+
+说明：不要在方法体内定义：Pattern pattern = Pattern.compile("规则");`,
+  },
+  {
+    code: '1.11.2',
+    level: 'MANDATORY',
+    category: '编程规约-其他',
+    title: `避免用 ApacheBeanutils 进行属性的 copy`,
+    content: `避免用 ApacheBeanutils 进行属性的 copy。
+
+说明：ApacheBeanUtils 性能较差，可以使用其他方案比如 SpringBeanUtils，CglibBeanCopier，注意均是浅拷贝。`,
+  },
+  {
+    code: '1.11.3',
+    level: 'MANDATORY',
+    category: '编程规约-其他',
+    title: `velocity 调用 POJO 类的属性时，直接使用属性名取值即可，模板引擎会自动按规范调用 POJO 的 getXxx()，如果是 boolean 基本数据`,
+    content: `velocity 调用 POJO 类的属性时，直接使用属性名取值即可，模板引擎会自动按规范调用 POJO 的 getXxx()，如果是 boolean 基本数据类型变量（boolean 命名不需要加 is 前缀），会自动调 isXxx() 方法。
+
+说明：注意如果是 Boolean 包装类对象，优先调用 getXxx() 的方法。`,
+  },
+  {
+    code: '1.11.4',
+    level: 'MANDATORY',
+    category: '编程规约-其他',
+    title: `后台输送给页面的变量必须加 $!{var} ——中间的感叹号`,
+    content: `后台输送给页面的变量必须加 $!{var} ——中间的感叹号。
+
+说明：如果 var 等于 null 或者不存在，那么 \${var} 会直接显示在页面上。`,
+  },
+  {
+    code: '1.11.5',
+    level: 'MANDATORY',
+    category: '编程规约-其他',
+    title: `注意 Math.random() 这个方法返回是 double 类型，注意取值的范围 0 ≤ x < 1（能够取到零值，注意除零异常），如果想获取整数类型的随机`,
+    content: `注意 Math.random() 这个方法返回是 double 类型，注意取值的范围 0 ≤ x < 1（能够取到零值，注意除零异常），如果想获取整数类型的随机数，不要将 x 放大 10 的若干倍然后取整，直接使用 Random 对象的 nextInt 或者 nextLong 方法。`,
+  },
+  {
+    code: '1.11.6',
+    level: 'MANDATORY',
+    category: '编程规约-其他',
+    title: `枚举 enum（括号内）的属性字段必须是私有且不可变`,
+    content: `枚举 enum（括号内）的属性字段必须是私有且不可变。`,
+  },
+  {
+    code: '1.11.7',
+    level: 'RECOMMENDED',
+    category: '编程规约-其他',
+    title: `不要在视图模板中加入任何复杂的逻辑运算`,
+    content: `不要在视图模板中加入任何复杂的逻辑运算。
+
+说明：根据 MVC 理论，视图的职责是展示，不要抢模型和控制器的活。`,
+  },
+  {
+    code: '1.11.8',
+    level: 'RECOMMENDED',
+    category: '编程规约-其他',
+    title: `任何数据结构的构造或初始化，都应指定大小，避免数据结构无限增长吃光内存`,
+    content: `任何数据结构的构造或初始化，都应指定大小，避免数据结构无限增长吃光内存。`,
+  },
+  {
+    code: '1.11.9',
+    level: 'RECOMMENDED',
+    category: '编程规约-其他',
+    title: `及时清理不再使用的代码段或配置信息`,
+    content: `及时清理不再使用的代码段或配置信息。
+
+说明：对于垃圾代码或过时配置，坚决清理干净，避免程序过度臃肿，代码冗余。`,
+    exampleGood: `对于暂时被注释掉，后续可能恢复使用的代码片断，在注释代码上方，统一规定使用三个斜杠(///) 来说明注释掉代码的理由： public static void hello() { /// 业务方通知活动暂停 // Business business = new Business(); // business.active(); System.out.println("it's finished"); }`,
+  },
+  {
+    code: '2.1.1',
+    level: 'MANDATORY',
+    category: '异常日志-错误码',
+    title: `错误码的制定原则：快速溯源、沟通标准化`,
+    content: `错误码的制定原则：快速溯源、沟通标准化。
+
+说明：错误码想得过于完美和复杂，就像康熙字典的生僻字一样，用词似乎精准，但是字典不容易随身携带且简单易懂。`,
+    exampleGood: `错误码回答的问题是谁的错？错在哪？ 1）错误码必须能够快速知晓错误来源，可快速判断是谁的问题。 2）错误码必须能够进行清晰地比对（代码中容易 equals）。 3）错误码有利于团队快速对错误原因达到一致认知。`,
+  },
+  {
+    code: '2.1.2',
+    level: 'MANDATORY',
+    category: '异常日志-错误码',
+    title: `错误码不体现版本号和错误等级信息`,
+    content: `错误码不体现版本号和错误等级信息。
+
+说明：错误码以不断追加的方式进行兼容。错误等级由日志和错误码本身的释义来决定。`,
+  },
+  {
+    code: '2.1.3',
+    level: 'MANDATORY',
+    category: '异常日志-错误码',
+    title: `全部正常，但不得不填充错误码时返回五个零：00000`,
+    content: `全部正常，但不得不填充错误码时返回五个零：00000。`,
+  },
+  {
+    code: '2.1.4',
+    level: 'MANDATORY',
+    category: '异常日志-错误码',
+    title: `错误码为字符串类型，共 5 位，分成两个部分：错误产生来源+四位数字编号`,
+    content: `错误码为字符串类型，共 5 位，分成两个部分：错误产生来源+四位数字编号。
+
+说明：错误产生来源分为 A/B/C，A 表示错误来源于用户，比如参数错误，用户安装版本过低，用户支付超时等问题； B 表示错误来源于当前系统，往往是业务逻辑出错，或程序健壮性差等问题；C 表示错误来源于第三方服务，比如 CDN 服务出错，消息投递超时等问题；四位数字编号从 0001 到 9999，大类之间的步长间距预留 100，参考文末附表 3。`,
+  },
+  {
+    code: '2.1.5',
+    level: 'MANDATORY',
+    category: '异常日志-错误码',
+    title: `编号不与公司业务架构，更不与组织架构挂钩，以先到先得的原则在统一平台上进行，审批生效，编号即被永久固定`,
+    content: `编号不与公司业务架构，更不与组织架构挂钩，以先到先得的原则在统一平台上进行，审批生效，编号即被永久固定。`,
+  },
+  {
+    code: '2.1.6',
+    level: 'MANDATORY',
+    category: '异常日志-错误码',
+    title: `错误码使用者避免随意定义新的错误码`,
+    content: `错误码使用者避免随意定义新的错误码。
+
+说明：尽可能在原有错误码附表中找到语义相同或者相近的错误码在代码中使用即可。`,
+  },
+  {
+    code: '2.1.7',
+    level: 'MANDATORY',
+    category: '异常日志-错误码',
+    title: `错误码不能直接输出给用户作为提示信息使用`,
+    content: `错误码不能直接输出给用户作为提示信息使用。
+
+说明：堆栈（stack_trace）、错误信息(error_message) 、错误码（error_code）、提示信息（user_tip）是一个有效关联并互相转义的和谐整体，但是请勿互相越俎代庖。`,
+  },
+  {
+    code: '2.1.8',
+    level: 'RECOMMENDED',
+    category: '异常日志-错误码',
+    title: `错误码之外的业务信息由 error_message 来承载，而不是让错误码本身涵盖过多具体业务属性`,
+    content: `错误码之外的业务信息由 error_message 来承载，而不是让错误码本身涵盖过多具体业务属性。`,
+  },
+  {
+    code: '2.1.9',
+    level: 'RECOMMENDED',
+    category: '异常日志-错误码',
+    title: `在获取第三方服务错误码时，向上抛出允许本系统转义，由 C 转为 B，并且在错误信息上带上原有的第三方错误码`,
+    content: `在获取第三方服务错误码时，向上抛出允许本系统转义，由 C 转为 B，并且在错误信息上带上原有的第三方错误码。`,
+  },
+  {
+    code: '2.1.10',
+    level: 'REFERENCE',
+    category: '异常日志-错误码',
+    title: `错误码分为一级宏观错误码、二级宏观错误码、三级宏观错误码`,
+    content: `错误码分为一级宏观错误码、二级宏观错误码、三级宏观错误码。
+
+说明：在无法更加具体确定的错误场景中，可以直接使用一级宏观错误码，分别是：A0001（用户端错误）、B0001（系统执行出错）、C0001（调用第三方服务出错）。`,
+    exampleGood: `调用第三方服务出错是一级，中间件错误是二级，消息服务出错是三级。`,
+  },
+  {
+    code: '2.1.11',
+    level: 'REFERENCE',
+    category: '异常日志-错误码',
+    title: `错误码的后三位编号与 HTTP 状态码没有任何关系`,
+    content: `错误码的后三位编号与 HTTP 状态码没有任何关系。`,
+  },
+  {
+    code: '2.1.12',
+    level: 'REFERENCE',
+    category: '异常日志-错误码',
+    title: `错误码有利于不同文化背景的开发者进行交流与代码协作`,
+    content: `错误码有利于不同文化背景的开发者进行交流与代码协作。
+
+说明：英文单词形式的错误码不利于非英语母语国家（如阿拉伯语、希伯来语、俄罗斯语等）之间的开发者互相协作。`,
+  },
+  {
+    code: '2.1.13',
+    level: 'REFERENCE',
+    category: '异常日志-错误码',
+    title: `错误码即人性，感性认知+口口相传，使用纯数字来进行错误码编排不利于感性记忆和分类`,
+    content: `错误码即人性，感性认知+口口相传，使用纯数字来进行错误码编排不利于感性记忆和分类。
+
+说明：数字是一个整体，每位数字的地位和含义是相同的。`,
+    exampleBad: `一个五位数字 12345，第 1 位是错误等级，第 2 位是错误来源，345 是编号，人的大脑不会主动地拆开并分辨每位数字的不同含义。`,
+  },
+  {
+    code: '2.2.1',
+    level: 'MANDATORY',
+    category: '异常日志-异常处理',
+    title: `Java 类库中定义的可以通过预检查方式规避的 RuntimeException 异常不应该通过 catch 的方式来处理，比如：NullPointerExce`,
+    content: `Java 类库中定义的可以通过预检查方式规避的 RuntimeException 异常不应该通过 catch 的方式来处理，比如：NullPointerException，IndexOutOfBoundsException 等等。
+
+说明：无法通过预检查的异常除外，比如，在解析字符串形式的数字时，可能存在数字格式错误，不得不通过 catch NumberFormatException 来实现。`,
+    exampleGood: `if (obj != null) {...}`,
+    exampleBad: `try { obj.method(); } catch (NullPointerException e) {…}`,
+  },
+  {
+    code: '2.2.2',
+    level: 'MANDATORY',
+    category: '异常日志-异常处理',
+    title: `异常捕获后不要用来做流程控制，条件控制`,
+    content: `异常捕获后不要用来做流程控制，条件控制。
+
+说明：异常设计的初衷是解决程序运行中的各种意外情况，且异常的处理效率比条件判断方式要低很多。`,
+  },
+  {
+    code: '2.2.3',
+    level: 'MANDATORY',
+    category: '异常日志-异常处理',
+    title: `catch 时请分清稳定代码和非稳定代码，稳定代码指的是无论如何不会出错的代码`,
+    content: `catch 时请分清稳定代码和非稳定代码，稳定代码指的是无论如何不会出错的代码。对于非稳定代码的 catch 尽可能进行区分异常类型，再做对应的异常处理。
+
+说明：对大段代码进行 try-catch，使程序无法根据不同的异常做出正确的应激反应，也不利于定位问题，这是一种不负责任的表现。`,
+    exampleGood: `用户注册的场景中，如果用户输入非法字符，或用户名称已存在，或用户输入密码过于简单，在程序上作出分门别类的判断，并提示给用户。`,
+  },
+  {
+    code: '2.2.4',
+    level: 'MANDATORY',
+    category: '异常日志-异常处理',
+    title: `捕获异常是为了处理它，不要捕获了却什么都不处理而抛弃之，如果不想处理它，请将该异常抛给它的调用者`,
+    content: `捕获异常是为了处理它，不要捕获了却什么都不处理而抛弃之，如果不想处理它，请将该异常抛给它的调用者。最外层的业务使用者，必须处理异常，将其转化为用户可以理解的内容。`,
+  },
+  {
+    code: '2.2.5',
+    level: 'MANDATORY',
+    category: '异常日志-异常处理',
+    title: `事务场景中，抛出异常被 catch 后，如果需要回滚，一定要注意手动回滚事务`,
+    content: `事务场景中，抛出异常被 catch 后，如果需要回滚，一定要注意手动回滚事务。`,
+  },
+  {
+    code: '2.2.6',
+    level: 'MANDATORY',
+    category: '异常日志-异常处理',
+    title: `finally 块必须对资源对象、流对象进行关闭，有异常也要做 try-catch`,
+    content: `finally 块必须对资源对象、流对象进行关闭，有异常也要做 try-catch。
+
+说明：如果 JDK7，可以使用 try-with-resources 方式。`,
+  },
+  {
+    code: '2.2.7',
+    level: 'MANDATORY',
+    category: '异常日志-异常处理',
+    title: `不要在 finally 块中使用 return`,
+    content: `不要在 finally 块中使用 return
+
+说明：try 块中的 return 语句执行成功后，并不马上返回，而是继续执行 finally 块中的语句，如果此处存在 return 语句，则会在此直接返回，无情丢弃掉 try 块中的返回点。`,
+    exampleBad: `private int x = 0; public int checkReturn() { try { // x 等于 1，此处不返回 return ++x; } finally { // 返回的结果是 2 return ++x; } }`,
+  },
+  {
+    code: '2.2.8',
+    level: 'MANDATORY',
+    category: '异常日志-异常处理',
+    title: `捕获异常与抛异常，必须是完全匹配，或者捕获异常是抛异常的父类`,
+    content: `捕获异常与抛异常，必须是完全匹配，或者捕获异常是抛异常的父类。
+
+说明：如果预期对方抛的是绣球，实际接到的是铅球，就会产生意外情况。`,
+  },
+  {
+    code: '2.2.9',
+    level: 'MANDATORY',
+    category: '异常日志-异常处理',
+    title: `在调用 RPC、二方包、或动态生成类的相关方法时，捕捉异常使用 Throwable 类进行拦截`,
+    content: `在调用 RPC、二方包、或动态生成类的相关方法时，捕捉异常使用 Throwable 类进行拦截。
+
+说明：通过反射机制来调用方法，如果找不到方法，抛出 NoSuchMethodException。什么情况会抛出 NoSuchMethodError 呢？二方包在类冲突时，仲裁机制可能导致引入非预期的版本使类的方法签名不匹配，或者在字节码修改框架（比如：ASM）动态创建或修改类时，修改了相应的方法签名。这些情况，即使代码编译期是正确的，但在代码运行期时，会抛出 NoSuchMethodError。`,
+    exampleBad: `足迹服务引入了高版本的 spring，导致运行到某段核心逻辑时，抛出 NoSuchMethodError 错误，catch 用的类却是 Exception，堆栈向上抛，影响到上层业务。这是一个非核心功能点影响到核心应用的典型反例。`,
+  },
+  {
+    code: '2.2.10',
+    level: 'RECOMMENDED',
+    category: '异常日志-异常处理',
+    title: `方法的返回值可以为 null，不强制返回空集合，或者空对象等，必须添加注释充分说明什么情况下会返回 null 值`,
+    content: `方法的返回值可以为 null，不强制返回空集合，或者空对象等，必须添加注释充分说明什么情况下会返回 null 值。
+
+说明：本规约明确防止 NPE 是调用者的责任。即使被调用方法返回空集合或者空对象，对调用者来说，也并非高枕无忧，必须考虑到远程调用失败，运行时异常等场景返回 null 的情况。`,
+  },
+  {
+    code: '2.2.11',
+    level: 'RECOMMENDED',
+    category: '异常日志-异常处理',
+    title: `防止 NPE，是程序员的基本修养，注意 NPE 产生的场景： 1）返回类型为基本数据类型，return 包装数据类型的对象时，自动拆箱有可能产生 NPE`,
+    content: `防止 NPE，是程序员的基本修养，注意 NPE 产生的场景： 1）返回类型为基本数据类型，return 包装数据类型的对象时，自动拆箱有可能产生 NPE`,
+    exampleGood: `使用 JDK8 的 Optional 类来防止 NPE 问题。`,
+    exampleBad: `public int method() { return Integer 对象; }，如果为 null，自动解箱抛 NPE。 2）数据库的查询结果可能为 null。 3）集合里的元素即使 isNotEmpty，取出的数据元素也可能为 null。 4）远程调用返回对象时，一律要求进行空指针判断，防止 NPE。 5）对于 Session 中获取的数据，建议进行 NPE 检查，避免空指针。 6）级联调用 obj.getA().getB().getC()；一连串调用，易产生 NPE。`,
+  },
+  {
+    code: '2.2.12',
+    level: 'RECOMMENDED',
+    category: '异常日志-异常处理',
+    title: `定义时区分 unchecked / checked 异常，避免直接抛出 new RuntimeException()，更不允许抛出 Exception 或者 T`,
+    content: `定义时区分 unchecked / checked 异常，避免直接抛出 new RuntimeException()，更不允许抛出 Exception 或者 Throwable，应使用有业务含义的自定义异常。推荐业界已定义过的自定义异常，如：DAOException / ServiceException 等。`,
+  },
+  {
+    code: '2.2.13',
+    level: 'REFERENCE',
+    category: '异常日志-异常处理',
+    title: `对于公司外的 http / api 开放接口必须使用错误码，而应用内部推荐异常抛出；跨应用间 RPC 调用优先考虑使用 Result 方式，封装 isSucce`,
+    content: `对于公司外的 http / api 开放接口必须使用错误码，而应用内部推荐异常抛出；跨应用间 RPC 调用优先考虑使用 Result 方式，封装 isSuccess() 方法、错误码、错误简短信息；应用内部推荐异常抛出。
+
+说明：关于 RPC 方法返回方式使用 Result 方式的理由： 1）使用抛异常返回方式，调用方如果没有捕获到就会产生运行时错误。 2）如果不加栈信息，只是 new 自定义异常，加入自己的理解的 error message，对于调用端解决问题的帮助不会太多。 如果加了栈信息，在频繁调用出错的情况下，数据序列化和传输的性能损耗也是问题。`,
+  },
+  {
+    code: '2.3.1',
+    level: 'MANDATORY',
+    category: '异常日志-日志规约',
+    title: `应用中不可直接使用日志系统（Log4j、Logback）中的 API，而应依赖使用日志框架（SLF4J、 JCL—Jakarta Commons Logging`,
+    content: `应用中不可直接使用日志系统（Log4j、Logback）中的 API，而应依赖使用日志框架（SLF4J、 JCL—Jakarta Commons Logging）中的 API，使用门面模式的日志框架，有利于维护和各个类的日志处理方式统一。
+
+说明：日志框架（SLF4J、JCL--Jakarta Commons Logging）的使用方式（推荐使用 SLF4J） 使用 SLF4J： import org.slf4j.Logger; import org.slf4j.LoggerFactory; private static final Logger logger = LoggerFactory.getLogger(Test.class); 使用 JCL： import org.apache.commons.logging.Log; import org.apache.commons.logging.LogFactory; private static final Log log = LogFactory.getLog(Test.class);`,
+  },
+  {
+    code: '2.3.2',
+    level: 'MANDATORY',
+    category: '异常日志-日志规约',
+    title: `日志文件至少保存 15 天，因为有些异常具备以“周”为频次发生的特点`,
+    content: `日志文件至少保存 15 天，因为有些异常具备以“周”为频次发生的特点。对于当天日志，以 “应用名.log”来保存，保存在/{统一目录}/{应用名}/logs/目录下，过往日志格式为： {logname}.log.{保存日期}，日期格式：yyyy-MM-dd`,
+    exampleGood: `以 mppserver 应用为例，日志保存/home/admin/mppserver/logs/mppserver.log，历史日志名称为 mppserver.log.2021-11-28`,
+  },
+  {
+    code: '2.3.3',
+    level: 'MANDATORY',
+    category: '异常日志-日志规约',
+    title: `根据国家法律，网络运行状态、网络安全事件、个人敏感信息操作等相关记录，留存的日志不少于六个月，并且进行网络多机备份`,
+    content: `根据国家法律，网络运行状态、网络安全事件、个人敏感信息操作等相关记录，留存的日志不少于六个月，并且进行网络多机备份。`,
+  },
+  {
+    code: '2.3.4',
+    level: 'MANDATORY',
+    category: '异常日志-日志规约',
+    title: `应用中的扩展日志（如打点、临时监控、访问日志等）命名方式： appName_logType_logName.log`,
+    content: `应用中的扩展日志（如打点、临时监控、访问日志等）命名方式： appName_logType_logName.log。logType：日志类型，如 stats / monitor / access 等； logName：日志描述。这种命名的好处：通过文件名就可知道日志文件属于什么应用，什么类型，什么目的，也有利于归类查找。
+
+说明：推荐对日志进行分类，将错误日志和业务日志分开放，便于开发人员查看，也便于通过日志对系统进行及时监控。`,
+    exampleGood: `mppserver 应用中单独监控时区转换异常，如：mppserver_monitor_timeZoneConvert.log`,
+  },
+  {
+    code: '2.3.5',
+    level: 'MANDATORY',
+    category: '异常日志-日志规约',
+    title: `在日志输出时，字符串变量之间的拼接使用占位符的方式`,
+    content: `在日志输出时，字符串变量之间的拼接使用占位符的方式。
+
+说明：因为 String 字符串的拼接会使用 StringBuilder 的 append() 方式，有一定的性能损耗。使用占位符仅是替换动作，可以有效提升性能。`,
+    exampleGood: `logger.debug("Processing trade with id : {} and symbol : {}", id, symbol);`,
+  },
+  {
+    code: '2.3.6',
+    level: 'MANDATORY',
+    category: '异常日志-日志规约',
+    title: `对于 trace / debug / info 级别的日志输出，必须进行日志级别的开关判断`,
+    content: `对于 trace / debug / info 级别的日志输出，必须进行日志级别的开关判断：
+
+说明：虽然在 debug(参数) 的方法体内第一行代码 isDisabled(Level.DEBUG_INT) 为真时（Slf4j 的常见实现 Log4j 和 Logback），就直接 return，但是参数可能会进行字符串拼接运算。此外，如果 debug(getName()) 这种参数内有 getName() 方法调用，无谓浪费方法调用的开销。`,
+    exampleGood: `// 如果判断为真，那么可以输出 trace 和 debug 级别的日志 if (logger.isDebugEnabled()) { logger.debug("Current ID is: {} and name is: {}", id, getName()); }`,
+  },
+  {
+    code: '2.3.7',
+    level: 'MANDATORY',
+    category: '异常日志-日志规约',
+    title: `避免重复打印日志，浪费磁盘空间，务必在日志配置文件中设置 additivity=false`,
+    content: `避免重复打印日志，浪费磁盘空间，务必在日志配置文件中设置 additivity=false`,
+    exampleGood: `<logger name="com.taobao.dubbo.config" additivity="false">`,
+  },
+  {
+    code: '2.3.8',
+    level: 'MANDATORY',
+    category: '异常日志-日志规约',
+    title: `生产环境禁止使用 System.out 或 System.err 输出或使用 e.printStackTrace() 打印异常堆栈`,
+    content: `生产环境禁止使用 System.out 或 System.err 输出或使用 e.printStackTrace() 打印异常堆栈。
+
+说明：标准日志输出与标准错误输出文件每次 Jboss 重启时才滚动，如果大量输出送往这两个文件，容易造成文件大小超过操作系统大小限制。`,
+  },
+  {
+    code: '2.3.9',
+    level: 'MANDATORY',
+    category: '异常日志-日志规约',
+    title: `异常信息应该包括两类信息：案发现场信息和异常堆栈信息`,
+    content: `异常信息应该包括两类信息：案发现场信息和异常堆栈信息。如果不处理，那么通过关键字 throws 往上抛出。`,
+    exampleGood: `logger.error("inputParams: {} and errorMessage: {}", 各类参数或者对象 toString(), e.getMessage(), e);`,
+  },
+  {
+    code: '2.3.10',
+    level: 'MANDATORY',
+    category: '异常日志-日志规约',
+    title: `日志打印时禁止直接用JSON 工具将对象转换成 String`,
+    content: `日志打印时禁止直接用JSON 工具将对象转换成 String。
+
+说明：如果对象里某些 get 方法被覆写，存在抛出异常的情况，则可能会因为打印日志而影响正常业务流程的执行。`,
+    exampleGood: `打印日志时仅打印出业务相关属性值或者调用其对象的 toString() 方法。`,
+  },
+  {
+    code: '2.3.11',
+    level: 'RECOMMENDED',
+    category: '异常日志-日志规约',
+    title: `谨慎地记录日志`,
+    content: `谨慎地记录日志。生产环境禁止输出 debug 日志；有选择地输出 info 日志；如果使用 warn 来记录刚上线时的业务行为信息，一定要注意日志输出量的问题，避免把服务器磁盘撑爆，并记得及时删除这些观察日志。
+
+说明：大量地输出无效日志，不利于系统性能提升，也不利于快速定位错误点。记录日志时请思考：这些日志真的有人看吗？看到这条日志你能做什么？能不能给问题排查带来好处？`,
+  },
+  {
+    code: '2.3.12',
+    level: 'RECOMMENDED',
+    category: '异常日志-日志规约',
+    title: `可以使用 warn 日志级别来记录用户输入参数错误的情况，避免用户投诉时，无所适从`,
+    content: `可以使用 warn 日志级别来记录用户输入参数错误的情况，避免用户投诉时，无所适从。如非必要，请不要在此场景打出 error 级别，避免频繁报警。
+
+说明：注意日志输出的级别，error 级别只记录系统逻辑出错、异常或者重要的错误信息。`,
+  },
+  {
+    code: '2.3.13',
+    level: 'RECOMMENDED',
+    category: '异常日志-日志规约',
+    title: `尽量用英文来描述日志错误信息，如果日志中的错误信息用英文描述不清楚的话使用中文描述即可，否则容易产生歧义`,
+    content: `尽量用英文来描述日志错误信息，如果日志中的错误信息用英文描述不清楚的话使用中文描述即可，否则容易产生歧义。
+
+说明：国际化团队或海外部署的服务器由于字符集问题，使用全英文来注释和描述日志错误信息。`,
+  },
+  {
+    code: '2.3.14',
+    level: 'RECOMMENDED',
+    category: '异常日志-日志规约',
+    title: `为了保护用户隐私，日志文件中的用户敏感信息需要进行脱敏处理`,
+    content: `为了保护用户隐私，日志文件中的用户敏感信息需要进行脱敏处理。
+
+说明：日志排查问题时，推荐使用订单号、UUID 之类的唯一编号进行查询。`,
+  },
+  {
+    code: '3.1',
+    level: 'MANDATORY',
+    category: '单元测试',
+    title: `好的单元测试必须遵守AIR 原则`,
+    content: `好的单元测试必须遵守AIR 原则。
+
+说明：单元测试在线上运行时，感觉像空气（AIR）一样感觉不到，但在测试质量的保障上，却是非常关键的。好的单元测试宏观上来说，具有自动化、独立性、可重复执行的特点。 ⚫ A：Automatic（自动化） ⚫ I：Independent（独立性） ⚫ R：Repeatable（可重复）`,
+  },
+  {
+    code: '3.2',
+    level: 'MANDATORY',
+    category: '单元测试',
+    title: `单元测试应该是全自动执行的，并且非交互式的`,
+    content: `单元测试应该是全自动执行的，并且非交互式的。测试用例通常是被定期执行的，执行过程必须完全自动化才有意义。输出结果需要人工检查的测试不是一个好的单元测试。不允许使用 System.out 来进行人肉验证，单元测试必须使用 assert 来验证。`,
+  },
+  {
+    code: '3.3',
+    level: 'MANDATORY',
+    category: '单元测试',
+    title: `保持单元测试的独立性`,
+    content: `保持单元测试的独立性。为了保证单元测试稳定可靠且便于维护，单元测试用例之间决不能互相调用，也不能依赖执行的先后次序。`,
+    exampleBad: `method2 需要依赖 method1 的执行，将执行结果作为 method2 的输入。`,
+  },
+  {
+    code: '3.4',
+    level: 'MANDATORY',
+    category: '单元测试',
+    title: `单元测试是可以重复执行的，不能受到外界环境的影响`,
+    content: `单元测试是可以重复执行的，不能受到外界环境的影响。
+
+说明：单元测试通常会被放到持续集成中，每次有代码 push 时单元测试都会被执行。如果单测对外部环境（网络、服务、中间件等）有依赖，容易导致持续集成机制的不可用。`,
+    exampleGood: `为了不受外界环境影响，要求设计代码时就把 SUT（Software under test）的依赖改成注入，在测试时用 Spring 这样的 DI 框架注入一个本地（内存）实现或者 Mock 实现。`,
+  },
+  {
+    code: '3.5',
+    level: 'MANDATORY',
+    category: '单元测试',
+    title: `对于单元测试，要保证测试粒度足够小，有助于精确定位问题`,
+    content: `对于单元测试，要保证测试粒度足够小，有助于精确定位问题。单测粒度至多是类级别，一般是方法级别。
+
+说明：测试粒度小才能在出错时尽快定位到出错的位置。单元测试不负责检查跨类或者跨系统的交互逻辑，那是集成测试的领域。`,
+  },
+  {
+    code: '3.6',
+    level: 'MANDATORY',
+    category: '单元测试',
+    title: `核心业务、核心应用、核心模块的增量代码确保单元测试通过`,
+    content: `核心业务、核心应用、核心模块的增量代码确保单元测试通过。
+
+说明：新增代码及时补充单元测试，如果新增代码影响了原有单元测试，请及时修正。`,
+  },
+  {
+    code: '3.7',
+    level: 'MANDATORY',
+    category: '单元测试',
+    title: `单元测试代码必须写在如下工程目录： src/test/java，不允许写在业务代码目录下`,
+    content: `单元测试代码必须写在如下工程目录： src/test/java，不允许写在业务代码目录下。
+
+说明：源码编译时会跳过此目录，而单元测试框架默认是扫描此目录。`,
+  },
+  {
+    code: '3.8',
+    level: 'RECOMMENDED',
+    category: '单元测试',
+    title: `单测的基本目标：语句覆盖率达到 70%；核心模块的语句覆盖率和分支覆盖率都要达到 100%`,
+    content: `单测的基本目标：语句覆盖率达到 70%；核心模块的语句覆盖率和分支覆盖率都要达到 100%
+
+说明：在工程规约的应用分层中提到的 DAO 层，Manager 层，可重用度高的 Service，都应该进行单元测试。`,
+  },
+  {
+    code: '3.9',
+    level: 'RECOMMENDED',
+    category: '单元测试',
+    title: `编写单元测试代码遵守 BCDE 原则，以保证被测试模块的交付质量`,
+    content: `编写单元测试代码遵守 BCDE 原则，以保证被测试模块的交付质量。 ⚫ B：Border，边界值测试，包括循环边界、特殊取值、特殊时间点、数据顺序等。 ⚫ C：Correct，正确的输入，并得到预期的结果。 ⚫ D：Design，与设计文档相结合，来编写单元测试。 ⚫ E：Error，强制错误信息输入（如：非法数据、异常流程、业务允许外等），并得到预期的结果。`,
+  },
+  {
+    code: '3.10',
+    level: 'RECOMMENDED',
+    category: '单元测试',
+    title: `对于数据库相关的查询，更新，删除等操作，不能假设数据库里的数据是存在的，或者直接操作数据库把数据插入进去，请使用程序插入或者导入数据的方式来准备数据`,
+    content: `对于数据库相关的查询，更新，删除等操作，不能假设数据库里的数据是存在的，或者直接操作数据库把数据插入进去，请使用程序插入或者导入数据的方式来准备数据。`,
+    exampleBad: `删除某一行数据的单元测试，在数据库中，先直接手动增加一行作为删除目标，但是这一行新增数据并不符合业务插入规则，导致测试结果异常。`,
+  },
+  {
+    code: '3.11',
+    level: 'RECOMMENDED',
+    category: '单元测试',
+    title: `和数据库相关的单元测试，可以设定自动回滚机制，不给数据库造成脏数据`,
+    content: `和数据库相关的单元测试，可以设定自动回滚机制，不给数据库造成脏数据。或者对单元测试产生的数据有明确的前后缀标识。`,
+    exampleGood: `在基础技术部的内部单元测试中，使用 FOUNDATION_UNIT_TEST_的前缀来标识单元测试相关代码。`,
+  },
+  {
+    code: '3.12',
+    level: 'RECOMMENDED',
+    category: '单元测试',
+    title: `对于不可测的代码在适当的时机做必要的重构，使代码变得可测避免为了达到测试要求而书写不规范测试代码`,
+    content: `对于不可测的代码在适当的时机做必要的重构，使代码变得可测避免为了达到测试要求而书写不规范测试代码。`,
+  },
+  {
+    code: '3.13',
+    level: 'RECOMMENDED',
+    category: '单元测试',
+    title: `在设计评审阶段，开发人员需要和测试人员一起确定单元测试范围，单元测试最好覆盖所有测试用例（UC）`,
+    content: `在设计评审阶段，开发人员需要和测试人员一起确定单元测试范围，单元测试最好覆盖所有测试用例（UC）。`,
+  },
+  {
+    code: '3.14',
+    level: 'RECOMMENDED',
+    category: '单元测试',
+    title: `单元测试作为一种质量保障手段，在项目提测前完成单元测试，不建议项目发布后补充单元测试用例`,
+    content: `单元测试作为一种质量保障手段，在项目提测前完成单元测试，不建议项目发布后补充单元测试用例。`,
+  },
+  {
+    code: '3.15',
+    level: 'REFERENCE',
+    category: '单元测试',
+    title: `为了更方便地进行单元测试，业务代码应避免以下情况： ⚫ 构造方法中做的事情过多`,
+    content: `为了更方便地进行单元测试，业务代码应避免以下情况： ⚫ 构造方法中做的事情过多。 ⚫ 存在过多的全局变量和静态方法。 ⚫ 存在过多的外部依赖。 ⚫ 存在过多的条件语句。
+
+说明：多层条件语句建议使用卫语句、策略模式、状态模式等方式重构。`,
+  },
+  {
+    code: '3.16',
+    level: 'REFERENCE',
+    category: '单元测试',
+    title: `不要对单元测试存在如下误解： ⚫ 那是测试同学干的事情`,
+    content: `不要对单元测试存在如下误解： ⚫ 那是测试同学干的事情。本文是开发手册，凡是本文内容都是与开发同学强相关的。 ⚫ 单元测试代码是多余的。系统的整体功能与各单元部件的测试正常与否是强相关的。 ⚫ 单元测试代码不需要维护。一年半载后，那么单元测试几乎处于废弃状态。 ⚫ 单元测试与线上故障没有辩证关系。好的单元测试能够最大限度地规避线上故障。`,
+  },
+  {
+    code: '4.1',
+    level: 'MANDATORY',
+    category: '安全规约',
+    title: `隶属于用户个人的页面或者功能必须进行权限控制校验`,
+    content: `隶属于用户个人的页面或者功能必须进行权限控制校验。
+
+说明：防止没有做水平权限校验就可随意访问、修改、删除别人的数据，比如查看他人的私信内容。`,
+  },
+  {
+    code: '4.2',
+    level: 'MANDATORY',
+    category: '安全规约',
+    title: `用户敏感数据禁止直接展示，必须对展示数据进行脱敏`,
+    content: `用户敏感数据禁止直接展示，必须对展示数据进行脱敏。`,
+    exampleGood: `中国大陆个人手机号码显示：139****1219，隐藏中间 4 位，防止隐私泄露。`,
+  },
+  {
+    code: '4.3',
+    level: 'MANDATORY',
+    category: '安全规约',
+    title: `用户输入的 SQL 参数严格使用参数绑定或者 METADATA 字段值限定，防止 SQL 注入，禁止字符串拼接 SQL 访问数据库`,
+    content: `用户输入的 SQL 参数严格使用参数绑定或者 METADATA 字段值限定，防止 SQL 注入，禁止字符串拼接 SQL 访问数据库。`,
+    exampleBad: `某系统签名大量被恶意修改，即是因为对于危险字符#--没有进行转义，导致数据库更新时，where 后边的信息被注释掉，对全库进行更新。`,
+  },
+  {
+    code: '4.4',
+    level: 'MANDATORY',
+    category: '安全规约',
+    title: `用户请求传入的任何参数必须做有效性验证`,
+    content: `用户请求传入的任何参数必须做有效性验证。
+
+说明：忽略参数校验可能导致： ⚫ 页面 page size 过大导致内存溢出 ⚫ 恶意 order by 导致数据库慢查询 ⚫ 缓存击穿 ⚫ SSRF ⚫ 任意重定向 ⚫ SQL 注入，Shell 注入，反序列化注入 ⚫ 正则输入源串拒绝服务 ReDoS 扩展：Java 代码用正则来验证客户端的输入，有些正则写法验证普通用户输入没有问题，但是如果攻击人员使用的是特殊构造的字符串来验证，有可能导致死循环的结果。`,
+  },
+  {
+    code: '4.5',
+    level: 'MANDATORY',
+    category: '安全规约',
+    title: `禁止向 HTML 页面输出未经安全过滤或未正确转义的用户数据`,
+    content: `禁止向 HTML 页面输出未经安全过滤或未正确转义的用户数据。
+
+说明：XSS 跨站脚本攻击。它指的是恶意攻击者往 Web 页面里插入恶意 html 代码，当用户浏览时，嵌入其中 Web 里面的 html 代码会被执行，造成获取用户 cookie、钓鱼、获取用户页面数据、蠕虫、挂马等危害。`,
+  },
+  {
+    code: '4.6',
+    level: 'MANDATORY',
+    category: '安全规约',
+    title: `表单、AJAX 提交必须执行 CSRF 安全验证`,
+    content: `表单、AJAX 提交必须执行 CSRF 安全验证。
+
+说明：CSRF (Cross-site request forgery) 跨站请求伪造是一类常见编程漏洞。对于存在 CSRF 漏洞的应用/网站，攻击者可以事先构造好 URL，只要受害者用户一访问，后台便在用户不知情的情况下对数据库中用户参数进行相应修改。`,
+  },
+  {
+    code: '4.7',
+    level: 'MANDATORY',
+    category: '安全规约',
+    title: `URL 外部重定向传入的目标地址必须执行白名单过滤`,
+    content: `URL 外部重定向传入的目标地址必须执行白名单过滤。
+
+说明：攻击者通过恶意构造跳转的链接，可以向受害者发起钓鱼攻击。`,
+  },
+  {
+    code: '4.8',
+    level: 'MANDATORY',
+    category: '安全规约',
+    title: `在使用平台资源，譬如短信、邮件、电话、下单、支付，必须实现正确的防重放的机制，如数量限制、疲劳度控制、验证码校验，避免被滥刷而导致资损`,
+    content: `在使用平台资源，譬如短信、邮件、电话、下单、支付，必须实现正确的防重放的机制，如数量限制、疲劳度控制、验证码校验，避免被滥刷而导致资损。
+
+说明：如注册时发送验证码到手机，如果没有限制次数和频率，那么可以利用此功能骚扰到其它用户，并造成短信平台资源浪费。`,
+  },
+  {
+    code: '4.9',
+    level: 'MANDATORY',
+    category: '安全规约',
+    title: `对于文件上传功能，需要对于文件大小、类型进行严格检查和控制`,
+    content: `对于文件上传功能，需要对于文件大小、类型进行严格检查和控制。
+
+说明：攻击者可以利用上传漏洞，上传恶意文件到服务器，并且远程执行，达到控制网站服务器的目的。`,
+  },
+  {
+    code: '4.10',
+    level: 'MANDATORY',
+    category: '安全规约',
+    title: `配置文件中的密码需要加密`,
+    content: `配置文件中的密码需要加密。`,
+  },
+  {
+    code: '4.11',
+    level: 'RECOMMENDED',
+    category: '安全规约',
+    title: `发贴、评论、发送等即时消息，需要用户输入内容的场景`,
+    content: `发贴、评论、发送等即时消息，需要用户输入内容的场景。必须实现防刷、内容违禁词过滤等风控策略。`,
+  },
+  {
+    code: '5.1.1',
+    level: 'MANDATORY',
+    category: 'MySQL-建表规约',
+    title: `表达是与否概念的字段，必须使用 is_xxx 的方式命名，数据类型是 unsigned tinyint（1 表示是，0 表示否）`,
+    content: `表达是与否概念的字段，必须使用 is_xxx 的方式命名，数据类型是 unsigned tinyint（1 表示是，0 表示否）。 注意：POJO 类中的任何布尔类型的变量，都不要加 is 前缀，所以，需要在<resultMap>设置从 is_xxx 到 Xxx 的映射关系。数据库表示是与否的值，使用 tinyint 类型，坚持 is_xxx 的命名方式是为了明确其取值含义与取值范围。
+
+说明：任何字段如果为非负数，必须是 unsigned。`,
+    exampleGood: `表达逻辑删除的字段名 is_deleted，1 表示删除，0 表示未删除。`,
+  },
+  {
+    code: '5.1.2',
+    level: 'MANDATORY',
+    category: 'MySQL-建表规约',
+    title: `表名、字段名必须使用小写字母或数字，禁止出现数字开头禁止两个下划线中间只出现数字`,
+    content: `表名、字段名必须使用小写字母或数字，禁止出现数字开头禁止两个下划线中间只出现数字。数据库字段名的修改代价很大，因为无法进行预发布，所以字段名称需要慎重考虑。
+
+说明：MySQL 在 Windows 下不区分大小写，但在 Linux 下默认是区分大小写。因此，数据库名、表名、字段名，都不允许出现任何大写字母，避免节外生枝。`,
+    exampleGood: `aliyun_admin，rdc_config，level3_name`,
+    exampleBad: `AliyunAdmin，rdcConfig，level_3_name`,
+  },
+  {
+    code: '5.1.3',
+    level: 'MANDATORY',
+    category: 'MySQL-建表规约',
+    title: `表名不使用复数名词`,
+    content: `表名不使用复数名词。
+
+说明：表名应该仅仅表示表里面的实体内容，不应该表示实体数量，对应于 DO 类名也是单数形式，符合表达习惯。`,
+  },
+  {
+    code: '5.1.4',
+    level: 'MANDATORY',
+    category: 'MySQL-建表规约',
+    title: `禁用保留字，如 desc、range、match、delayed 等，请参考 MySQL 官方保留字`,
+    content: `禁用保留字，如 desc、range、match、delayed 等，请参考 MySQL 官方保留字。`,
+  },
+  {
+    code: '5.1.5',
+    level: 'MANDATORY',
+    category: 'MySQL-建表规约',
+    title: `主键索引名为 pk_字段名；唯一索引名为 uk_字段名；普通索引名则为 idx_字段名`,
+    content: `主键索引名为 pk_字段名；唯一索引名为 uk_字段名；普通索引名则为 idx_字段名。
+
+说明：pk_即 primary key；uk_即 unique key；idx_即 index 的简称。`,
+  },
+  {
+    code: '5.1.6',
+    level: 'MANDATORY',
+    category: 'MySQL-建表规约',
+    title: `小数类型为 decimal，禁止使用 float 和 double`,
+    content: `小数类型为 decimal，禁止使用 float 和 double。
+
+说明：在存储的时候，float 和 double 都存在精度损失的问题，很可能在比较值的时候，得到不正确的结果。如果存储的数据范围超过 decimal 的范围，建议将数据拆成整数和小数并分开存储。`,
+  },
+  {
+    code: '5.1.7',
+    level: 'MANDATORY',
+    category: 'MySQL-建表规约',
+    title: `如果存储的字符串长度几乎相等，使用 char 定长字符串类型`,
+    content: `如果存储的字符串长度几乎相等，使用 char 定长字符串类型。`,
+  },
+  {
+    code: '5.1.8',
+    level: 'MANDATORY',
+    category: 'MySQL-建表规约',
+    title: `varchar 是可变长字符串，不预先分配存储空间，长度不要超过 5000，如果存储长度大于此值，定义字段类型为 text，独立出来一张表，用主键来对应，避免影响其它字段索引率`,
+    content: `varchar 是可变长字符串，不预先分配存储空间，长度不要超过 5000，如果存储长度大于此值，定义字段类型为 text，独立出来一张表，用主键来对应，避免影响其它字段索引率。`,
+  },
+  {
+    code: '5.1.9',
+    level: 'MANDATORY',
+    category: 'MySQL-建表规约',
+    title: `表必备三字段：id，create_time，update_time`,
+    content: `表必备三字段：id，create_time，update_time。
+
+说明：其中 id 必为主键，类型为 bigint unsigned、单表时自增、步长为 1。create_time，update_time 的类型均为 datetime 类型，如果要记录时区信息，那么类型设置为 timestamp。`,
+  },
+  {
+    code: '5.1.10',
+    level: 'MANDATORY',
+    category: 'MySQL-建表规约',
+    title: `在数据库中不能使用物理删除操作，要使用逻辑删除`,
+    content: `在数据库中不能使用物理删除操作，要使用逻辑删除。
+
+说明：逻辑删除在数据删除后可以追溯到行为操作。不过会使得一些情况下的唯一主键变得不唯一，需要根据情况来酌情解决。`,
+  },
+  {
+    code: '5.1.11',
+    level: 'RECOMMENDED',
+    category: 'MySQL-建表规约',
+    title: `表的命名最好是遵循“业务名称_表的作用”`,
+    content: `表的命名最好是遵循“业务名称_表的作用”。`,
+    exampleGood: `alipay_task / force_project / trade_config / tes_question`,
+  },
+  {
+    code: '5.1.12',
+    level: 'RECOMMENDED',
+    category: 'MySQL-建表规约',
+    title: `库名与应用名称尽量一致`,
+    content: `库名与应用名称尽量一致。`,
+  },
+  {
+    code: '5.1.13',
+    level: 'RECOMMENDED',
+    category: 'MySQL-建表规约',
+    title: `如果修改字段含义或对字段表示的状态追加时，需要及时更新字段注释`,
+    content: `如果修改字段含义或对字段表示的状态追加时，需要及时更新字段注释。`,
+  },
+  {
+    code: '5.1.14',
+    level: 'RECOMMENDED',
+    category: 'MySQL-建表规约',
+    title: `字段允许适当冗余，以提高查询性能，但必须考虑数据一致`,
+    content: `字段允许适当冗余，以提高查询性能，但必须考虑数据一致。冗余字段应遵循： 1）不是频繁修改的字段。 2）不是唯一索引的字段。 3）不是 varchar 超长字段，更不能是 text 字段。`,
+    exampleGood: `各业务线经常冗余存储商品名称，避免查询时需要调用 IC 服务获取。`,
+  },
+  {
+    code: '5.1.15',
+    level: 'RECOMMENDED',
+    category: 'MySQL-建表规约',
+    title: `单表行数超过 500 万行或者单表容量超过 2GB，才推荐进行分库分表`,
+    content: `单表行数超过 500 万行或者单表容量超过 2GB，才推荐进行分库分表。
+
+说明：如果预计三年后的数据量根本达不到这个级别，请不要在创建表时就分库分表。`,
+  },
+  {
+    code: '5.1.16',
+    level: 'REFERENCE',
+    category: 'MySQL-建表规约',
+    title: `合适的字符存储长度，不但节约数据库表空间、节约索引存储，更重要的是提升检索速度`,
+    content: `合适的字符存储长度，不但节约数据库表空间、节约索引存储，更重要的是提升检索速度。`,
+    exampleGood: `无符号值可以避免误存负数，且扩大了表示范围： 对象 年龄区间 类型 字节 表示范围人 150 岁之内 tinyint unsigned 1 无符号值：0 到 255 龟 数百岁 smallint unsigned 2 无符号值：0 到 65535 恐龙化石 数千万年 int unsigned 4 无符号值：0 到约 43 亿太阳 约 50 亿年 bigint unsigned 8 无符号值：0 到约 10 的 19 次方`,
+  },
+  {
+    code: '5.2.1',
+    level: 'MANDATORY',
+    category: 'MySQL-索引规约',
+    title: `业务上具有唯一特性的字段，即使是组合字段，也必须建成唯一索引`,
+    content: `业务上具有唯一特性的字段，即使是组合字段，也必须建成唯一索引。
+
+说明：不要以为唯一索引影响了 insert 速度，这个速度损耗可以忽略，但提高查找速度是明显的；另外，即使在应用层做了非常完善的校验控制，只要没有唯一索引，根据墨菲定律，必然有脏数据产生。`,
+  },
+  {
+    code: '5.2.2',
+    level: 'MANDATORY',
+    category: 'MySQL-索引规约',
+    title: `超过三个表禁止 join`,
+    content: `超过三个表禁止 join。需要 join 的字段，数据类型保持绝对一致；多表关联查询时，保证被关联的字段需要有索引。
+
+说明：即使双表 join 也要注意表索引、SQL 性能。`,
+  },
+  {
+    code: '5.2.3',
+    level: 'MANDATORY',
+    category: 'MySQL-索引规约',
+    title: `在 varchar 字段上建立索引时，必须指定索引长度，没必要对全字段建立索引，根据实际文本区分度决定索引长度`,
+    content: `在 varchar 字段上建立索引时，必须指定索引长度，没必要对全字段建立索引，根据实际文本区分度决定索引长度。
+
+说明：索引的长度与区分度是一对矛盾体，一般对字符串类型数据，长度为 20 的索引，区分度会高达 90%以上，可以使用 count(distinct left(列名，索引长度)) / count(*) 的区分度来确定。`,
+  },
+  {
+    code: '5.2.4',
+    level: 'MANDATORY',
+    category: 'MySQL-索引规约',
+    title: `页面搜索严禁左模糊或者全模糊，如果需要请走搜索引擎来解决`,
+    content: `页面搜索严禁左模糊或者全模糊，如果需要请走搜索引擎来解决。
+
+说明：索引文件具有 B-Tree 的最左前缀匹配特性，如果左边的值未确定，那么无法使用此索引。`,
+  },
+  {
+    code: '5.2.5',
+    level: 'RECOMMENDED',
+    category: 'MySQL-索引规约',
+    title: `如果有 order by 的场景，请注意利用索引的有序性`,
+    content: `如果有 order by 的场景，请注意利用索引的有序性。order by 最后的字段是组合索引的一部分，并且放在索引组合顺序的最后，避免出现 filesort 的情况，影响查询性能。`,
+    exampleGood: `where a = ? and b = ? order by c；索引：a_b_c`,
+    exampleBad: `索引如果存在范围查询，那么索引有序性无法利用，如：WHERE a > 10 ORDER BY b；索引 a_b 无法排序。`,
+  },
+  {
+    code: '5.2.6',
+    level: 'RECOMMENDED',
+    category: 'MySQL-索引规约',
+    title: `利用覆盖索引来进行查询操作，避免回表`,
+    content: `利用覆盖索引来进行查询操作，避免回表。
+
+说明：如果一本书需要知道第 11 章是什么标题，会翻开第 11 章对应的那一页吗？目录浏览一下就好，这个目录就是起到覆盖索引的作用。`,
+    exampleGood: `能够建立索引的种类分为主键索引、唯一索引、普通索引三种，而覆盖索引只是一种查询的一种效果，用 explain 的结果，extra 列会出现：using index。`,
+  },
+  {
+    code: '5.2.7',
+    level: 'RECOMMENDED',
+    category: 'MySQL-索引规约',
+    title: `利用延迟关联或者子查询优化超多分页场景`,
+    content: `利用延迟关联或者子查询优化超多分页场景。
+
+说明：MySQL 并不是跳过 offset 行，而是取 offset+N 行，然后返回放弃前 offset 行，返回 N 行，那当 offset 特别大的时候，效率就非常的低下，要么控制返回的总页数，要么对超过特定阈值的页数进行 SQL 改写。`,
+    exampleGood: `先快速定位需要获取的 id 段，然后再关联： SELECT t1.* FROM 表 1 as t1 , (select id from 表 1 where 条件 LIMIT 100000 , 20) as t2 where t1.id = t2.id`,
+  },
+  {
+    code: '5.2.8',
+    level: 'RECOMMENDED',
+    category: 'MySQL-索引规约',
+    title: `SQL 性能优化的目标：至少要达到 range 级别，要求是 ref 级别，如果可以是 const 最好`,
+    content: `SQL 性能优化的目标：至少要达到 range 级别，要求是 ref 级别，如果可以是 const 最好。
+
+说明：1）consts 单表中最多只有一个匹配行（主键或者唯一索引），在优化阶段即可读取到数据。 2）ref 指的是使用普通的索引（normal index）。 3）range 对索引进行范围检索。`,
+    exampleBad: `explain 表的结果，type = index，索引物理文件全扫描，速度非常慢，这个 index 级别比较 range 还低，与全表扫描是小巫见大巫。`,
+  },
+  {
+    code: '5.2.9',
+    level: 'RECOMMENDED',
+    category: 'MySQL-索引规约',
+    title: `建组合索引的时候，区分度最高的在最左边`,
+    content: `建组合索引的时候，区分度最高的在最左边。
+
+说明：存在非等号和等号混合判断条件时，在建索引时，请把等号条件的列前置。如：where c > ? and d = ? 那么即使 c 的区分度更高，也必须把 d 放在索引的最前列，即建立组合索引 idx_d_c。`,
+    exampleGood: `如果 where a = ? and b = ?，a 列的几乎接近于唯一值，那么只需要单建 idx_a 索引即可。`,
+  },
+  {
+    code: '5.2.10',
+    level: 'RECOMMENDED',
+    category: 'MySQL-索引规约',
+    title: `防止因字段类型不同造成的隐式转换，导致索引失效`,
+    content: `防止因字段类型不同造成的隐式转换，导致索引失效。`,
+  },
+  {
+    code: '5.2.11',
+    level: 'REFERENCE',
+    category: 'MySQL-索引规约',
+    title: `创建索引时避免有如下极端误解： 1）索引宁滥勿缺`,
+    content: `创建索引时避免有如下极端误解： 1）索引宁滥勿缺。认为一个查询就需要建一个索引。 2）吝啬索引的创建。认为索引会消耗空间、严重拖慢记录的更新以及行的新增速度。 3）抵制唯一索引。认为唯一索引一律需要在应用层通过“先查后插”方式解决。`,
+  },
+  {
+    code: '5.3.1',
+    level: 'MANDATORY',
+    category: 'MySQL-SQL 语句',
+    title: `不要使用 count(列名) 或 count(常量) 来替代 count(*)，count(*) 是 SQL92 定义的标准统计行数的语法，跟数据库无关，跟 N`,
+    content: `不要使用 count(列名) 或 count(常量) 来替代 count(*)，count(*) 是 SQL92 定义的标准统计行数的语法，跟数据库无关，跟 NULL 和非 NULL 无关。
+
+说明：count(*) 会统计值为 NULL 的行，而 count(列名) 不会统计此列为 NULL 值的行。`,
+  },
+  {
+    code: '5.3.2',
+    level: 'MANDATORY',
+    category: 'MySQL-SQL 语句',
+    title: `count(distinct col) 计算该列除 NULL 之外的不重复行数，注意 count(distinct col1 , col2) 如果其中一列全为`,
+    content: `count(distinct col) 计算该列除 NULL 之外的不重复行数，注意 count(distinct col1 , col2) 如果其中一列全为 NULL，那么即使另一列有不同的值，也返回为 0。`,
+  },
+  {
+    code: '5.3.3',
+    level: 'MANDATORY',
+    category: 'MySQL-SQL 语句',
+    title: `当某一列的值全是 NULL 时，count(col) 的返回结果为 0；但 sum(col) 的返回结果为 NULL，因此使用 sum() 时需注意 NPE 问题`,
+    content: `当某一列的值全是 NULL 时，count(col) 的返回结果为 0；但 sum(col) 的返回结果为 NULL，因此使用 sum() 时需注意 NPE 问题。`,
+    exampleGood: `可以使用如下方式来避免 sum 的 NPE 问题：SELECT IFNULL(SUM(column) , 0) FROM table;`,
+  },
+  {
+    code: '5.3.4',
+    level: 'MANDATORY',
+    category: 'MySQL-SQL 语句',
+    title: `使用 ISNULL() 来判断是否为 NULL 值`,
+    content: `使用 ISNULL() 来判断是否为 NULL 值。
+
+说明：NULL 与任何值的直接比较都为 NULL。 1）NULL<>NULL 的返回结果是 NULL，而不是 false。 2）NULL=NULL 的返回结果是 NULL，而不是 true。 3）NULL<>1 的返回结果是 NULL，而不是 true。`,
+    exampleBad: `在 SQL 语句中，如果在 null 前换行，影响可读性。 select * from table where column1 is null and column3 is not null；而 ISNULL(column) 是一个整体，简洁易懂。 从性能数据上分析，ISNULL(column) 执行效率更快一些。`,
+  },
+  {
+    code: '5.3.5',
+    level: 'MANDATORY',
+    category: 'MySQL-SQL 语句',
+    title: `代码中写分页查询逻辑时，若 count 为 0 应直接返回，避免执行后面的分页语句`,
+    content: `代码中写分页查询逻辑时，若 count 为 0 应直接返回，避免执行后面的分页语句。`,
+  },
+  {
+    code: '5.3.6',
+    level: 'MANDATORY',
+    category: 'MySQL-SQL 语句',
+    title: `不得使用外键与级联，一切外键概念必须在应用层解决`,
+    content: `不得使用外键与级联，一切外键概念必须在应用层解决。
+
+说明：（概念解释）学生表中的 student_id 是主键，那么成绩表中的 student_id 则为外键。如果更新学生表中的 student_id，同时触发成绩表中的 student_id 更新，即为级联更新。外键与级联更新适用于单机低并发，不适合分布式、高并发集群；级联更新是强阻塞，存在数据库更新风暴的风险；外键影响数据库的插入速度。`,
+  },
+  {
+    code: '5.3.7',
+    level: 'MANDATORY',
+    category: 'MySQL-SQL 语句',
+    title: `禁止使用存储过程，存储过程难以调试和扩展，更没有移植性`,
+    content: `禁止使用存储过程，存储过程难以调试和扩展，更没有移植性。`,
+  },
+  {
+    code: '5.3.8',
+    level: 'MANDATORY',
+    category: 'MySQL-SQL 语句',
+    title: `数据订正（特别是删除或修改记录操作）时，要先 select，避免出现误删除的情况，确认无误才能执行更新语句`,
+    content: `数据订正（特别是删除或修改记录操作）时，要先 select，避免出现误删除的情况，确认无误才能执行更新语句。`,
+  },
+  {
+    code: '5.3.9',
+    level: 'MANDATORY',
+    category: 'MySQL-SQL 语句',
+    title: `对于数据库中表记录的查询和变更，只要涉及多个表，都需要在列名前加表的别名（或表名）进行限定`,
+    content: `对于数据库中表记录的查询和变更，只要涉及多个表，都需要在列名前加表的别名（或表名）进行限定。
+
+说明：对多表进行查询记录、更新记录、删除记录时，如果对操作列没有限定表的别名（或表名），并且操作列在多个表中存在时，就会抛异常。`,
+    exampleGood: `select t1.name from first_table as t1 , second_table as t2 where t1.id = t2.id;`,
+    exampleBad: `在某业务中，由于多表关联查询语句没有加表的别名（或表名）的限制，正常运行两年后，最近在某个表中增加一个同名字段，在预发布环境做数据库变更后，线上查询语句出现出 1052 异常： Column 'name' infield list is ambiguous。`,
+  },
+  {
+    code: '5.3.10',
+    level: 'RECOMMENDED',
+    category: 'MySQL-SQL 语句',
+    title: `SQL 语句中表的别名前加 as，并且以 t1、t2、t3、...的顺序依次命名`,
+    content: `SQL 语句中表的别名前加 as，并且以 t1、t2、t3、...的顺序依次命名。
+
+说明：1）别名可以是表的简称，或者是依照表在 SQL 语句中出现的顺序，以 t1、t2、t3 的方式命名。 2）别名前加 as 使别名更容易识别。`,
+    exampleGood: `select t1.name from first_table as t1 , second_table as t2 where t1.id = t2.id;`,
+  },
+  {
+    code: '5.3.11',
+    level: 'RECOMMENDED',
+    category: 'MySQL-SQL 语句',
+    title: `in 操作能避免则避免，若实在避免不了，需要仔细评估 in 后边的集合元素数量，控制在 1000 个之内`,
+    content: `in 操作能避免则避免，若实在避免不了，需要仔细评估 in 后边的集合元素数量，控制在 1000 个之内。`,
+  },
+  {
+    code: '5.3.12',
+    level: 'REFERENCE',
+    category: 'MySQL-SQL 语句',
+    title: `因国际化需要，所有的字符存储与表示，均采用 utf8mb4 字符集，字符计数方法需要注意`,
+    content: `因国际化需要，所有的字符存储与表示，均采用 utf8mb4 字符集，字符计数方法需要注意。
+
+说明：SELECT LENGTH("轻松工作")；--返回为 12 SELECT CHARACTER_LENGTH("轻松工作")；--返回为 4 表情需要用 utf8mb4 来进行存储，注意它与 utf8 编码的区别。`,
+  },
+  {
+    code: '5.3.13',
+    level: 'REFERENCE',
+    category: 'MySQL-SQL 语句',
+    title: `TRUNCATE TABLE 比 DELETE 速度快，且使用的系统和事务日志资源少，但 TRUNCATE 无事务且不触发 trigger，有可能造成事故，故不`,
+    content: `TRUNCATE TABLE 比 DELETE 速度快，且使用的系统和事务日志资源少，但 TRUNCATE 无事务且不触发 trigger，有可能造成事故，故不建议在开发代码中使用此语句。
+
+说明：TRUNCATE TABLE 在功能上与不带 WHERE 子句的 DELETE 语句相同。`,
+  },
+  {
+    code: '5.4.1',
+    level: 'MANDATORY',
+    category: 'MySQL-ORM 映射',
+    title: `在表查询中，一律不要使用 * 作为查询的字段列表，需要哪些字段必须明确写明`,
+    content: `在表查询中，一律不要使用 * 作为查询的字段列表，需要哪些字段必须明确写明。
+
+说明：1）增加查询分析器解析成本。 2）增减字段容易与 resultMap 配置不一致。 3）无用字段增加网络消耗，尤其是 text 类型的字段。`,
+  },
+  {
+    code: '5.4.2',
+    level: 'MANDATORY',
+    category: 'MySQL-ORM 映射',
+    title: `POJO 类的布尔属性不能加 is，而数据库字段必须加 is_，要求在 resultMap 中进行字段与属性之间的映射`,
+    content: `POJO 类的布尔属性不能加 is，而数据库字段必须加 is_，要求在 resultMap 中进行字段与属性之间的映射。
+
+说明：参见定义 POJO 类以及数据库字段定义规定，在 sql.xml 增加映射，是必须的。`,
+  },
+  {
+    code: '5.4.3',
+    level: 'MANDATORY',
+    category: 'MySQL-ORM 映射',
+    title: `不要用 resultClass 当返回参数，即使所有类属性名与数据库字段一一对应，也需要定义 <resultMap>；反过来，每一个表也必然有一个<resultMap>与之对应`,
+    content: `不要用 resultClass 当返回参数，即使所有类属性名与数据库字段一一对应，也需要定义 <resultMap>；反过来，每一个表也必然有一个<resultMap>与之对应。
+
+说明：配置映射关系，使字段与 DO 类解耦，方便维护。`,
+  },
+  {
+    code: '5.4.4',
+    level: 'MANDATORY',
+    category: 'MySQL-ORM 映射',
+    title: `sql.xml 配置参数使用：#{}，#param# 不要使用 \${} 此种方式容易出现 SQL 注入`,
+    content: `sql.xml 配置参数使用：#{}，#param# 不要使用 \${} 此种方式容易出现 SQL 注入。`,
+  },
+  {
+    code: '5.4.5',
+    level: 'MANDATORY',
+    category: 'MySQL-ORM 映射',
+    title: `iBATIS 自带的 queryForList(String statementName，int start，int size) 不推荐使用`,
+    content: `iBATIS 自带的 queryForList(String statementName，int start，int size) 不推荐使用。
+
+说明：其实现方式是在数据库取到 statementName 对应的 SQL 语句的所有记录，再通过 subList 取 start，size 的子集合，线上因为这个原因曾经出现过 OOM。`,
+    exampleGood: `Map<String, Object> map = new HashMap<>(16); map.put("start", start); map.put("size", size);`,
+  },
+  {
+    code: '5.4.6',
+    level: 'MANDATORY',
+    category: 'MySQL-ORM 映射',
+    title: `不允许直接拿 HashMap 与 Hashtable 作为查询结果集的输出`,
+    content: `不允许直接拿 HashMap 与 Hashtable 作为查询结果集的输出。`,
+    exampleBad: `某同学为避免写一个<resultMap>xxx</resultMap>，直接使用 Hashtable 来接收数据库返回结果，结果出现日常是把 bigint 转成 Long 值，而线上由于数据库版本不一样，解析成 BigInteger，导致线上问题。`,
+  },
+  {
+    code: '5.4.7',
+    level: 'MANDATORY',
+    category: 'MySQL-ORM 映射',
+    title: `更新数据表记录时，必须同时更新记录对应的 update_time 字段值为当前时间`,
+    content: `更新数据表记录时，必须同时更新记录对应的 update_time 字段值为当前时间。`,
+  },
+  {
+    code: '5.4.8',
+    level: 'RECOMMENDED',
+    category: 'MySQL-ORM 映射',
+    title: `不要写一个大而全的数据更新接口`,
+    content: `不要写一个大而全的数据更新接口。传入为 POJO 类，不管是不是自己的目标更新字段，都进行 update table set c1 = value1 , c2 = value2 , c3 = value3；这是不对的。执行 SQL 时，不要更新无改动的字段，一是易出错；二是效率低；三是增加 binlog 存储。`,
+  },
+  {
+    code: '5.4.9',
+    level: 'REFERENCE',
+    category: 'MySQL-ORM 映射',
+    title: `@Transactional 事务不要滥用`,
+    content: `@Transactional 事务不要滥用。事务会影响数据库的 QPS，另外使用事务的地方需要考虑各方面的回滚方案，包括缓存回滚、搜索引擎回滚、消息补偿、统计修正等。`,
+  },
+  {
+    code: '5.4.10',
+    level: 'REFERENCE',
+    category: 'MySQL-ORM 映射',
+    title: `<isEqual>中的 compareValue 是与属性值对比的常量，一般是数字，表示相等时带上此条件；<isNotEmpty>表示不为空且不为 null 时`,
+    content: `<isEqual>中的 compareValue 是与属性值对比的常量，一般是数字，表示相等时带上此条件；<isNotEmpty>表示不为空且不为 null 时执行；<isNotNull>表示不为 null 值时执行。`,
+  },
+  {
+    code: '6.1.1',
+    level: 'RECOMMENDED',
+    category: '工程结构-应用分层',
+    title: `根据业务架构实践，结合业界分层规范与流行技术框架分析，推荐分层结构如图所示，默认上层依赖于下层，箭头关系表示可直接依赖，如：开放 API 层可以依赖于 Web`,
+    content: `根据业务架构实践，结合业界分层规范与流行技术框架分析，推荐分层结构如图所示，默认上层依赖于下层，箭头关系表示可直接依赖，如：开放 API 层可以依赖于 Web 层（Controller 层），也可以直接依赖于 Service 层，依此类推： ⚫ 开放 API 层：可直接封装 Service 接口暴露成 RPC 接口；通过 Web 封装成 http 接口；网关控制层等。 ⚫ 终端显示层：各个端的模板渲染并执行显示的层。当前主要是 velocity 渲染，JS 渲染，JSP 渲染，移动端展示等。 ⚫ Web 层：主要是对访问控制进行转发，各类基本参数校验，或者不复用的业务简单处理等。 ⚫ Service 层：相对具体的业务逻辑服务层。 ⚫ Manager 层：通用业务处理层，它有如下特征 1）对第三方平台封装的层，预处理返回结果及转化异常信息，适配上层接口。 2）对 Service 层通用能力的下沉，如缓存方案、中间件通用处理。 3）与 DAO 层交互，对多个 DAO 的组合复用。 ⚫ DAO 层：数据访问层，与底层 MySQL、Oracle、Hbase、OceanBase等进行数据交互。 ⚫ 第三方服务：包括其它部门 RPC 服务接口，基础平台，其它公司的 HTTP 接口，如淘宝开放平台、支付宝付款服务、高德地图服务等。 ⚫ 外部数据接口：外部（应用）数据存储服务提供 的接口，多见于数据迁移场景中。`,
+  },
+  {
+    code: '6.1.2',
+    level: 'REFERENCE',
+    category: '工程结构-应用分层',
+    title: `（分层异常处理规约）在 DAO 层，产生的异常类型有很多，无法用细粒度的异常进行 catch，使用 catch(Exception e) 方式，并 throw`,
+    content: `（分层异常处理规约）在 DAO 层，产生的异常类型有很多，无法用细粒度的异常进行 catch，使用 catch(Exception e) 方式，并 throw new DAOException(e)，不需要打印日志，因为日志在 Manager 或 Service 层一定需要捕获并打印到日志文件中去，如果同台服务器再打日志，浪费性能和存储。在 Service 层出现异常时，必须记录出错日志到磁盘，尽可能带上参数和上下文信息，相当于保护案发现场。Manager 层与 Service 同机部署，日志方式与 DAO 层处理一致，如果是单独部署，则采用与 Service 一致的处理方式。Web 层绝不应该继续往上抛异常，因为已经处于顶层，如果意识到这个异常将导致页面无法正常渲染，那么就应该直接跳转到友好错误页面，尽量加上友好的错误提示信息。开放接口层要将异常处理成错误码和错误信息方式返回。`,
+  },
+  {
+    code: '6.1.3',
+    level: 'REFERENCE',
+    category: '工程结构-应用分层',
+    title: `分层领域模型规约： ⚫ DO（Data Object）：此对象与数据库表结构一一对应，通过 DAO 层向上传输数据源对象`,
+    content: `分层领域模型规约： ⚫ DO（Data Object）：此对象与数据库表结构一一对应，通过 DAO 层向上传输数据源对象。 ⚫ DTO（Data Transfer Object）：数据传输对象，Service 或 Manager 向外传输的对象。 ⚫ BO（Business Object）：业务对象，可以由 Service 层输出的封装业务逻辑的对象。 ⚫ Query：数据查询对象，各层接收上层的查询请求。注意超过 2 个参数的查询封装，禁止使用 Map 类来传输。 ⚫ VO（View Object）：显示层对象，通常是 Web 向模板渲染引擎层传输的对象。`,
+  },
+  {
+    code: '6.2.1',
+    level: 'MANDATORY',
+    category: '工程结构-二方库依赖',
+    title: `定义 GAV 遵从以下规则： 1）GroupId 格式：com.{公司/BU}.业务线.[子业务线]，最多 4 级`,
+    content: `定义 GAV 遵从以下规则： 1）GroupId 格式：com.{公司/BU}.业务线.[子业务线]，最多 4 级。
+
+说明：{公司/BU}例如：alibaba / taobao / tmall / kaikeba 等 BU 一级；子业务线可选。`,
+    exampleGood: `com.taobao.jstorm 或 com.alibaba.dubbo.register 2）ArtifactId 格式：产品线名-模块名。语义不重复不遗漏，先到中央仓库去查证一下。 dubbo-client / fastjson-api / jstorm-tool 3）Version：详细规定参考下方。`,
+  },
+  {
+    code: '6.2.2',
+    level: 'MANDATORY',
+    category: '工程结构-二方库依赖',
+    title: `二方库版本号命名方式：主版本号.次版本号.修订号 1）主版本号：产品方向改变，或者大规模 API 不兼容，或者架构不兼容升级`,
+    content: `二方库版本号命名方式：主版本号.次版本号.修订号 1）主版本号：产品方向改变，或者大规模 API 不兼容，或者架构不兼容升级。 2）次版本号：保持相对兼容性，增加主要功能特性，影响范围极小的 API 不兼容修改。 3）修订号：保持完全兼容性，修复 BUG、新增次要功能特性等。
+
+说明：注意起始版本号必须为：1.0.0，而不是 0.0.1。`,
+    exampleBad: `仓库内某二方库版本号从 1.0.0.0 开始，一直默默“升级”成 1.0.0.64，完全失去版本的语义信息。`,
+  },
+  {
+    code: '6.2.3',
+    level: 'MANDATORY',
+    category: '工程结构-二方库依赖',
+    title: `线上应用不要依赖 SNAPSHOT 版本（安全包除外）；正式发布的类库必须先去中央仓库进行查证，使 RELEASE 版本号有延续性，且版本号不允许覆盖升级`,
+    content: `线上应用不要依赖 SNAPSHOT 版本（安全包除外）；正式发布的类库必须先去中央仓库进行查证，使 RELEASE 版本号有延续性，且版本号不允许覆盖升级。
+
+说明：不依赖 SNAPSHOT 版本是保证应用发布的幂等性。另外，也可以加快编译时的打包构建。`,
+  },
+  {
+    code: '6.2.4',
+    level: 'MANDATORY',
+    category: '工程结构-二方库依赖',
+    title: `二方库的新增或升级，保持除功能点之外的其它 jar 包仲裁结果不变`,
+    content: `二方库的新增或升级，保持除功能点之外的其它 jar 包仲裁结果不变。如果有改变，必须明确评估和验证。
+
+说明：在升级时，进行 dependency:resolve 前后信息比对，如果仲裁结果完全不一致，那么通过 dependency:tree 命令，找出差异点，进行<exclude>排除 jar 包。`,
+  },
+  {
+    code: '6.2.5',
+    level: 'MANDATORY',
+    category: '工程结构-二方库依赖',
+    title: `二方库里可以定义枚举类型，参数可以使用枚举类型，但是接口返回值不允许使用枚举类型或者包含枚举类型的 POJO 对象`,
+    content: `二方库里可以定义枚举类型，参数可以使用枚举类型，但是接口返回值不允许使用枚举类型或者包含枚举类型的 POJO 对象。`,
+  },
+  {
+    code: '6.2.6',
+    level: 'MANDATORY',
+    category: '工程结构-二方库依赖',
+    title: `二方库定制包的命名方式，在规定的版本号之后加“-英文说明[序号]”，英文说明可以是部门简称、业务名称，序号直接紧跟在英文说明之后，表示此定制包的顺序号`,
+    content: `二方库定制包的命名方式，在规定的版本号之后加“-英文说明[序号]”，英文说明可以是部门简称、业务名称，序号直接紧跟在英文说明之后，表示此定制包的顺序号。
+
+说明：fastjson 给 SCM 定制的版本号：1.0.0-SCM1。注：请尽可能在应用端来解决类冲突和加载问题，避免随意发布此类定制包。`,
+  },
+  {
+    code: '6.2.7',
+    level: 'MANDATORY',
+    category: '工程结构-二方库依赖',
+    title: `依赖于一个二方库群时，必须定义一个统一的版本变量，避免版本号不一致`,
+    content: `依赖于一个二方库群时，必须定义一个统一的版本变量，避免版本号不一致。
+
+说明：依赖 springframework-core，-context，-beans，它们都是同一个版本，可以定义一个变量来保存版本： \${spring.version}，定义依赖的时候，引用该版本。`,
+  },
+  {
+    code: '6.2.8',
+    level: 'MANDATORY',
+    category: '工程结构-二方库依赖',
+    title: `禁止在子项目的 pom 依赖中出现相同的 GroupId，相同的 ArtifactId，但是不同的 Version`,
+    content: `禁止在子项目的 pom 依赖中出现相同的 GroupId，相同的 ArtifactId，但是不同的 Version。
+
+说明：在本地调试时会使用各子项目指定的版本号，但是合并成一个 war，只能有一个版本号出现在最后的 lib 目录中。曾经出现过线下调试是正确的，发布到线上却出故障的先例。`,
+  },
+  {
+    code: '6.2.9',
+    level: 'RECOMMENDED',
+    category: '工程结构-二方库依赖',
+    title: `底层基础技术框架、核心数据管理平台、或近硬件端系统谨慎引入第三方实现`,
+    content: `底层基础技术框架、核心数据管理平台、或近硬件端系统谨慎引入第三方实现。`,
+  },
+  {
+    code: '6.2.10',
+    level: 'RECOMMENDED',
+    category: '工程结构-二方库依赖',
+    title: `所有 pom 文件中的依赖声明放在<dependencies>语句块中，所有版本仲裁放在 <dependencyManagement>语句块中`,
+    content: `所有 pom 文件中的依赖声明放在<dependencies>语句块中，所有版本仲裁放在 <dependencyManagement>语句块中。
+
+说明：<dependencyManagement>里只是声明版本，并不实现引入，因此子项目需要显式的声明依赖，version 和 scope 都读取自父 pom。而<dependencies>所有声明在主 pom 的<dependencies>里的依赖都会自动引入，并默认被所有的子项目继承。`,
+  },
+  {
+    code: '6.2.11',
+    level: 'RECOMMENDED',
+    category: '工程结构-二方库依赖',
+    title: `二方库不要有配置项，最低限度不要再增加配置项`,
+    content: `二方库不要有配置项，最低限度不要再增加配置项。`,
+  },
+  {
+    code: '6.2.12',
+    level: 'RECOMMENDED',
+    category: '工程结构-二方库依赖',
+    title: `不要使用不稳定的工具包或者 Utils 类`,
+    content: `不要使用不稳定的工具包或者 Utils 类。
+
+说明：不稳定指的是提供方无法做到向下兼容，在编译阶段正常，但在运行时产生异常，因此，尽量使用业界稳定的二方工具包。`,
+  },
+  {
+    code: '6.2.13',
+    level: 'REFERENCE',
+    category: '工程结构-二方库依赖',
+    title: `为避免应用二方库的依赖冲突问题，二方库发布者应当遵循以下原则： 1）`,
+    content: `为避免应用二方库的依赖冲突问题，二方库发布者应当遵循以下原则： 1） 。移除一切不必要的 API 和依赖，只包含 Service API、必要的领域模型对象、Utils 类、常量、枚举等。如果依赖其它二方库，尽量是 provided 引入，让二方库使用者去依赖具体版本号；无 log 具体实现，只依赖日志框架。 2） 。每个版本的变化应该被记录，二方库由谁维护，源码在哪里，都需要能方便查到。除非用户主动升级版本，否则公共二方库的行为不应该发生变化。`,
+  },
+  {
+    code: '6.3.1',
+    level: 'MANDATORY',
+    category: '工程结构-服务器',
+    title: `调用远程操作必须有超时设置`,
+    content: `调用远程操作必须有超时设置。
+
+说明：类似于 HttpClient 的超时设置需要自己明确去设置 Timeout。根据经验表明，无数次的故障都是因为没有设置超时时间。`,
+  },
+  {
+    code: '6.3.2',
+    level: 'RECOMMENDED',
+    category: '工程结构-服务器',
+    title: `客户端设置远程接口方法的具体超时时间（单位 ms），超时设置生效顺序一般为：1）客户端 Special Method；2）客户端接口级别；3）服务端 Speci`,
+    content: `客户端设置远程接口方法的具体超时时间（单位 ms），超时设置生效顺序一般为：1）客户端 Special Method；2）客户端接口级别；3）服务端 Special Method；4）服务端接口级别。`,
+  },
+  {
+    code: '6.3.3',
+    level: 'RECOMMENDED',
+    category: '工程结构-服务器',
+    title: `高并发服务器建议调小 TCP 协议的 time_wait 超时时间`,
+    content: `高并发服务器建议调小 TCP 协议的 time_wait 超时时间。
+
+说明：操作系统默认 240 秒后，才会关闭处于 time_wait 状态的连接，在高并发访问下，服务器端会因为处于 time_wait 的连接数太多，可能无法建立新的连接，所以需要在服务器上调小此等待值。`,
+    exampleGood: `在 linux 服务器上请通过变更/etc/sysctl.conf 文件去修改该缺省值（秒）：net.ipv4.tcp_fin_timeout=30`,
+  },
+  {
+    code: '6.3.4',
+    level: 'RECOMMENDED',
+    category: '工程结构-服务器',
+    title: `调大服务器所支持的最大文件句柄数（File Descriptor，简写为 fd）`,
+    content: `调大服务器所支持的最大文件句柄数（File Descriptor，简写为 fd）
+
+说明：主流操作系统的设计是将 TCP / UDP 连接采用与文件一样的方式去管理，即一个连接对应于一个 fd。主流的 linux 服务器默认所支持最大fd 数量为 1024，当并发连接数很大时很容易因为fd 不足而出现“open too many files”错误，导致新的连接无法建立。建议将 linux 服务器所支持的最大句柄数调高数倍（与服务器的内存数量相关）。`,
+  },
+  {
+    code: '6.3.5',
+    level: 'RECOMMENDED',
+    category: '工程结构-服务器',
+    title: `给 JVM 环境参数设置-XX：+HeapDumpOnOutOfMemoryError 参数，让 JVM 碰到 OOM 场景时输出 dump 信息`,
+    content: `给 JVM 环境参数设置-XX：+HeapDumpOnOutOfMemoryError 参数，让 JVM 碰到 OOM 场景时输出 dump 信息。
+
+说明：OOM 的发生是有概率的，甚至相隔数月才出现一例，出错时的堆内信息对解决问题非常有帮助。`,
+  },
+  {
+    code: '6.3.6',
+    level: 'RECOMMENDED',
+    category: '工程结构-服务器',
+    title: `在线上生产环境，JVM 的 Xms 和 Xmx 设置一样大小的内存容量，避免在 GC 后调整堆大小带来的压力`,
+    content: `在线上生产环境，JVM 的 Xms 和 Xmx 设置一样大小的内存容量，避免在 GC 后调整堆大小带来的压力。`,
+  },
+  {
+    code: '6.3.7',
+    level: 'RECOMMENDED',
+    category: '工程结构-服务器',
+    title: `了解每个服务大致的平均耗时，可以通过独立配置线程池，将较慢的服务与主线程池隔离开，免得不同服务的线程同归于尽`,
+    content: `了解每个服务大致的平均耗时，可以通过独立配置线程池，将较慢的服务与主线程池隔离开，免得不同服务的线程同归于尽。`,
+  },
+  {
+    code: '6.3.8',
+    level: 'REFERENCE',
+    category: '工程结构-服务器',
+    title: `服务器内部重定向必须使用 forward；外部部重定向地址必须使用 URL Broker 生成，否则因线上采用 HTTPS 协议而导致浏览器提示“不安全”`,
+    content: `服务器内部重定向必须使用 forward；外部部重定向地址必须使用 URL Broker 生成，否则因线上采用 HTTPS 协议而导致浏览器提示“不安全”。此外，还会带来 URL 维护不一致的问题。`,
+  },
+  {
+    code: '7.1',
+    level: 'MANDATORY',
+    category: '设计规约',
+    title: `存储方案和底层数据结构的设计获得评审一致通过，并沉淀成为文档`,
+    content: `存储方案和底层数据结构的设计获得评审一致通过，并沉淀成为文档。
+
+说明：有缺陷的底层数据结构容易导致系统风险上升，可扩展性下降，重构成本也会因历史数据迁移和系统平滑过渡而陡然增加，所以，存储方案和数据结构需要认真地进行设计和评审，生产环境提交执行后，需要进行 double check。`,
+    exampleGood: `评审内容包括存储介质选型、表结构设计能否满足技术方案、存取性能和存储空间能否满足业务发展、表或字段之间的辩证关系、字段名称、字段类型、索引等；数据结构变更（如在原有表中新增字段）也需要在评审通过后上线。`,
+  },
+  {
+    code: '7.2',
+    level: 'MANDATORY',
+    category: '设计规约',
+    title: `在需求分析阶段，如果与系统交互的 User 超过一类并且相关的 UseCase 超过 5 个，使用用例图来表达更加清晰的结构化需求`,
+    content: `在需求分析阶段，如果与系统交互的 User 超过一类并且相关的 UseCase 超过 5 个，使用用例图来表达更加清晰的结构化需求。`,
+  },
+  {
+    code: '7.3',
+    level: 'MANDATORY',
+    category: '设计规约',
+    title: `如果某个业务对象的状态超过 3 个，使用状态图来表达并且明确状态变化的各个触发条件`,
+    content: `如果某个业务对象的状态超过 3 个，使用状态图来表达并且明确状态变化的各个触发条件。
+
+说明：状态图的核心是对象状态，首先明确对象有多少种状态，然后明确两两状态之间是否存在直接转换关系，再明确触发状态转换的条件是什么。`,
+    exampleGood: `淘宝订单状态有已下单、待付款、已付款、待发货、已发货、已收货等。比如已下单与已收货这两种状态之间是不可能有直接转换关系的。`,
+  },
+  {
+    code: '7.4',
+    level: 'MANDATORY',
+    category: '设计规约',
+    title: `如果系统中某个功能的调用链路上的涉及对象超过 3 个，使用时序图来表达并且明确各调用环节的输入与输出`,
+    content: `如果系统中某个功能的调用链路上的涉及对象超过 3 个，使用时序图来表达并且明确各调用环节的输入与输出。
+
+说明：时序图反映了一系列对象间的交互与协作关系，清晰立体地反映系统的调用纵深链路。`,
+  },
+  {
+    code: '7.5',
+    level: 'MANDATORY',
+    category: '设计规约',
+    title: `如果系统中模型类超过 5 个，且存在复杂的依赖关系，使用类图来表达并且明确类之间的关系`,
+    content: `如果系统中模型类超过 5 个，且存在复杂的依赖关系，使用类图来表达并且明确类之间的关系。
+
+说明：类图像建筑领域的施工图，如果搭平房，可能不需要，但如果建造蚂蚁 Z 空间大楼，肯定需要详细的施工图。`,
+  },
+  {
+    code: '7.6',
+    level: 'MANDATORY',
+    category: '设计规约',
+    title: `如果系统中超过 2 个对象之间存在协作关系，并需要表示复杂的处理流程，使用活动图来表示`,
+    content: `如果系统中超过 2 个对象之间存在协作关系，并需要表示复杂的处理流程，使用活动图来表示。
+
+说明：活动图是流程图的扩展，增加了能够体现协作关系的对象泳道，支持表示并发等。`,
+  },
+  {
+    code: '7.7',
+    level: 'MANDATORY',
+    category: '设计规约',
+    title: `系统设计时要准确识别出弱依赖，并针对性地设计降级和应急预案，保证核心系统正常可用`,
+    content: `系统设计时要准确识别出弱依赖，并针对性地设计降级和应急预案，保证核心系统正常可用。
+
+说明：系统依赖的第三方服务被降级或屏蔽后，依然不会影响主干流程继续进行，仅影响信息展示、或消息通知等非关键功能，那么这些服务称为弱依赖。`,
+    exampleGood: `当系统弱依赖于多个外部服务时，如果下游服务耗时过长，则会严重影响当前调用者，必须采取相应降级措施，比如，当调用链路中某个下游服务调用的平均响应时间或错误率超过阈值时，系统自动进行降级或熔断操作，屏蔽弱依赖负面影响，保护当前系统主干功能可用。`,
+    exampleBad: `某个疫情相关的二维码出错：“服务器开了点小差，请稍后重试”，不可用时长持续很久，引起社会高度关注，原因可能为调用的外部依赖服务 RT 过高而导致系统假死，而在显示端没有做降级预案，只能直接抛错给用户。`,
+  },
+  {
+    code: '7.8',
+    level: 'RECOMMENDED',
+    category: '设计规约',
+    title: `系统架构设计时明确以下目标： ⚫ 确定系统边界`,
+    content: `系统架构设计时明确以下目标： ⚫ 确定系统边界。确定系统在技术层面上的做与不做。 ⚫ 确定系统内模块之间的关系。确定模块之间的依赖关系及模块的宏观输入与输出。 ⚫ 确定指导后续设计与演化的原则。使后续的子系统或模块设计在一个既定的框架内和技术方向上继续演化。 ⚫ 确定非功能性需求。非功能性需求是指安全性、可用性、可扩展性等。`,
+  },
+  {
+    code: '7.9',
+    level: 'RECOMMENDED',
+    category: '设计规约',
+    title: `需求分析与系统设计在考虑主干功能的同时，需要充分评估异常流程与业务边界`,
+    content: `需求分析与系统设计在考虑主干功能的同时，需要充分评估异常流程与业务边界。`,
+  },
+  {
+    code: '7.10',
+    level: 'RECOMMENDED',
+    category: '设计规约',
+    title: `类在设计与实现时要符合单一原则`,
+    content: `类在设计与实现时要符合单一原则。
+
+说明：单一原则最易理解却是最难实现的一条规则，随着系统演进，很多时候，忘记了类设计的初衷。`,
+  },
+  {
+    code: '7.11',
+    level: 'RECOMMENDED',
+    category: '设计规约',
+    title: `谨慎使用继承的方式来进行扩展，优先使用聚合/组合的方式来实现`,
+    content: `谨慎使用继承的方式来进行扩展，优先使用聚合/组合的方式来实现。
+
+说明：不得已使用继承的话，必须符合里氏代换原则，此原则说父类能够出现的地方子类一定能够出现，比如，“把钱交出来”，钱的子类美元、欧元、人民币等都可以出现。`,
+  },
+  {
+    code: '7.12',
+    level: 'RECOMMENDED',
+    category: '设计规约',
+    title: `系统设计阶段，根据依赖倒置原则，尽量依赖抽象类与接口，有利于扩展与维护`,
+    content: `系统设计阶段，根据依赖倒置原则，尽量依赖抽象类与接口，有利于扩展与维护。
+
+说明：低层次模块依赖于高层次模块的抽象，方便系统间的解耦。`,
+  },
+  {
+    code: '7.13',
+    level: 'RECOMMENDED',
+    category: '设计规约',
+    title: `系统设计阶段，注意对扩展开放，对修改闭合`,
+    content: `系统设计阶段，注意对扩展开放，对修改闭合。
+
+说明：极端情况下，交付的代码是不可修改的，同一业务域内的需求变化，通过模块或类的扩展来实现。`,
+  },
+  {
+    code: '7.14',
+    level: 'RECOMMENDED',
+    category: '设计规约',
+    title: `系统设计阶段，共性业务或公共行为抽取出来公共模块、公共配置、公共类、公共方法等，在系统中不出现重复代码的情况，即 DRY 原则（Don't Repeat Yourself）`,
+    content: `系统设计阶段，共性业务或公共行为抽取出来公共模块、公共配置、公共类、公共方法等，在系统中不出现重复代码的情况，即 DRY 原则（Don't Repeat Yourself）。
+
+说明：随着代码的重复次数不断增加，维护成本指数级上升。随意复制和粘贴代码，必然会导致代码的重复，在维护代码时，需要修改所有的副本，容易遗漏。必要时抽取共性方法，或者抽象公共类，甚至是组件化。`,
+    exampleGood: `一个类中有多个 public 方法，都需要进行数行相同的参数校验操作，这个时候请抽取： private boolean checkParam(DTO dto) {...}`,
+  },
+  {
+    code: '7.15',
+    level: 'RECOMMENDED',
+    category: '设计规约',
+    title: `避免如下误解：敏捷开发=讲故事+编码+发布`,
+    content: `避免如下误解：敏捷开发=讲故事+编码+发布。
+
+说明：敏捷开发是快速交付迭代可用的系统，省略多余的设计方案，摒弃传统的审批流程，但核心关键点上的必要设计和文档沉淀是需要的。`,
+    exampleBad: `某团队为了业务快速发展，敏捷成了产品经理催进度的借口，系统中均是勉强能运行但像面条一样的代码，可维护性和可扩展性极差，一年之后，不得不进行大规模重构，得不偿失。`,
+  },
+  {
+    code: '7.16',
+    level: 'REFERENCE',
+    category: '设计规约',
+    title: `设计文档的作用是明确需求、理顺逻辑、后期维护，次要目的用于指导编码`,
+    content: `设计文档的作用是明确需求、理顺逻辑、后期维护，次要目的用于指导编码。
+
+说明：避免为了设计而设计，系统设计文档有助于后期的系统维护和重构，所以设计结果需要进行分类归档保存。`,
+  },
+  {
+    code: '7.17',
+    level: 'REFERENCE',
+    category: '设计规约',
+    title: `可扩展性的本质是找到系统的变化点，并隔离变化点`,
+    content: `可扩展性的本质是找到系统的变化点，并隔离变化点。
+
+说明：世间众多设计模式其实就是一种设计模式即隔离变化点的模式。`,
+    exampleGood: `极致扩展性的标志，就是需求的新增，不会在原有代码交付物上进行任何形式的修改。`,
+  },
+  {
+    code: '7.18',
+    level: 'REFERENCE',
+    category: '设计规约',
+    title: `设计的本质就是识别和表达系统难点`,
+    content: `设计的本质就是识别和表达系统难点。
+
+说明：识别和表达完全是两回事，很多人错误地认为识别到系统难点在哪里，表达只是自然而然的事情，但是大家在设计评审中经常出现语焉不详，甚至是词不达意的情况。准确地表达系统难点需要具备如下能力：表达规则和表达工具的熟练性。抽象思维和总结能力的局限性。基础知识体系的完备性。深入浅出的生动表达力。`,
+  },
+  {
+    code: '7.19',
+    level: 'REFERENCE',
+    category: '设计规约',
+    title: `代码即文档的观点是错误的，清晰的代码只是文档的某个片断，而不是全部`,
+    content: `代码即文档的观点是错误的，清晰的代码只是文档的某个片断，而不是全部。
+
+说明：代码的深度调用，模块层面上的依赖关系网，业务场景逻辑，非功能性需求等问题要相应的文档来完整地呈现。`,
+  },
+  {
+    code: '7.20',
+    level: 'REFERENCE',
+    category: '设计规约',
+    title: `在做无障碍产品设计时，需要考虑到： ⚫ 所有可交互的控件元素必须能被 tab 键聚焦，并且焦点顺序需符合自然操作逻辑`,
+    content: `在做无障碍产品设计时，需要考虑到： ⚫ 所有可交互的控件元素必须能被 tab 键聚焦，并且焦点顺序需符合自然操作逻辑。 ⚫ 用于登录校验和请求拦截的验证码均需提供图形验证以外的其它方式。 ⚫ 自定义的控件类型需明确交互方式。`,
+    exampleGood: `登录场景中，输入框的按钮都需要考虑 tab 键聚焦，符合自然逻辑的操作顺序如下，"输入用户名，输入密码，输入验证码，点击登录"，其中验证码实现语音验证方式。如有自定义标签实现的控件设置控件类型可使用 role 属性。`,
+  },
 ]
-
-/** 用于规约库页面侧边栏：按类别分组的计数 */
-export function computeCategoryStats() {
-  const map = new Map<string, number>()
-  rules.forEach(r => map.set(r.category, (map.get(r.category) || 0) + 1))
-  return Array.from(map.entries()).map(([name, count]) => ({ name, count }))
-}
-
-/** 按大类聚合（用于左侧树形）*/
-export function groupByTopCategory() {
-  const groups = new Map<string, { name: string; children: Array<{ name: string; count: number }> }>()
-  rules.forEach(r => {
-    const [top, sub] = r.category.split('-')
-    if (!groups.has(top)) groups.set(top, { name: top, children: [] })
-    const g = groups.get(top)!
-    const subName = sub || top
-    const child = g.children.find(c => c.name === subName)
-    if (child) child.count++
-    else g.children.push({ name: subName, count: 1 })
-  })
-  return Array.from(groups.values())
-}
