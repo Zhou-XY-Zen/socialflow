@@ -113,41 +113,58 @@ def tail_flyway_log(ssh, lines=20):
     print(out or "  (无 Flyway 日志输出)")
 
 
+PID_FILE = f"{REMOTE_DIR}/.last-start.pid"
+
+
 def start_backend(ssh, profile="prod"):
     """启动后端并返回新进程 PID。
 
-    nohup + disown + </dev/null 仍不能让 paramiko channel 立刻关闭，因为 java
-    进程继承了 channel 的 stdout/stderr，paramiko 要等所有继承 fd 全部关闭才
-    认为 channel 结束。这里的策略：
-      1. 用 readline() 读一行（就是 echo $pid 的输出）再退出读循环
-      2. 若读超时（channel 仍 hang），用 pgrep 反查 PID
-      3. 整个过程不再让 run() 等 exit_status
+    paramiko 在 nohup java 场景下会 channel hang —— 即便用了 `< /dev/null`、
+    `disown`、`echo $!; exit`，只要 Python 侧尝试 read/readline，都会卡到 channel
+    最终关闭（而 java 进程继承了 channel 的 fd，channel 根本不会主动关）。
+
+    彻底方案：
+      1. 用 `transport.open_session()` 开独立 channel 发启动命令
+      2. 远端把 PID 写到文件 `{REMOTE_DIR}/.last-start.pid`
+      3. 发完命令 sleep 1.5s 让 shell 把 PID 写入文件
+      4. 直接 close 这个 channel —— 不 read 就不会 hang
+      5. 回到主 channel，用 `cat` 读 PID 文件；读不到再 pgrep 兜底
+
+    这样主 ssh 会话完全不受影响，后续的 wait_health / smoke_test 都能正常走。
     """
     start_cmd = (
         f"cd {REMOTE_DIR} && "
         f"SPRING_PROFILES_ACTIVE={profile} "
         f"nohup java -Xms512m -Xmx1536m "
         f"-jar socialflow.jar > {REMOTE_DIR}/logs/app.log 2>&1 < /dev/null & "
-        f"pid=$!; disown; echo $pid; exit"
+        f"echo $! > {PID_FILE}; disown"
     )
     print(f"$ {start_cmd}")
-    _, stdout, _ = ssh.exec_command(start_cmd, timeout=8)
-    stdout.channel.settimeout(8.0)
-    pid = ""
-    try:
-        line = stdout.readline()
-        pid = line.strip() if line else ""
-    except Exception:
-        pass  # 读超时忽略 —— 进程通常已起来，下面 pgrep 反查
 
-    if not pid or not pid.isdigit():
+    # 开独立 session channel 发命令，不读 stdout，立即关闭
+    transport = ssh.get_transport()
+    channel = transport.open_session()
+    try:
+        channel.exec_command(start_cmd)
+        # 给 shell 时间执行到 `echo $! > pid_file` 这一步
+        time.sleep(1.5)
+    finally:
+        try:
+            channel.close()
+        except Exception:
+            pass
+
+    # 在主 channel 上读 PID（此时 channel 已开新的 session，互不干扰）
+    out, _, _ = run(ssh, f"cat {PID_FILE} 2>/dev/null", silent=True)
+    pid = out.strip()
+    if not pid.isdigit():
         time.sleep(2)
-        out, _, _ = run(
+        out2, _, _ = run(
             ssh,
             "pgrep -f 'java.*socialflow.jar' | grep -v nacos | tail -1",
             silent=True,
         )
-        pid = out.strip()
+        pid = out2.strip()
     return pid or "unknown"
 
 
