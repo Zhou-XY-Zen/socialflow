@@ -2,9 +2,7 @@ package com.socialflow.service.codeanalysis.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.socialflow.common.enums.LlmProvider;
 import com.socialflow.common.exception.BusinessException;
 import com.socialflow.dao.mapper.RepoAnalysisFindingMapper;
 import com.socialflow.dao.mapper.RepoAnalysisMapper;
@@ -15,34 +13,41 @@ import com.socialflow.model.dto.SaveBookmarkDTO;
 import com.socialflow.model.entity.RepoAnalysis;
 import com.socialflow.model.entity.RepoAnalysisFinding;
 import com.socialflow.model.entity.RepoBookmark;
-import com.socialflow.model.vo.*;
-import com.socialflow.service.ai.llm.ChatMessage;
-import com.socialflow.service.ai.llm.LlmConfig;
-import com.socialflow.service.ai.llm.LlmResponse;
-import com.socialflow.service.ai.llm.LlmRouter;
+import com.socialflow.model.vo.AnalysisStatsVO;
+import com.socialflow.model.vo.CodeAnalysisVO;
+import com.socialflow.model.vo.CodeFindingVO;
+import com.socialflow.model.vo.LanguageStatVO;
+import com.socialflow.model.vo.RepoBookmarkVO;
+import com.socialflow.model.vo.RepoCommitVO;
 import com.socialflow.service.codeanalysis.CodeAnalysisService;
-import com.socialflow.service.codeanalysis.CodeReviewPrompts;
 import com.socialflow.service.codeanalysis.GitRepoService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.io.File;
 import java.time.LocalDateTime;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
+import java.util.UUID;
 
 /**
- * 代码分析门面实现 —— 把 Git 操作 + LLM 调用 + 持久化串起来。
+ * 代码分析门面实现 —— 负责：
+ *   1. 同步入口：triggerXxx 立即 INSERT 一条 PENDING 记录，委托给
+ *      {@link CodeAnalysisAsyncRunner} 真正异步执行，立即返回 analysisId。
+ *   2. 查询：getAnalysis / getByShareToken / history / dashboardStats。
+ *   3. 辅助：收藏 / 分享 token / finding 状态标注 / commit 列表。
  *
- * 每个 trigger 方法：
- *   1. 立即 INSERT 一条 PENDING 记录并返回 id（同步）
- *   2. @Async 启动真正分析任务：克隆 → 读上下文 → LLM → 解析 → UPDATE
- *   3. 失败时把 status 置 FAILED + errorMsg
- *
- * 轮询走 {@link #getAnalysis(Long, Long)} 即可。
+ * 【为什么把 @Async 拆到独立 bean？】
+ *   Spring 的 @Async 基于 AOP 代理实现。同类内部方法调用（this.foo()）不走代理，
+ *   导致 @Async 失效、在 HTTP 线程同步执行、前端 60s 超时。
+ *   {@link CodeAnalysisAsyncRunner} 作为独立 @Component 注入到这里，以"外部 bean
+ *   调用"的方式触发，Spring 代理才会拦截并切换到异步线程。
  */
 @Slf4j
 @Service
@@ -53,29 +58,9 @@ public class CodeAnalysisServiceImpl implements CodeAnalysisService {
     private final RepoAnalysisFindingMapper findingMapper;
     private final RepoBookmarkMapper bookmarkMapper;
     private final GitRepoService gitRepoService;
-    private final LlmRouter llmRouter;
+    /** 异步执行器（独立 bean，让 @Async 代理生效） */
+    private final CodeAnalysisAsyncRunner asyncRunner;
     private final ObjectMapper objectMapper = new ObjectMapper();
-
-    @Value("${socialflow.ai.system-api-key:}")
-    private String systemApiKey;
-
-    @Value("${socialflow.code-analysis.provider:DEEPSEEK}")
-    private String defaultProviderCode;
-
-    @Value("${socialflow.code-analysis.model:deepseek-chat}")
-    private String model;
-
-    @Value("${socialflow.code-analysis.temperature:0.3}")
-    private Double temperature;
-
-    /** diff 最大字节数（~40KB → ~10K tokens） */
-    private static final int MAX_DIFF_BYTES = 40 * 1024;
-
-    /** 关键文件总字节上限（~30KB） */
-    private static final int MAX_KEY_FILES_BYTES = 30 * 1024;
-
-    /** 目录树层数 */
-    private static final int TREE_DEPTH = 3;
 
     /** commit 列表默认条数 */
     private static final int DEFAULT_COMMIT_LIMIT = 50;
@@ -87,7 +72,7 @@ public class CodeAnalysisServiceImpl implements CodeAnalysisService {
         RepoAnalysis a = initRecord(userId, dto, "PROJECT_OVERVIEW");
         a.setBranch(dto.getBranch());
         analysisMapper.insert(a);
-        runProjectOverview(a.getId(), dto);
+        asyncRunner.runProjectOverview(a.getId(), dto);
         return a.getId();
     }
 
@@ -100,7 +85,7 @@ public class CodeAnalysisServiceImpl implements CodeAnalysisService {
         a.setCommitSha(dto.getCommitSha());
         a.setBranch(dto.getBranch());
         analysisMapper.insert(a);
-        runCommitReview(a.getId(), dto);
+        asyncRunner.runCommitReview(a.getId(), dto);
         return a.getId();
     }
 
@@ -113,7 +98,7 @@ public class CodeAnalysisServiceImpl implements CodeAnalysisService {
         a.setBaseRef(dto.getBaseRef());
         a.setHeadRef(dto.getHeadRef());
         analysisMapper.insert(a);
-        runDiffReview(a.getId(), dto);
+        asyncRunner.runDiffReview(a.getId(), dto);
         return a.getId();
     }
 
@@ -133,203 +118,12 @@ public class CodeAnalysisServiceImpl implements CodeAnalysisService {
         return a;
     }
 
-    // ================== 异步任务主体 ==================
-
-    @Async
-    protected void runProjectOverview(Long analysisId, AnalyzeRepoDTO dto) {
-        long start = System.currentTimeMillis();
-        File repo = null;
-        try {
-            updateProgress(analysisId, "CLONING", 10, "克隆仓库中...");
-            repo = gitRepoService.shallowClone(dto.getGitUrl(), dto.getBranch(),
-                    dto.getCloneDepth() != null ? dto.getCloneDepth() : 1);
-
-            updateProgress(analysisId, "SCANNING", 30, "扫描语言与目录结构...");
-            Map<String, Long> langs = gitRepoService.scanLanguageStats(repo, dto.getExcludeDirs());
-            String tree = gitRepoService.buildTreeView(repo, TREE_DEPTH, dto.getExcludeDirs());
-            String keyFiles = gitRepoService.readKeyFiles(repo, MAX_KEY_FILES_BYTES);
-
-            updateProgress(analysisId, "ANALYZING", 55, "调用 LLM 生成项目概览...");
-            String repoName = extractRepoName(dto.getGitUrl());
-            String langStatsText = formatLangStats(langs);
-            String prompt = CodeReviewPrompts.projectOverviewUser(repoName, tree, langStatsText, keyFiles);
-
-            LlmResponse resp = callLlm(CodeReviewPrompts.projectOverviewSystem(), prompt);
-
-            updateProgress(analysisId, "RENDERING", 85, "解析结果并入库...");
-            JsonNode root = parseJson(resp.getContent());
-
-            RepoAnalysis update = new RepoAnalysis();
-            update.setId(analysisId);
-            update.setStatus("SUCCESS");
-            update.setStage("DONE");
-            update.setProgressPercent(100);
-            update.setProgressMessage("分析完成");
-            update.setSummaryMd(getText(root, "summaryMd"));
-            update.setMermaidCode(getText(root, "mermaidCode"));
-            update.setTechStackJson(writeJson(root.get("techStack")));
-            update.setLanguageStatsJson(writeJson(computeLangStatsVO(langs)));
-            update.setDurationMs(System.currentTimeMillis() - start);
-            update.setLlmTokensUsed(safeTotal(resp));
-            analysisMapper.updateById(update);
-
-            log.info("[CodeAnalysis] projectOverview OK id={} duration={}ms",
-                    analysisId, update.getDurationMs());
-        } catch (Exception e) {
-            log.error("[CodeAnalysis] projectOverview FAILED id={}", analysisId, e);
-            markFailed(analysisId, e.getMessage());
-        } finally {
-            if (repo != null) gitRepoService.cleanup(repo);
-        }
-    }
-
-    @Async
-    protected void runCommitReview(Long analysisId, AnalyzeRepoDTO dto) {
-        long start = System.currentTimeMillis();
-        File repo = null;
-        try {
-            updateProgress(analysisId, "CLONING", 10, "克隆仓库中...");
-            int depth = dto.getCloneDepth() != null ? dto.getCloneDepth() : 50;
-            repo = gitRepoService.shallowClone(dto.getGitUrl(), dto.getBranch(), depth);
-
-            updateProgress(analysisId, "SCANNING", 30, "读取提交 diff...");
-            String diff = gitRepoService.readCommitDiff(repo, dto.getCommitSha(), MAX_DIFF_BYTES);
-
-            updateProgress(analysisId, "ANALYZING", 60, "调用 LLM 做阿里规约审查...");
-            String repoName = extractRepoName(dto.getGitUrl());
-            String userPrompt = CodeReviewPrompts.commitReviewUser(repoName, dto.getCommitSha(), diff);
-
-            LlmResponse resp = callLlm(CodeReviewPrompts.commitReviewSystem(), userPrompt);
-
-            updateProgress(analysisId, "RENDERING", 90, "解析 findings 并入库...");
-            persistReviewResult(analysisId, resp, start);
-            log.info("[CodeAnalysis] commitReview OK id={}", analysisId);
-        } catch (Exception e) {
-            log.error("[CodeAnalysis] commitReview FAILED id={}", analysisId, e);
-            markFailed(analysisId, e.getMessage());
-        } finally {
-            if (repo != null) gitRepoService.cleanup(repo);
-        }
-    }
-
-    @Async
-    protected void runDiffReview(Long analysisId, AnalyzeRepoDTO dto) {
-        long start = System.currentTimeMillis();
-        File repo = null;
-        try {
-            updateProgress(analysisId, "CLONING", 10, "克隆仓库中...");
-            repo = gitRepoService.shallowClone(dto.getGitUrl(), dto.getBranch(), 100);
-
-            updateProgress(analysisId, "SCANNING", 30, "读取 diff...");
-            String diff = gitRepoService.readDiff(repo, dto.getBaseRef(), dto.getHeadRef(), MAX_DIFF_BYTES);
-
-            updateProgress(analysisId, "ANALYZING", 60, "调用 LLM 做对比审查...");
-            String repoName = extractRepoName(dto.getGitUrl());
-            String userPrompt = CodeReviewPrompts.diffReviewUser(repoName,
-                    dto.getBaseRef(), dto.getHeadRef(), diff);
-
-            LlmResponse resp = callLlm(CodeReviewPrompts.diffReviewSystem(), userPrompt);
-
-            updateProgress(analysisId, "RENDERING", 90, "解析并入库...");
-            persistReviewResult(analysisId, resp, start);
-            log.info("[CodeAnalysis] diffReview OK id={}", analysisId);
-        } catch (Exception e) {
-            log.error("[CodeAnalysis] diffReview FAILED id={}", analysisId, e);
-            markFailed(analysisId, e.getMessage());
-        } finally {
-            if (repo != null) gitRepoService.cleanup(repo);
-        }
-    }
-
-    /** 把 LLM 返回 JSON 转成 RepoAnalysis + Finding 写库 */
-    private void persistReviewResult(Long analysisId, LlmResponse resp, long start) {
-        JsonNode root = parseJson(resp.getContent());
-
-        int high = 0, medium = 0, low = 0;
-        List<RepoAnalysisFinding> findings = new ArrayList<>();
-        JsonNode findingsNode = root.get("findings");
-        if (findingsNode != null && findingsNode.isArray()) {
-            for (JsonNode f : findingsNode) {
-                RepoAnalysisFinding fe = new RepoAnalysisFinding();
-                fe.setAnalysisId(analysisId);
-                fe.setLevel(upperOrDefault(getText(f, "level"), "LOW"));
-                fe.setCategory(getText(f, "category"));
-                fe.setTitle(truncate(getText(f, "title"), 255));
-                fe.setFile(getText(f, "file"));
-                fe.setLineRange(getText(f, "lineRange"));
-                fe.setDescription(getText(f, "description"));
-                fe.setSuggestion(getText(f, "suggestion"));
-                fe.setCodeSnippet(getText(f, "codeSnippet"));
-                fe.setRuleRef(getText(f, "ruleRef"));
-                fe.setStatus("UNRESOLVED");
-                findings.add(fe);
-                switch (fe.getLevel()) {
-                    case "HIGH" -> high++;
-                    case "MEDIUM" -> medium++;
-                    default -> low++;
-                }
-            }
-        }
-        for (RepoAnalysisFinding f : findings) findingMapper.insert(f);
-
-        Integer score = root.has("overallScore") && !root.get("overallScore").isNull()
-                ? root.get("overallScore").asInt()
-                : Math.max(0, 100 - high * 15 - medium * 5 - low);
-
-        RepoAnalysis upd = new RepoAnalysis();
-        upd.setId(analysisId);
-        upd.setStatus("SUCCESS");
-        upd.setStage("DONE");
-        upd.setProgressPercent(100);
-        upd.setProgressMessage("分析完成");
-        upd.setOverallScore(score);
-        upd.setHighCount(high);
-        upd.setMediumCount(medium);
-        upd.setLowCount(low);
-        upd.setSummaryMd(getText(root, "summaryMd"));
-        upd.setDurationMs(System.currentTimeMillis() - start);
-        upd.setLlmTokensUsed(safeTotal(resp));
-        analysisMapper.updateById(upd);
-    }
-
-    private LlmResponse callLlm(String systemPrompt, String userPrompt) {
-        List<ChatMessage> messages = new ArrayList<>();
-        messages.add(ChatMessage.system(systemPrompt));
-        messages.add(ChatMessage.user(userPrompt));
-        LlmConfig cfg = LlmConfig.builder()
-                .model(model)
-                .temperature(temperature)
-                .apiKey(systemApiKey)
-                .build();
-        return llmRouter.get(LlmProvider.valueOf(defaultProviderCode.toUpperCase()))
-                .chat(messages, cfg);
-    }
-
-    private void updateProgress(Long id, String stage, int percent, String msg) {
-        RepoAnalysis u = new RepoAnalysis();
-        u.setId(id);
-        u.setStatus("RUNNING");
-        u.setStage(stage);
-        u.setProgressPercent(percent);
-        u.setProgressMessage(msg);
-        analysisMapper.updateById(u);
-    }
-
-    private void markFailed(Long id, String err) {
-        RepoAnalysis u = new RepoAnalysis();
-        u.setId(id);
-        u.setStatus("FAILED");
-        u.setProgressPercent(100);
-        u.setErrorMsg(truncate(err, 1000));
-        analysisMapper.updateById(u);
-    }
-
     // ================== 查询 ==================
 
     @Override
     public CodeAnalysisVO getAnalysis(Long userId, Long analysisId) {
         RepoAnalysis a = analysisMapper.selectById(analysisId);
-        if (a == null || Boolean.TRUE.equals(a.getIsDeleted() != null && a.getIsDeleted() == 1)) {
+        if (a == null || (a.getIsDeleted() != null && a.getIsDeleted() == 1)) {
             throw new BusinessException("分析记录不存在");
         }
         if (userId != null && !userId.equals(a.getUserId())) {
@@ -419,8 +213,9 @@ public class CodeAnalysisServiceImpl implements CodeAnalysisService {
     public List<RepoCommitVO> listCommits(String gitUrl, String branch, Integer limit) {
         File repo = null;
         try {
-            repo = gitRepoService.shallowClone(gitUrl, branch, limit == null ? DEFAULT_COMMIT_LIMIT : limit);
-            return gitRepoService.listCommits(repo, limit == null ? DEFAULT_COMMIT_LIMIT : limit);
+            int n = limit == null ? DEFAULT_COMMIT_LIMIT : limit;
+            repo = gitRepoService.shallowClone(gitUrl, branch, n);
+            return gitRepoService.listCommits(repo, n);
         } finally {
             if (repo != null) gitRepoService.cleanup(repo);
         }
@@ -502,10 +297,9 @@ public class CodeAnalysisServiceImpl implements CodeAnalysisService {
         vo.setTopRepos(tops);
 
         // 分类分布：按 finding category 聚合
-        List<RepoAnalysisFinding> allFindings = findingMapper.selectList(
-                new LambdaQueryWrapper<RepoAnalysisFinding>()
-                        .in(all.size() > 0,
-                            RepoAnalysisFinding::getAnalysisId,
+        List<RepoAnalysisFinding> allFindings = all.isEmpty() ? List.of() :
+                findingMapper.selectList(new LambdaQueryWrapper<RepoAnalysisFinding>()
+                        .in(RepoAnalysisFinding::getAnalysisId,
                             all.stream().map(RepoAnalysis::getId).toList()));
         Map<String, Integer> catHit = new HashMap<>();
         for (RepoAnalysisFinding f : allFindings) {
@@ -572,12 +366,11 @@ public class CodeAnalysisServiceImpl implements CodeAnalysisService {
         bookmarkMapper.deleteById(bookmarkId);
     }
 
-    // ================== 工具方法 ==================
+    // ================== 工具方法（查询侧） ==================
 
     private CodeAnalysisVO toVo(RepoAnalysis a, boolean loadFindings) {
         CodeAnalysisVO v = new CodeAnalysisVO();
         BeanUtils.copyProperties(a, v);
-        // 反序列化技术栈 / 语言统计
         v.setTechStack(readJsonList(a.getTechStackJson(), String.class));
         v.setLanguageStats(readJsonList(a.getLanguageStatsJson(), LanguageStatVO.class));
         if (loadFindings && !"PROJECT_OVERVIEW".equals(a.getAnalysisType())) {
@@ -595,39 +388,6 @@ public class CodeAnalysisServiceImpl implements CodeAnalysisService {
         return v;
     }
 
-    private JsonNode parseJson(String content) {
-        if (content == null) throw new BusinessException("LLM 返回空");
-        String cleaned = stripCodeFence(content.trim());
-        try {
-            return objectMapper.readTree(cleaned);
-        } catch (Exception e) {
-            log.warn("[CodeAnalysis] JSON 解析失败，原始输出前 500 字：\n{}",
-                    cleaned.substring(0, Math.min(500, cleaned.length())));
-            throw new BusinessException("LLM 返回 JSON 解析失败: " + e.getMessage());
-        }
-    }
-
-    /** 去除 markdown 代码围栏 */
-    private static String stripCodeFence(String s) {
-        if (s.startsWith("```")) {
-            int firstNl = s.indexOf('\n');
-            int lastFence = s.lastIndexOf("```");
-            if (firstNl > 0 && lastFence > firstNl) {
-                return s.substring(firstNl + 1, lastFence).trim();
-            }
-        }
-        return s;
-    }
-
-    private String writeJson(Object obj) {
-        if (obj == null) return null;
-        try {
-            return objectMapper.writeValueAsString(obj);
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
     private <T> List<T> readJsonList(String json, Class<T> clazz) {
         if (json == null || json.isBlank()) return List.of();
         try {
@@ -636,59 +396,5 @@ public class CodeAnalysisServiceImpl implements CodeAnalysisService {
         } catch (Exception e) {
             return List.of();
         }
-    }
-
-    private String getText(JsonNode node, String field) {
-        if (node == null) return null;
-        JsonNode v = node.get(field);
-        return v == null || v.isNull() ? null : v.asText();
-    }
-
-    private String formatLangStats(Map<String, Long> langs) {
-        long sum = langs.values().stream().mapToLong(Long::longValue).sum();
-        if (sum == 0) return "(无可识别源文件)";
-        StringBuilder sb = new StringBuilder();
-        langs.entrySet().stream()
-                .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
-                .limit(8)
-                .forEach(e -> sb.append(String.format("- %s: %d 行 (%.1f%%)%n",
-                        e.getKey(), e.getValue(), e.getValue() * 100.0 / sum)));
-        return sb.toString();
-    }
-
-    private List<LanguageStatVO> computeLangStatsVO(Map<String, Long> langs) {
-        long sum = langs.values().stream().mapToLong(Long::longValue).sum();
-        if (sum == 0) return List.of();
-        List<LanguageStatVO> list = new ArrayList<>();
-        langs.entrySet().stream()
-                .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
-                .forEach(e -> list.add(new LanguageStatVO(e.getKey(), null,
-                        e.getValue(), e.getValue() * 100.0 / sum)));
-        return list;
-    }
-
-    private static String extractRepoName(String gitUrl) {
-        if (gitUrl == null) return "unknown";
-        String s = gitUrl;
-        if (s.endsWith(".git")) s = s.substring(0, s.length() - 4);
-        int i = s.lastIndexOf('/');
-        return i >= 0 ? s.substring(i + 1) : s;
-    }
-
-    private static String upperOrDefault(String s, String def) {
-        return s == null || s.isBlank() ? def : s.toUpperCase();
-    }
-
-    private static String truncate(String s, int len) {
-        if (s == null) return null;
-        return s.length() <= len ? s : s.substring(0, len);
-    }
-
-    private static Integer safeTotal(LlmResponse r) {
-        if (r == null) return null;
-        Integer prompt = r.getPromptTokens();
-        Integer completion = r.getCompletionTokens();
-        if (prompt == null && completion == null) return null;
-        return (prompt == null ? 0 : prompt) + (completion == null ? 0 : completion);
     }
 }
