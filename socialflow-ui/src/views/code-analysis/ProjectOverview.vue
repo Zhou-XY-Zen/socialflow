@@ -3,7 +3,7 @@
 -->
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, computed, reactive, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import MarkdownIt from 'markdown-it'
 import { codeAnalysisApi } from '@/api/codeAnalysis'
@@ -11,6 +11,7 @@ import { useMermaid } from '@/composables/useMermaid'
 import type { CodeAnalysis, RepoBookmark } from '@/types/codeAnalysis'
 
 const router = useRouter()
+const route = useRoute()
 const md = new MarkdownIt({ html: false, linkify: true, breaks: true })
 
 const form = reactive({
@@ -114,7 +115,13 @@ const topTechs = computed(() => current.value?.techStack?.slice(0, 8) || [])
 const totalLines = computed(() =>
   (current.value?.languageStats || []).reduce((a, b) => a + (b.totalLines || 0), 0))
 
-onMounted(loadBookmarks)
+onMounted(() => {
+  loadBookmarks()
+  // 从 URL 查询参数预填（来自凭证页 / 收藏页的"用此凭证/收藏分析"跳转）
+  const q = route.query
+  if (typeof q.git === 'string' && q.git) form.gitUrl = q.git
+  if (typeof q.branch === 'string' && q.branch) form.branch = q.branch
+})
 onUnmounted(stopPoll)
 </script>
 

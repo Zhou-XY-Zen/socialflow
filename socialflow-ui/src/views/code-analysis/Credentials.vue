@@ -7,10 +7,12 @@
 -->
 <script setup lang="ts">
 import { onMounted, ref, computed, reactive } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { codeAnalysisApi } from '@/api/codeAnalysis'
 import type { RepoAuthCredential } from '@/types/codeAnalysis'
 
+const router = useRouter()
 const list = ref<RepoAuthCredential[]>([])
 const loading = ref(false)
 const dialogVisible = ref(false)
@@ -24,6 +26,7 @@ const form = reactive<{
   authType: 'TOKEN' | 'PASSWORD'
   username: string
   token: string
+  defaultRepoUrl: string
   isDefault: number
 }>({
   nickname: '',
@@ -31,8 +34,22 @@ const form = reactive<{
   authType: 'TOKEN',
   username: '',
   token: '',
+  defaultRepoUrl: '',
   isDefault: 0,
 })
+
+/** host 输入变化时，如果"默认仓库 URL"为空，尝试用 host 补一个模板 */
+function onHostChange(h: string) {
+  if (!form.defaultRepoUrl && h) {
+    form.defaultRepoUrl = `https://${h}/your-org/your-repo.git`
+  }
+}
+
+/** 从 URL 智能推断 host 填充（粘贴常用 URL 时）*/
+function onRepoUrlPaste() {
+  const m = form.defaultRepoUrl.match(/^https?:\/\/([^\/]+)/i)
+  if (m && m[1] && !form.gitHost) form.gitHost = m[1]
+}
 
 const isEdit = computed(() => form.id != null)
 
@@ -69,6 +86,7 @@ function openAdd() {
   form.authType = 'TOKEN'
   form.username = ''
   form.token = ''
+  form.defaultRepoUrl = ''
   form.isDefault = 0
   showToken.value = false
   dialogVisible.value = true
@@ -81,9 +99,22 @@ function openEdit(c: RepoAuthCredential) {
   form.authType = (c.authType as 'TOKEN' | 'PASSWORD') || 'TOKEN'
   form.username = c.username
   form.token = ''  // 编辑时留空 = 不修改
+  form.defaultRepoUrl = c.defaultRepoUrl || ''
   form.isDefault = c.isDefault || 0
   showToken.value = false
   dialogVisible.value = true
+}
+
+/** 用此凭证直接去项目概览分析（预填仓库 URL）*/
+function analyzeWithCred(c: RepoAuthCredential) {
+  if (!c.defaultRepoUrl) {
+    ElMessage.info('该凭证未填"常用仓库 URL"，先点编辑填一下再来')
+    return
+  }
+  router.push({
+    path: '/code-analysis/project',
+    query: { git: c.defaultRepoUrl, branch: 'main' },
+  })
 }
 
 async function save() {
@@ -113,6 +144,7 @@ async function save() {
       authType: form.authType,
       username: form.username,
       token: form.token || undefined,  // 空串不传
+      defaultRepoUrl: form.defaultRepoUrl || undefined,
       isDefault: form.isDefault,
     })
     ElMessage.success(isEdit.value ? '已更新' : '已添加')
@@ -216,6 +248,14 @@ const statusMeta: Record<string, { label: string; color: string; icon: string }>
             <span class="k">{{ c.authType === 'PASSWORD' ? '🔒 密码' : '🔑 Token' }}</span>
             <span class="v mono">{{ c.tokenHint || '—' }}</span>
           </div>
+          <div v-if="c.defaultRepoUrl" class="card-row">
+            <span class="k">📦 仓库</span>
+            <span class="v mono repo-url" :title="c.defaultRepoUrl">{{ c.defaultRepoUrl }}</span>
+          </div>
+          <div v-else class="card-row">
+            <span class="k">📦 仓库</span>
+            <span class="v muted">未设置（建议编辑补填）</span>
+          </div>
           <div v-if="c.lastUsedAt" class="card-row"><span class="k">🕐 最近</span><span class="v">{{ new Date(c.lastUsedAt).toLocaleString('zh-CN') }}</span></div>
           <div v-if="c.testMessage" class="card-msg" :style="{ color: statusMeta[c.testStatus || 'UNKNOWN'].color }">
             {{ c.testMessage }}
@@ -223,6 +263,8 @@ const statusMeta: Record<string, { label: string; color: string; icon: string }>
         </div>
 
         <div class="card-actions">
+          <el-button v-if="c.defaultRepoUrl" size="small" type="success" plain
+                     @click="analyzeWithCred(c)">📖 用此凭证分析</el-button>
           <el-button size="small" :loading="testingId === c.id" @click="test(c)">🔄 测试</el-button>
           <el-button size="small" type="primary" plain @click="openEdit(c)">✏️ 编辑</el-button>
           <el-button size="small" type="danger" plain @click="remove(c)">🗑️ 删除</el-button>
@@ -239,11 +281,26 @@ const statusMeta: Record<string, { label: string; color: string; icon: string }>
 
         <el-form-item label="Git Host" required>
           <el-select v-model="form.gitHost" filterable allow-create default-first-option
-                     placeholder="选择或输入 host" style="width: 100%">
+                     placeholder="选择或输入 host" style="width: 100%"
+                     @change="onHostChange">
             <el-option v-for="h in COMMON_HOSTS" :key="h" :label="h" :value="h" />
           </el-select>
           <div class="form-hint">
             仅填 host（例：github.com / gitlab.company.com / 10.0.0.5:3000），不要带 https://
+          </div>
+        </el-form-item>
+
+        <el-form-item>
+          <template #label>
+            <span>常用仓库 URL <span class="optional">（可选，但<strong>强烈推荐</strong>填）</span></span>
+          </template>
+          <el-input v-model="form.defaultRepoUrl" @change="onRepoUrlPaste"
+                    placeholder="https://gitlab.company.com/team/backend.git" clearable />
+          <div class="form-hint">
+            💡 填这个字段后：<br>
+            ① 点「测试」按钮会真的 clone 这个仓库做<strong>精准验证</strong>（不只是测 host 可达）<br>
+            ② 凭证卡片会显示"此凭证用来克隆 xxx"，一目了然<br>
+            ③ 卡片上会出现「📖 用此凭证分析」按钮，一键跳到项目概览并自动填 URL
           </div>
         </el-form-item>
 
@@ -367,4 +424,7 @@ const statusMeta: Record<string, { label: string; color: string; icon: string }>
 .auth-tag { padding: 1px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
 .auth-tag.auth-token { background: #ede9fe; color: #6d28d9; }
 .auth-tag.auth-pwd   { background: #fef3c7; color: #b45309; }
+.optional { color: #9ca3af; font-weight: 400; font-size: 12px; }
+.repo-url { color: #0369a1 !important; font-size: 12px; }
+.muted    { color: #9ca3af; font-size: 12px; }
 </style>

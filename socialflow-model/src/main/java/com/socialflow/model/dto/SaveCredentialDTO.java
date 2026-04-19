@@ -39,6 +39,10 @@ public class SaveCredentialDTO implements Serializable {
     @Schema(description = "Token 或密码。编辑时留空代表不修改")
     private String token;
 
+    @Schema(description = "常用仓库完整 URL（可选）。用于精准测试连接 + 前端快速发起分析",
+            example = "https://gitlab.company.com/team/backend.git")
+    private String defaultRepoUrl;
+
     /** 同 host 下是否设为默认 */
     private Integer isDefault;
 }

@@ -142,6 +142,7 @@ export interface RepoAuthCredential {
   authType?: CredentialAuthType
   username: string
   tokenHint?: string        // TOKEN: ghp_****f8a；PASSWORD: ********
+  defaultRepoUrl?: string   // 常用仓库 URL，测试连接 + 快速分析用
   isDefault?: number        // 0 / 1
   testStatus?: 'UNKNOWN' | 'SUCCESS' | 'FAILED'
   testMessage?: string
@@ -156,6 +157,7 @@ export interface SaveCredentialDTO {
   authType?: CredentialAuthType
   username: string
   token?: string        // 编辑时留空 = 不改；新增必填（token 或 password）
+  defaultRepoUrl?: string
   isDefault?: number
 }
 

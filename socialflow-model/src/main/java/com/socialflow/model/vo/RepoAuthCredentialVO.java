@@ -29,6 +29,9 @@ public class RepoAuthCredentialVO implements Serializable {
     /** 掩码：ghp_****f8a；前端永远拿不到明文 */
     private String tokenHint;
 
+    /** 常用仓库 URL（可选） */
+    private String defaultRepoUrl;
+
     private Integer isDefault;
     private String testStatus;
     private String testMessage;

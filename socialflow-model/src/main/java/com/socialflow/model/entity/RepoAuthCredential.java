@@ -38,6 +38,9 @@ public class RepoAuthCredential extends BaseEntity {
     /** 展示用的掩码，如 ghp_****f8a */
     private String tokenHint;
 
+    /** 常用仓库 URL（可选）：测试连接用它做 ls-remote，前端快速触发分析也用它 */
+    private String defaultRepoUrl;
+
     /** 同一 host 下的默认凭证：0=非默认 / 1=默认 */
     private Integer isDefault;
 

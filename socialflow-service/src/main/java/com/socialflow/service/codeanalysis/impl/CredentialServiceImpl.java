@@ -79,6 +79,9 @@ public class CredentialServiceImpl implements CredentialService {
         }
         e.setAuthType(authType);
         e.setUsername(dto.getUsername());
+        // 常用仓库 URL（可选）
+        e.setDefaultRepoUrl(dto.getDefaultRepoUrl() != null && !dto.getDefaultRepoUrl().isBlank()
+                ? dto.getDefaultRepoUrl().trim() : null);
         if (dto.getToken() != null && !dto.getToken().isBlank()) {
             e.setTokenEncrypted(AesGcmUtil.encrypt(dto.getToken(), encryptionKey));
             e.setTokenHint(maskToken(dto.getToken(), authType));
@@ -120,32 +123,34 @@ public class CredentialServiceImpl implements CredentialService {
     public RepoAuthCredentialVO test(Long userId, Long id) {
         RepoAuthCredential e = getDecrypted(userId, id);
         String token = e.getTokenEncrypted();  // getDecrypted 已把 tokenEncrypted 替换成了明文
-        String host = e.getGitHost();
-        String testUrl = "https://" + host + "/";
+        // 优先用户填的"默认仓库 URL"（精准验证），否则退回 host root
+        boolean usingRealRepo = e.getDefaultRepoUrl() != null && !e.getDefaultRepoUrl().isBlank();
+        String testUrl = usingRealRepo ? e.getDefaultRepoUrl() : ("https://" + e.getGitHost() + "/");
         String resultStatus = "FAILED";
         String resultMsg;
         try {
-            // 用 ls-remote 小成本测 token 是否认证成功
-            // 这里对 host 做一次 ls-remote（无目标仓库时会 401/403，只判断是否能 auth）
-            // 实际更稳的做法：让用户在 test 时填一个测试 URL，此处简化为 host root
             Git.lsRemoteRepository()
                     .setRemote(testUrl)
                     .setCredentialsProvider(new UsernamePasswordCredentialsProvider(e.getUsername(), token))
                     .setTimeout(10)
                     .call();
             resultStatus = "SUCCESS";
-            resultMsg = "认证成功";
+            resultMsg = usingRealRepo
+                    ? "✅ 精准验证成功：凭证能访问 " + e.getDefaultRepoUrl()
+                    : "✅ Host 可达（建议填一个具体仓库 URL 做精准验证）";
         } catch (Exception ex) {
             String msg = ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage();
-            // 注意：很多 Git Host 的 root 不是有效 repo，会抛 not found 而非 auth failed
-            // not found / repository 类异常视为"凭证有效但路径不对" → 也算测通
             String lower = msg.toLowerCase();
-            if (lower.contains("not found") || lower.contains("not a git repository")
-                    || lower.contains("doesn't exist") || lower.contains("not authorized to access")) {
+            // 无默认仓库测 host root 时，not-found 代表"能到 host 但不是 git 服务"，视为可达
+            if (!usingRealRepo && (lower.contains("not found") || lower.contains("not a git repository")
+                    || lower.contains("doesn't exist") || lower.contains("not authorized to access"))) {
                 resultStatus = "SUCCESS";
-                resultMsg = "可访问该 host（需要具体仓库 URL 才能完整验证权限）";
-            } else if (lower.contains("auth") || lower.contains("401") || lower.contains("403")) {
-                resultMsg = "认证失败：用户名或 Token 不正确";
+                resultMsg = "Host 可达（建议填一个具体仓库 URL 做精准验证）";
+            } else if (lower.contains("auth") || lower.contains("401") || lower.contains("403")
+                    || lower.contains("unauthorized")) {
+                resultMsg = "认证失败：用户名或 Token/密码不正确";
+            } else if (lower.contains("not found") || lower.contains("doesn't exist")) {
+                resultMsg = "仓库不存在或你的账号无访问权限：" + truncate(msg, 140);
             } else {
                 resultMsg = "连接失败：" + truncate(msg, 180);
             }
