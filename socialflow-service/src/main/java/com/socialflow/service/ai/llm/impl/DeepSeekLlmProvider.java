@@ -99,7 +99,10 @@ public class DeepSeekLlmProvider implements LlmProviderService {
             int prompt = root.path("usage").path("prompt_tokens").asInt(0);
             int completion = root.path("usage").path("completion_tokens").asInt(0);
 
-            log.info("DeepSeek OK: model={}, latency={}ms, tokens={}", model, latency, prompt + completion);
+            // 按黄山版 2.3.2：每个占位符对应一个变量
+            int totalTokens = prompt + completion;
+            log.info("DeepSeek OK: model={}, latency={}ms, prompt={}, completion={}, total={}",
+                    model, latency, prompt, completion, totalTokens);
             return LlmResponse.builder()
                     .content(content)
                     .promptTokens(prompt)
@@ -157,6 +160,8 @@ public class DeepSeekLlmProvider implements LlmProviderService {
                         }
                         return content;
                     } catch (Exception e) {
+                        // 黄山版 2.2.2：catch 后记日志
+                        log.warn("[DeepSeek] 流式 chunk JSON 解析失败: {}", e.getMessage());
                         return "";
                     }
                 })

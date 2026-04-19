@@ -78,7 +78,7 @@ public class CodeAnalysisAsyncRunner {
     //   项目概览：分层递进全量分析
     // ============================================================
 
-    @Async
+    @Async("codeAnalysisExecutor")
     public void runProjectOverview(Long userId, Long analysisId, AnalyzeRepoDTO dto) {
         long start = System.currentTimeMillis();
         File repo = null;
@@ -205,7 +205,7 @@ public class CodeAnalysisAsyncRunner {
     //   提交审查：按文件分片
     // ============================================================
 
-    @Async
+    @Async("codeAnalysisExecutor")
     public void runCommitReview(Long userId, Long analysisId, AnalyzeRepoDTO dto) {
         long start = System.currentTimeMillis();
         File repo = null;
@@ -301,7 +301,7 @@ public class CodeAnalysisAsyncRunner {
     //   对比分析（DiffReview）：同提交审查，只是 diff 来源不同
     // ============================================================
 
-    @Async
+    @Async("codeAnalysisExecutor")
     public void runDiffReview(Long userId, Long analysisId, AnalyzeRepoDTO dto) {
         long start = System.currentTimeMillis();
         File repo = null;
@@ -599,8 +599,13 @@ public class CodeAnalysisAsyncRunner {
 
     private String writeJson(Object obj) {
         if (obj == null) return null;
-        try { return JsonUtil.mapper().writeValueAsString(obj); }
-        catch (Exception e) { return null; }
+        try {
+            return JsonUtil.mapper().writeValueAsString(obj);
+        } catch (Exception e) {
+            // 黄山版 2.2.2：catch 后至少记日志，避免静默失败
+            log.error("[CodeAnalysis] writeJson 序列化失败: {}", obj.getClass().getSimpleName(), e);
+            return null;
+        }
     }
 
     private String getText(JsonNode node, String field) {

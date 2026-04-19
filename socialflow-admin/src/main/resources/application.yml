@@ -30,8 +30,9 @@ spring:
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
     url: jdbc:mysql://${MYSQL_HOST:localhost}:3306/socialflow?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
-    username: root
-    password: ***REDACTED-DB-PASSWORD***
+    username: ${MYSQL_USER:root}
+    # 生产环境通过 systemd EnvironmentFile 或 docker -e 注入 MYSQL_PASSWORD；本地开发保留默认值
+    password: ${MYSQL_PASSWORD:***REDACTED-DB-PASSWORD***}
     hikari:
       maximum-pool-size: 20
       minimum-idle: 5
@@ -39,7 +40,7 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: 6379
-      password: ***REDACTED-DB-PASSWORD***
+      password: ${REDIS_PASSWORD:***REDACTED-DB-PASSWORD***}
       lettuce:
         pool:
           max-active: 16
@@ -142,8 +143,8 @@ socialflow:
     host: ${PG_HOST:localhost}
     port: 5432
     database: socialflow_vec
-    username: postgres
-    password: ***REDACTED-DB-PASSWORD***
+    username: ${PG_USER:postgres}
+    password: ${PG_PASSWORD:***REDACTED-DB-PASSWORD***}
     collection-prefix: sf_
   embedding:
     provider: api

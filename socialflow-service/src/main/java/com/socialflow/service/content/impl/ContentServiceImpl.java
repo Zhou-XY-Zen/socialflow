@@ -459,7 +459,8 @@ public class ContentServiceImpl implements ContentService {
             float[] vector = embeddingService.embed(text);
 
             // 第二步：在 content_vectors 集合中搜索相似向量（按 user_id 隔离数据）
-            Map<String, Object> filter = new HashMap<>();
+            // 黄山版 1.5.15：HashMap 创建时指定初始容量
+            Map<String, Object> filter = new HashMap<>(2);
             filter.put("user_id", userId);
             List<VectorStoreService.SearchHit> hits = vectorStoreService.search(
                     CommonConstants.VC_CONTENT_VECTORS, vector, filter, topK);
@@ -649,7 +650,8 @@ public class ContentServiceImpl implements ContentService {
      * @return 变量映射表
      */
     private Map<String, Object> buildVariablesMap(ContentGenerateDTO dto) {
-        Map<String, Object> vars = new HashMap<>();
+        // 黄山版 1.5.15：明确 6 个元素，指定容量 8 避免扩容
+        Map<String, Object> vars = new HashMap<>(8);
         vars.put("topic", dto.getTopic());
         vars.put("keywords", dto.getKeywords());
         vars.put("productInfo", dto.getProductInfo());
@@ -728,7 +730,8 @@ public class ContentServiceImpl implements ContentService {
         // 异步嵌入并存储内容向量到 content_vectors（事务外执行，失败不影响主流程）
         try {
             float[] contentVector = embeddingService.embed(cleanText);
-            Map<String, Object> vectorMeta = new HashMap<>();
+            // 黄山版 1.5.15：明确 4 个元素，指定容量 8
+            Map<String, Object> vectorMeta = new HashMap<>(8);
             vectorMeta.put("user_id", userId);
             vectorMeta.put("content_id", entity.getId());
             vectorMeta.put("platform", entity.getPlatform());

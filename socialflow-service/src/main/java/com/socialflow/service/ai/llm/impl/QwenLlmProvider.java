@@ -93,7 +93,10 @@ public class QwenLlmProvider implements LlmProviderService {
             int prompt = root.path("usage").path("prompt_tokens").asInt(0);
             int completion = root.path("usage").path("completion_tokens").asInt(0);
 
-            log.info("【Qwen 调用成功】模型={}, 耗时={}ms, tokens={}", model, latency, prompt + completion);
+            // 按黄山版 2.3.2：每个占位符对应一个变量，避免日志级别过滤时仍计算表达式
+            int totalTokens = prompt + completion;
+            log.info("【Qwen 调用成功】模型={}, 耗时={}ms, prompt={}, completion={}, total={}",
+                    model, latency, prompt, completion, totalTokens);
             return LlmResponse.builder()
                     .content(content)
                     .promptTokens(prompt)
@@ -140,6 +143,8 @@ public class QwenLlmProvider implements LlmProviderService {
                         JsonNode node = JsonUtil.mapper().readTree(line);
                         return node.path("choices").path(0).path("delta").path("content").asText("");
                     } catch (Exception e) {
+                        // 黄山版 2.2.2：catch 后记日志
+                        log.warn("[Qwen] 流式 chunk JSON 解析失败: {}", e.getMessage());
                         return "";
                     }
                 })

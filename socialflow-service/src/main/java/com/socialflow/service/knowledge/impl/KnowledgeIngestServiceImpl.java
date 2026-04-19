@@ -69,7 +69,7 @@ public class KnowledgeIngestServiceImpl implements KnowledgeIngestService {
      *
      * @param docId 要处理的文档记录 ID
      */
-    @Async
+    @Async("knowledgeIngestExecutor")
     @Override
     public void ingest(Long docId) {
         try {

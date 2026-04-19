@@ -119,7 +119,8 @@ public class RagPipelineServiceImpl implements RagPipelineService {
         // ============ 第 3 步：向量语义搜索 ============
         // 在向量数据库的 kb_chunks 集合中搜索与查询向量最相似的片段。
         // filter 参数确保只在指定知识库（kb_id）范围内搜索，实现数据隔离。
-        Map<String, Object> filter = new HashMap<>();
+        // 黄山版 1.5.15：HashMap 创建时指定初始容量，避免默认 16 导致的扩容浪费
+        Map<String, Object> filter = new HashMap<>(2);
         filter.put("kb_id", kbId);
         List<SearchHit> vectorHits = vectorStoreService.search(
                 CommonConstants.VC_KB_CHUNKS, vector, filter, defaultTopK);
@@ -160,10 +161,11 @@ public class RagPipelineServiceImpl implements RagPipelineService {
                     chunkScores.put(fused.get(si.index()).getId(), si.score());
                 }
             } else if (topK < fused.size()) {
-                finalChunks = fused.subList(0, topK);
+                // 黄山版 1.5.4：subList 返回的是视图，必须包装为独立 ArrayList 避免对原列表的修改影响
+                finalChunks = new ArrayList<>(fused.subList(0, topK));
             }
         } else if (topK < fused.size()) {
-            finalChunks = fused.subList(0, topK);
+            finalChunks = new ArrayList<>(fused.subList(0, topK));
         }
 
         // ============ 第 8 步：转换为 VO（带 snippet + score）============

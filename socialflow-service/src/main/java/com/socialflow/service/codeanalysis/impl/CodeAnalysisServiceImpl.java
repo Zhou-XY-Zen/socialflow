@@ -441,6 +441,9 @@ public class CodeAnalysisServiceImpl implements CodeAnalysisService {
             return JsonUtil.mapper().readValue(json,
                     JsonUtil.mapper().getTypeFactory().constructCollectionType(List.class, clazz));
         } catch (Exception e) {
+            // 黄山版 2.2.2：catch 后记日志
+            log.warn("[CodeAnalysis] readJsonList 失败, clazz={}, jsonPrefix={}",
+                    clazz.getSimpleName(), json.substring(0, Math.min(80, json.length())), e);
             return List.of();
         }
     }

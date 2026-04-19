@@ -22,7 +22,8 @@
             <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
                 <fileNamePattern>logs/${appName}.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
                 <maxFileSize>100MB</maxFileSize>
-                <maxHistory>30</maxHistory>
+                <!-- 黄山版 2.3.6：日志文件至少保留 15 天，避免磁盘占用过大 -->
+                <maxHistory>15</maxHistory>
                 <totalSizeCap>10GB</totalSizeCap>
             </rollingPolicy>
             <encoder>

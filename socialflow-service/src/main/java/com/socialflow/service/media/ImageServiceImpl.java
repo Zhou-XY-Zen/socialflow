@@ -52,6 +52,9 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class ImageServiceImpl implements ImageService {
 
+    /** 黄山版 1.2.1：缓存的 prompt 最大存储长度，超长截断 */
+    private static final int MAX_PROMPT_CACHE_LENGTH = 1000;
+
     private final MediaAssetMapper mediaAssetMapper;
     private final LlmRouter llmRouter;
     private final StorageService storageService;
@@ -497,8 +500,8 @@ public class ImageServiceImpl implements ImageService {
                 cache.setUserId(userId);
                 cache.setPromptHash(hash);
                 cache.setMediaIds(mediaIdsJson);
-                cache.setPrompt(prompt != null && prompt.length() > 1000
-                        ? prompt.substring(0, 1000) : prompt);
+                cache.setPrompt(prompt != null && prompt.length() > MAX_PROMPT_CACHE_LENGTH
+                        ? prompt.substring(0, MAX_PROMPT_CACHE_LENGTH) : prompt);
                 cache.setModel(model);
                 cache.setImageSize(size);
                 cache.setHitCount(0);
