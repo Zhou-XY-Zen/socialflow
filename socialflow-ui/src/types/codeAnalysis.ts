@@ -105,6 +105,29 @@ export interface AnalysisStats {
   dailyTrend: Array<{ date: string; count: number }>
   categoryStats: Array<{ category: string; count: number }>
   topRepos: Array<{ gitUrl: string; analyzeCount: number; lastScore?: number }>
+  // LLM Token 消耗（Wave 5.5 新增）
+  tokensMonthly?: number
+  tokensMonthlyPrompt?: number
+  tokensMonthlyCompletion?: number
+  llmCallsMonthly?: number
+  tokensPerAnalysisAvg?: number
+}
+
+/** LLM 调用日志（分析详情页里展开查看链路） */
+export interface LlmCallLog {
+  id: string
+  analysisId: string
+  stage: string
+  stageLabel?: string
+  provider: string
+  model: string
+  promptTokens?: number
+  completionTokens?: number
+  totalTokens?: number
+  latencyMs?: number
+  success: number            // 1 成功 / 0 失败
+  errorMsg?: string
+  createTime?: string
 }
 
 /** 请求 DTO */

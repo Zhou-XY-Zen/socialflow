@@ -10,6 +10,7 @@ import com.socialflow.model.dto.FindingStatusDTO;
 import com.socialflow.model.dto.SaveBookmarkDTO;
 import com.socialflow.model.vo.AnalysisStatsVO;
 import com.socialflow.model.vo.CodeAnalysisVO;
+import com.socialflow.model.vo.LlmCallLogVO;
 import com.socialflow.model.vo.RepoBookmarkVO;
 import com.socialflow.model.vo.RepoCommitVO;
 import com.socialflow.service.codeanalysis.CodeAnalysisService;
@@ -99,6 +100,13 @@ public class CodeAnalysisController {
     @GetMapping("/{id}")
     public R<CodeAnalysisVO> get(@PathVariable Long id) {
         return R.ok(codeAnalysisService.getAnalysis(StpUtil.getLoginIdAsLong(), id));
+    }
+
+    @Operation(summary = "查看某次分析的 LLM 调用链路（分模块/分文件）")
+    @SaCheckLogin
+    @GetMapping("/{id}/llm-calls")
+    public R<List<LlmCallLogVO>> llmCalls(@PathVariable Long id) {
+        return R.ok(codeAnalysisService.listLlmCalls(StpUtil.getLoginIdAsLong(), id));
     }
 
     // ---------- 历史记录 ----------

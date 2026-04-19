@@ -4,12 +4,14 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.socialflow.common.util.JsonUtil;
 import com.socialflow.common.exception.BusinessException;
+import com.socialflow.dao.mapper.LlmCallLogMapper;
 import com.socialflow.dao.mapper.RepoAnalysisFindingMapper;
 import com.socialflow.dao.mapper.RepoAnalysisMapper;
 import com.socialflow.dao.mapper.RepoBookmarkMapper;
 import com.socialflow.model.dto.AnalyzeRepoDTO;
 import com.socialflow.model.dto.FindingStatusDTO;
 import com.socialflow.model.dto.SaveBookmarkDTO;
+import com.socialflow.model.entity.LlmCallLog;
 import com.socialflow.model.entity.RepoAnalysis;
 import com.socialflow.model.entity.RepoAnalysisFinding;
 import com.socialflow.model.entity.RepoBookmark;
@@ -17,6 +19,7 @@ import com.socialflow.model.vo.AnalysisStatsVO;
 import com.socialflow.model.vo.CodeAnalysisVO;
 import com.socialflow.model.vo.CodeFindingVO;
 import com.socialflow.model.vo.LanguageStatVO;
+import com.socialflow.model.vo.LlmCallLogVO;
 import com.socialflow.model.vo.RepoBookmarkVO;
 import com.socialflow.model.vo.RepoCommitVO;
 import com.socialflow.service.codeanalysis.CodeAnalysisService;
@@ -57,6 +60,7 @@ public class CodeAnalysisServiceImpl implements CodeAnalysisService {
     private final RepoAnalysisMapper analysisMapper;
     private final RepoAnalysisFindingMapper findingMapper;
     private final RepoBookmarkMapper bookmarkMapper;
+    private final LlmCallLogMapper llmCallLogMapper;
     private final GitRepoService gitRepoService;
     /** 异步执行器（独立 bean，让 @Async 代理生效） */
     private final CodeAnalysisAsyncRunner asyncRunner;
@@ -318,7 +322,48 @@ public class CodeAnalysisServiceImpl implements CodeAnalysisService {
                 });
         vo.setCategoryStats(cats);
 
+        // ========== LLM Token 消耗聚合 ==========
+        LocalDateTime monthStart0 = LocalDateTime.now().withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0);
+        List<LlmCallLog> monthLogs = llmCallLogMapper.selectList(
+                new LambdaQueryWrapper<LlmCallLog>()
+                        .eq(LlmCallLog::getUserId, userId)
+                        .ge(LlmCallLog::getCreateTime, monthStart0));
+        long tokensMonthly = 0L, tokensPrompt = 0L, tokensCompletion = 0L;
+        for (LlmCallLog l : monthLogs) {
+            if (l.getTotalTokens() != null) tokensMonthly += l.getTotalTokens();
+            if (l.getPromptTokens() != null) tokensPrompt += l.getPromptTokens();
+            if (l.getCompletionTokens() != null) tokensCompletion += l.getCompletionTokens();
+        }
+        vo.setTokensMonthly(tokensMonthly);
+        vo.setTokensMonthlyPrompt(tokensPrompt);
+        vo.setTokensMonthlyCompletion(tokensCompletion);
+        vo.setLlmCallsMonthly(monthLogs.size());
+        // 本月成功 SUCCESS 的分析数（用来算平均每次 token）
+        long monthlySuccess = all.stream()
+                .filter(a -> "SUCCESS".equals(a.getStatus())
+                        && a.getCreateTime() != null && a.getCreateTime().isAfter(monthStart0))
+                .count();
+        vo.setTokensPerAnalysisAvg(monthlySuccess > 0 ? (int) (tokensMonthly / monthlySuccess) : 0);
+
         return vo;
+    }
+
+    @Override
+    public List<LlmCallLogVO> listLlmCalls(Long userId, Long analysisId) {
+        // 校验归属
+        RepoAnalysis a = analysisMapper.selectById(analysisId);
+        if (a == null || !a.getUserId().equals(userId)) {
+            throw new BusinessException("分析记录不存在");
+        }
+        List<LlmCallLog> logs = llmCallLogMapper.selectList(
+                new LambdaQueryWrapper<LlmCallLog>()
+                        .eq(LlmCallLog::getAnalysisId, analysisId)
+                        .orderByAsc(LlmCallLog::getCreateTime));
+        return logs.stream().map(l -> {
+            LlmCallLogVO v = new LlmCallLogVO();
+            BeanUtils.copyProperties(l, v);
+            return v;
+        }).toList();
     }
 
     // ================== 书签 ==================

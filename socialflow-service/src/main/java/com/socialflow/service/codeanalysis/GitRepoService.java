@@ -77,4 +77,41 @@ public interface GitRepoService {
      * 删除临时克隆目录。
      */
     void cleanup(File repoDir);
+
+    // ==================== 全量分析支持 ====================
+
+    /** 单个源文件（扫描时带原文） */
+    class SourceFile {
+        public String path;      // 相对仓库根的路径
+        public String content;   // 文件内容（可能已截断）
+        public int lines;
+        public SourceFile(String path, String content, int lines) {
+            this.path = path; this.content = content; this.lines = lines;
+        }
+    }
+
+    /**
+     * 扫描仓库，按"模块"分组返回所有源文件。
+     * 模块定义：仓库根下的一级目录名；非多模块仓库统一归 "ROOT"。
+     *
+     * @param perFileMaxBytes 单文件最大字节（超过截断保留头部）
+     */
+    java.util.Map<String, java.util.List<SourceFile>> scanSourcesByModule(
+            File repoDir, java.util.List<String> excludeDirs, int perFileMaxBytes);
+
+    /** 一个文件的 diff（不截断） */
+    class FileDiff {
+        public String file;
+        public String diff;
+        public int bytes;
+        public FileDiff(String file, String diff, int bytes) {
+            this.file = file; this.diff = diff; this.bytes = bytes;
+        }
+    }
+
+    /** 读取某次 commit 的 diff，按文件切分；每个文件单独一条，不截断 */
+    java.util.List<FileDiff> readCommitDiffByFile(File repoDir, String commitSha);
+
+    /** 两个 ref 之间的 diff 按文件切分 */
+    java.util.List<FileDiff> readDiffByFile(File repoDir, String baseRef, String headRef);
 }

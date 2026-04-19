@@ -219,4 +219,171 @@ public final class CodeReviewPrompts {
                 请按 system prompt 要求输出审查 JSON。
                 """.formatted(repoName, baseRef, headRef, diff);
     }
+
+    // ==================== 全量分析新增 prompt ====================
+
+    /** 模块摘要 system prompt：让 LLM 读一个模块的全部源码，产出该模块的职责说明 */
+    public static String moduleSummarySystem() {
+        return """
+                你是一位资深代码阅读者，擅长快速吸收一个模块的全部源码并浓缩出核心信息。
+                给你一个 Maven/Gradle 子模块里的全部源码（或若干目录下的文件集合），
+                请输出一份 Markdown 摘要，包含以下章节：
+
+                ## 模块职责
+                一句话 + 两三段说明这个模块在整个项目中承担什么角色。
+
+                ## 关键类清单
+                列出 5-10 个最重要的类/接口（包括 Controller、Service、Mapper、Entity 等），
+                每条给出"类名 → 一句话作用"。
+
+                ## 核心流程
+                如果模块里有明确的业务流程（比如文案生成/发布/知识库入库），
+                用序号 1, 2, 3 写出该流程的关键步骤和涉及的方法。
+
+                ## 对外依赖
+                该模块依赖了哪些外部东西：其他内部模块、外部 SDK（LLM / Redis / DB）、HTTP 客户端等。
+
+                ## 值得注意的细节
+                任何值得新人留意的：安全陷阱、并发注意点、特殊配置、已知 TODO 等。
+
+                必须紧凑：每部分 2-5 段，总长度 800-1500 字。不要输出任何 JSON 或 markdown 围栏。
+                """;
+    }
+
+    public static String moduleSummaryUser(String moduleName, String fileList, String sources) {
+        return """
+                模块名: %s
+
+                ## 文件清单
+                %s
+
+                ## 全部源码
+                ```
+                %s
+                ```
+
+                请按 system prompt 要求输出该模块的 Markdown 摘要。
+                """.formatted(moduleName, fileList, sources);
+    }
+
+    /** 最终项目全景 system prompt：在所有模块摘要到位后，产出项目级报告 */
+    public static String projectOverviewFinalSystem() {
+        return """
+                你是一位资深技术架构师，目标：为第一次接触该项目的新工程师写一份"项目全景"。
+                你已经看过了该项目每个模块的详细摘要（由你自己之前读全部源码产出）。
+                现在请综合所有摘要 + 技术栈 + 目录结构，输出 JSON（不要任何前后缀文字）：
+
+                {
+                  "projectName": "...",
+                  "oneLinePositioning": "一句话定位，不超过 40 字",
+                  "techStack": ["Java 21", "Spring Boot 3", ...],
+                  "summaryMd": "Markdown 长文，必须含这些章节：\\n## 项目定位\\n## 核心功能（列出 5-10 个能看到的能力）\\n## 技术选型（每一项说明"用什么 + 为什么"）\\n## 模块分层（基于摘要逐个介绍每个模块，每个模块 2-3 段）\\n## 典型数据流（至少画出 1-2 条端到端流程）\\n## 关键文件导读（列 10-20 个新人必读文件及路径 + 原因）\\n## 部署与运行\\n## 潜在改进 / 坑（从摘要里看到的可能问题）",
+                  "mermaidCode": "graph TD 或 sequenceDiagram 语法，30-80 行，画出模块依赖或核心数据流"
+                }
+
+                要求：summaryMd 至少 2000 字，基于你已经读过的每个模块的真实代码写，不要虚构。
+                """;
+    }
+
+    public static String projectOverviewFinalUser(String repoName, String treeView,
+                                                  String languageStats, String moduleSummariesJoined) {
+        return """
+                仓库: %s
+
+                ## 目录结构（节选）
+                ```
+                %s
+                ```
+
+                ## 语言统计
+                %s
+
+                ## 你已经产出的各模块摘要
+                %s
+
+                请按 system prompt 输出最终 JSON。
+                """.formatted(repoName, treeView, languageStats, moduleSummariesJoined);
+    }
+
+    /** 单文件 diff 审查 system prompt */
+    public static String fileReviewSystem() {
+        return ALIBABA_RULES + """
+
+                ---
+
+                你正在审查**一个文件**的改动。严格按《阿里巴巴 Java 开发手册》识别：
+                违反条款 + 安全隐患 + 代码坏味道。
+
+                输出 JSON（不要任何前后缀文字）：
+                {
+                  "findings": [
+                    {
+                      "level": "HIGH|MEDIUM|LOW",
+                      "category": "安全/并发/命名/SQL/异常/...",
+                      "title": "一句话概括",
+                      "file": "<就用我给你的文件路径>",
+                      "lineRange": "42-46",
+                      "description": "问题详细描述",
+                      "suggestion": "修复建议",
+                      "codeSnippet": "<原代码片段>",
+                      "ruleRef": "【强制】【安全规约】"
+                    }
+                  ]
+                }
+
+                findings 数量上限 15 条/文件，优先 HIGH/MEDIUM。
+                如该文件没有发现问题，返回 { "findings": [] }。
+                """;
+    }
+
+    public static String fileReviewUser(String repoName, String commitSha, String filePath, String fileDiff) {
+        return """
+                仓库: %s
+                提交: %s
+                文件: %s
+
+                本文件的完整 diff：
+                ```diff
+                %s
+                ```
+
+                请按 system prompt 返回 findings JSON。
+                """.formatted(repoName, commitSha, filePath, fileDiff);
+    }
+
+    /** 合并所有 findings 后做最终总结 system prompt */
+    public static String reviewMergeSystem() {
+        return """
+                你已经分别审查了本次提交改动的若干文件，并收到了所有文件的 findings 列表。
+                现在需要做最终归纳：
+
+                1. 给 overallScore（0-100）：100 - HIGH*15 - MEDIUM*5 - LOW*1，下限 0。
+                2. 写一段 summaryMd（Markdown）：
+                   ## 本次提交整体评价
+                   （2-4 段，说明这次提交干了什么、质量如何）
+
+                   ## 主要问题归纳
+                   （把 findings 按类别归类，指出最重要的 3-5 条）
+
+                   ## 改进建议
+                   （总体层面的建议，不仅限于 findings）
+
+                **不要**再额外添加新 findings，只归纳已有的。
+
+                输出 JSON（不要任何前后缀文字）：
+                { "overallScore": 85, "summaryMd": "..." }
+                """;
+    }
+
+    public static String reviewMergeUser(String repoName, String commitSha, String findingsJsonJoined) {
+        return """
+                仓库: %s
+                提交: %s
+
+                ## 所有文件审查得到的 findings（合并后）
+                %s
+
+                请按 system prompt 返回 { overallScore, summaryMd } JSON。
+                """.formatted(repoName, commitSha, findingsJsonJoined);
+    }
 }

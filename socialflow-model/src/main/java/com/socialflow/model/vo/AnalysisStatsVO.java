@@ -47,6 +47,23 @@ public class AnalysisStatsVO implements Serializable {
     /** 最常分析仓库 Top 5 */
     private List<RepoHot> topRepos;
 
+    // ========= LLM Token 消耗 =========
+
+    /** 本月总 token 消耗 */
+    private Long tokensMonthly;
+
+    /** 本月输入 token */
+    private Long tokensMonthlyPrompt;
+
+    /** 本月输出 token */
+    private Long tokensMonthlyCompletion;
+
+    /** 本月 LLM 调用次数 */
+    private Integer llmCallsMonthly;
+
+    /** 本月成功分析平均每次消耗的 token */
+    private Integer tokensPerAnalysisAvg;
+
     @Data
     public static class DailyPoint implements Serializable {
         @Serial private static final long serialVersionUID = 1L;

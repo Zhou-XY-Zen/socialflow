@@ -6,6 +6,7 @@ import com.socialflow.model.dto.FindingStatusDTO;
 import com.socialflow.model.dto.SaveBookmarkDTO;
 import com.socialflow.model.vo.AnalysisStatsVO;
 import com.socialflow.model.vo.CodeAnalysisVO;
+import com.socialflow.model.vo.LlmCallLogVO;
 import com.socialflow.model.vo.RepoBookmarkVO;
 import com.socialflow.model.vo.RepoCommitVO;
 
@@ -57,6 +58,9 @@ public interface CodeAnalysisService {
 
     /** 仪表盘聚合统计 */
     AnalysisStatsVO dashboardStats(Long userId);
+
+    /** 查某次分析的所有 LLM 调用日志（按时间升序） */
+    List<LlmCallLogVO> listLlmCalls(Long userId, Long analysisId);
 
     /* ------ 书签 ------ */
 

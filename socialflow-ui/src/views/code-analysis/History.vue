@@ -77,6 +77,14 @@ function fmtTime(s?: string) {
   if (!s) return ''
   return new Date(s).toLocaleString('zh-CN')
 }
+
+/** Token 数字格式化：123 / 12.3K / 1.23M */
+function fmtTokens(n?: number) {
+  if (n == null || n === 0) return '-'
+  if (n < 1000) return String(n)
+  if (n < 1_000_000) return (n / 1000).toFixed(1) + 'K'
+  return (n / 1_000_000).toFixed(2) + 'M'
+}
 </script>
 
 <template>
@@ -145,6 +153,15 @@ function fmtTime(s?: string) {
           </span>
         </template>
       </el-table-column>
+      <el-table-column label="Token" width="100" align="center">
+        <template #default="{ row }">
+          <span v-if="row.llmTokensUsed" class="token-chip"
+                :title="`${row.llmTokensUsed.toLocaleString()} tokens`">
+            🧮 {{ fmtTokens(row.llmTokensUsed) }}
+          </span>
+          <span v-else style="color: #9ca3af">-</span>
+        </template>
+      </el-table-column>
       <el-table-column label="时间" width="170" prop="createTime">
         <template #default="{ row }">
           <span style="color: #6b7280; font-size: 12px">{{ fmtTime(row.createTime) }}</span>
@@ -190,5 +207,15 @@ function fmtTime(s?: string) {
 .score-chip.s1 { background: #d1fae5; color: #059669; }
 .score-chip.s2 { background: #fef3c7; color: #b45309; }
 .score-chip.s3 { background: #fee2e2; color: #b91c1c; }
+.token-chip {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: #ecfeff;
+  color: #0e7490;
+  font-size: 12px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
 .pagination-bar { display: flex; justify-content: flex-end; margin-top: 16px; }
 </style>

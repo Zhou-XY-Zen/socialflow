@@ -11,6 +11,7 @@ import type {
   AnalyzeRepoDTO,
   CodeAnalysis,
   FindingStatusDTO,
+  LlmCallLog,
   RepoAuthCredential,
   RepoBookmark,
   RepoCommit,
@@ -50,6 +51,9 @@ export const codeAnalysisApi = {
 
   // 通用：查结果
   get: (id: Id) => get<CodeAnalysis>(`/code-analysis/${id}`),
+
+  // 查某次分析的 LLM 调用链路
+  llmCalls: (id: Id) => get<LlmCallLog[]>(`/code-analysis/${id}/llm-calls`),
 
   // 历史
   history: (params: { current?: number; size?: number; analysisType?: string; keyword?: string }) =>

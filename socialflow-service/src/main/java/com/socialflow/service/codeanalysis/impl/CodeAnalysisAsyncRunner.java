@@ -1,22 +1,26 @@
 package com.socialflow.service.codeanalysis.impl;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.socialflow.common.util.JsonUtil;
 import com.socialflow.common.enums.LlmProvider;
+import com.socialflow.common.util.JsonUtil;
+import com.socialflow.dao.mapper.LlmCallLogMapper;
 import com.socialflow.dao.mapper.RepoAnalysisFindingMapper;
 import com.socialflow.dao.mapper.RepoAnalysisMapper;
 import com.socialflow.model.dto.AnalyzeRepoDTO;
+import com.socialflow.model.entity.LlmCallLog;
 import com.socialflow.model.entity.RepoAnalysis;
 import com.socialflow.model.entity.RepoAnalysisFinding;
 import com.socialflow.model.entity.RepoAuthCredential;
-import com.socialflow.service.codeanalysis.CredentialService;
 import com.socialflow.model.vo.LanguageStatVO;
 import com.socialflow.service.ai.llm.ChatMessage;
 import com.socialflow.service.ai.llm.LlmConfig;
 import com.socialflow.service.ai.llm.LlmResponse;
 import com.socialflow.service.ai.llm.LlmRouter;
 import com.socialflow.service.codeanalysis.CodeReviewPrompts;
+import com.socialflow.service.codeanalysis.CredentialService;
 import com.socialflow.service.codeanalysis.GitRepoService;
+import com.socialflow.service.codeanalysis.GitRepoService.FileDiff;
+import com.socialflow.service.codeanalysis.GitRepoService.SourceFile;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -25,20 +29,18 @@ import org.springframework.stereotype.Component;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
- * 代码分析异步执行器 —— 专门承载 @Async 方法的独立 bean。
+ * 代码分析异步执行器（Wave 5.5 全量模式）。
  *
- * 【为什么单独一个类？】
- * Spring 的 @Async 通过 AOP 代理实现，同类内部方法调用（this.foo()）不会走代理，
- * 导致 @Async 失效，方法在调用方线程里同步执行。把 async 方法拆到独立 @Component
- * 让 {@link CodeAnalysisServiceImpl} 以外部调用的方式触发，代理才会生效。
- *
- * 【线程池】
- * 使用 Spring 默认的 SimpleAsyncTaskExecutor（每次新建线程）。生产环境如需限流
- * 或固定线程池，可在 @EnableAsync 上提供自定义 Executor Bean。
+ * 设计原则：
+ *   1. 项目概览：分层递进 —— 每个模块单独送 LLM 读全部源码 → 最后汇总项目全景
+ *   2. 提交审查：按文件分片 —— 每个文件的 diff 单独送 LLM 审查 → 最后合并归纳
+ *   3. 每次 LLM 调用独立落 llm_call_log，用于分析详情链路 + 仪表盘统计
+ *   4. 进度条粒度细化：显示"正在分析第 3/7 个模块：socialflow-service"
  */
 @Slf4j
 @Component
@@ -47,6 +49,7 @@ public class CodeAnalysisAsyncRunner {
 
     private final RepoAnalysisMapper analysisMapper;
     private final RepoAnalysisFindingMapper findingMapper;
+    private final LlmCallLogMapper llmCallLogMapper;
     private final GitRepoService gitRepoService;
     private final LlmRouter llmRouter;
     private final CredentialService credentialService;
@@ -63,33 +66,68 @@ public class CodeAnalysisAsyncRunner {
     @Value("${socialflow.code-analysis.temperature:0.3}")
     private Double temperature;
 
-    private static final int MAX_DIFF_BYTES = 40 * 1024;
-    private static final int MAX_KEY_FILES_BYTES = 30 * 1024;
+    /** 单文件源码截断上限（送 LLM 前），比较宽松 */
+    private static final int PER_SOURCE_FILE_BYTES = 30 * 1024;
+    /** 单模块源码汇总上限（送一次 LLM）——超过就继续按文件拆 */
+    private static final int PER_MODULE_BYTES = 80 * 1024;
+    /** 单个文件 diff 送 LLM 时的字节软上限，超过提示 AI 关注头部 */
+    private static final int PER_FILE_DIFF_HINT_BYTES = 60 * 1024;
     private static final int TREE_DEPTH = 3;
+
+    // ============================================================
+    //   项目概览：分层递进全量分析
+    // ============================================================
 
     @Async
     public void runProjectOverview(Long userId, Long analysisId, AnalyzeRepoDTO dto) {
         long start = System.currentTimeMillis();
         File repo = null;
         try {
-            updateProgress(analysisId, "CLONING", 10, "克隆仓库中...");
+            updateProgress(analysisId, "CLONING", 5, "克隆仓库中...");
             RepoAuthCredential cred = credentialService.resolveForUrl(userId, dto.getGitUrl()).orElse(null);
             repo = gitRepoService.shallowClone(dto.getGitUrl(), dto.getBranch(),
                     dto.getCloneDepth() != null ? dto.getCloneDepth() : 1, cred);
 
-            updateProgress(analysisId, "SCANNING", 30, "扫描语言与目录结构...");
+            updateProgress(analysisId, "SCANNING", 10, "扫描全部源文件...");
             Map<String, Long> langs = gitRepoService.scanLanguageStats(repo, dto.getExcludeDirs());
             String tree = gitRepoService.buildTreeView(repo, TREE_DEPTH, dto.getExcludeDirs());
-            String keyFiles = gitRepoService.readKeyFiles(repo, MAX_KEY_FILES_BYTES);
+            Map<String, List<SourceFile>> modules = gitRepoService.scanSourcesByModule(
+                    repo, dto.getExcludeDirs(), PER_SOURCE_FILE_BYTES);
 
-            updateProgress(analysisId, "ANALYZING", 55, "调用 LLM 生成项目概览...");
+            if (modules.isEmpty()) {
+                throw new RuntimeException("仓库内没识别到任何源文件（可能都被 excludeDirs 过滤了）");
+            }
+
             String repoName = extractRepoName(dto.getGitUrl());
+
+            // 逐模块生成摘要
+            List<String> moduleSummaries = new ArrayList<>();
+            int totalModules = modules.size();
+            int idx = 0;
+            for (Map.Entry<String, List<SourceFile>> entry : modules.entrySet()) {
+                idx++;
+                String moduleName = entry.getKey();
+                List<SourceFile> files = entry.getValue();
+
+                int pct = 15 + (int) Math.floor(idx * 65.0 / totalModules);  // 15% → 80%
+                updateProgress(analysisId, "MODULE_SUMMARY", pct,
+                        String.format("分析模块 %d/%d: %s (%d 个文件)", idx, totalModules, moduleName, files.size()));
+
+                String summary = summarizeOneModule(userId, analysisId, repoName, moduleName, files);
+                moduleSummaries.add("### " + moduleName + "\n" + summary);
+            }
+
+            // 最终汇总
+            updateProgress(analysisId, "FINAL", 85, "汇总所有模块摘要生成项目全景...");
             String langStatsText = formatLangStats(langs);
-            String prompt = CodeReviewPrompts.projectOverviewUser(repoName, tree, langStatsText, keyFiles);
+            String moduleSummariesJoined = String.join("\n\n---\n\n", moduleSummaries);
+            String userPrompt = CodeReviewPrompts.projectOverviewFinalUser(
+                    repoName, tree, langStatsText, moduleSummariesJoined);
+            LlmResponse resp = callLlm(
+                    userId, analysisId, "FINAL", "生成项目全景报告",
+                    CodeReviewPrompts.projectOverviewFinalSystem(), userPrompt);
 
-            LlmResponse resp = callLlm(CodeReviewPrompts.projectOverviewSystem(), prompt);
-
-            updateProgress(analysisId, "RENDERING", 85, "解析结果并入库...");
+            updateProgress(analysisId, "RENDERING", 95, "解析结果并入库...");
             JsonNode root = parseJson(resp.getContent());
 
             RepoAnalysis update = new RepoAnalysis();
@@ -103,11 +141,11 @@ public class CodeAnalysisAsyncRunner {
             update.setTechStackJson(writeJson(root.get("techStack")));
             update.setLanguageStatsJson(writeJson(computeLangStatsVO(langs)));
             update.setDurationMs(System.currentTimeMillis() - start);
-            update.setLlmTokensUsed(safeTotal(resp));
+            update.setLlmTokensUsed(sumTokens(analysisId));
             analysisMapper.updateById(update);
 
-            log.info("[CodeAnalysis] projectOverview OK id={} duration={}ms",
-                    analysisId, update.getDurationMs());
+            log.info("[CodeAnalysis] projectOverview OK id={} modules={} duration={}ms totalTokens={}",
+                    analysisId, totalModules, update.getDurationMs(), update.getLlmTokensUsed());
         } catch (Exception e) {
             log.error("[CodeAnalysis] projectOverview FAILED id={}", analysisId, e);
             markFailed(analysisId, e.getMessage());
@@ -116,28 +154,141 @@ public class CodeAnalysisAsyncRunner {
         }
     }
 
+    /** 为一个模块生成摘要：若该模块体积大，采用"分批读再合并摘要"的内部循环 */
+    private String summarizeOneModule(Long userId, Long analysisId, String repoName,
+                                      String moduleName, List<SourceFile> files) {
+        // 按字节分批：每批拼到 PER_MODULE_BYTES 就结束一批
+        List<List<SourceFile>> batches = new ArrayList<>();
+        List<SourceFile> current = new ArrayList<>();
+        int currentSize = 0;
+        for (SourceFile f : files) {
+            int sz = f.content.length() + f.path.length() + 50;
+            if (currentSize + sz > PER_MODULE_BYTES && !current.isEmpty()) {
+                batches.add(current);
+                current = new ArrayList<>();
+                currentSize = 0;
+            }
+            current.add(f);
+            currentSize += sz;
+        }
+        if (!current.isEmpty()) batches.add(current);
+
+        List<String> batchSummaries = new ArrayList<>();
+        for (int i = 0; i < batches.size(); i++) {
+            List<SourceFile> batch = batches.get(i);
+            String fileList = buildFileList(batch);
+            StringBuilder sources = new StringBuilder();
+            for (SourceFile f : batch) {
+                sources.append("\n\n// ========== ").append(f.path).append(" (")
+                       .append(f.lines).append(" lines) ==========\n")
+                       .append(f.content);
+            }
+            String stage = "MODULE_SUMMARY_" + safeStageSegment(moduleName)
+                    + (batches.size() > 1 ? "_p" + (i + 1) : "");
+            String label = batches.size() > 1
+                    ? String.format("模块 %s 分批摘要 %d/%d", moduleName, i + 1, batches.size())
+                    : String.format("模块 %s 摘要", moduleName);
+
+            String user = CodeReviewPrompts.moduleSummaryUser(moduleName, fileList, sources.toString());
+            LlmResponse resp = callLlm(userId, analysisId, stage, label,
+                    CodeReviewPrompts.moduleSummarySystem(), user);
+            batchSummaries.add(resp.getContent());
+        }
+        // 多批时直接拼接；单批直接用
+        return batchSummaries.size() == 1
+                ? batchSummaries.get(0)
+                : "（本模块内容分 " + batchSummaries.size() + " 批摘要）\n\n" +
+                  String.join("\n\n---\n\n", batchSummaries);
+    }
+
+    // ============================================================
+    //   提交审查：按文件分片
+    // ============================================================
+
     @Async
     public void runCommitReview(Long userId, Long analysisId, AnalyzeRepoDTO dto) {
         long start = System.currentTimeMillis();
         File repo = null;
         try {
-            updateProgress(analysisId, "CLONING", 10, "克隆仓库中...");
+            updateProgress(analysisId, "CLONING", 5, "克隆仓库中...");
             int depth = dto.getCloneDepth() != null ? dto.getCloneDepth() : 50;
             RepoAuthCredential cred = credentialService.resolveForUrl(userId, dto.getGitUrl()).orElse(null);
             repo = gitRepoService.shallowClone(dto.getGitUrl(), dto.getBranch(), depth, cred);
 
-            updateProgress(analysisId, "SCANNING", 30, "读取提交 diff...");
-            String diff = gitRepoService.readCommitDiff(repo, dto.getCommitSha(), MAX_DIFF_BYTES);
+            updateProgress(analysisId, "SCANNING", 10, "读取提交 diff 并按文件切分...");
+            List<FileDiff> diffs = gitRepoService.readCommitDiffByFile(repo, dto.getCommitSha());
+            if (diffs.isEmpty()) {
+                throw new RuntimeException("该提交没有任何文件变更");
+            }
 
-            updateProgress(analysisId, "ANALYZING", 60, "调用 LLM 做阿里规约审查...");
             String repoName = extractRepoName(dto.getGitUrl());
-            String userPrompt = CodeReviewPrompts.commitReviewUser(repoName, dto.getCommitSha(), diff);
+            int total = diffs.size();
+            List<RepoAnalysisFinding> allFindings = new ArrayList<>();
 
-            LlmResponse resp = callLlm(CodeReviewPrompts.commitReviewSystem(), userPrompt);
+            for (int i = 0; i < diffs.size(); i++) {
+                FileDiff fd = diffs.get(i);
+                int pct = 15 + (int) Math.floor((i + 1) * 65.0 / total);
+                updateProgress(analysisId, "FILE_REVIEW", pct,
+                        String.format("审查文件 %d/%d: %s (%d KB)",
+                                i + 1, total, fd.file, fd.bytes / 1024));
 
-            updateProgress(analysisId, "RENDERING", 90, "解析 findings 并入库...");
-            persistReviewResult(analysisId, resp, start);
-            log.info("[CodeAnalysis] commitReview OK id={}", analysisId);
+                String diffContent = fd.diff;
+                if (fd.bytes > PER_FILE_DIFF_HINT_BYTES) {
+                    // 单文件 diff 特别大时加个提示，但仍然全量送
+                    diffContent += "\n\n// 提示：此文件 diff 较大 (" + (fd.bytes / 1024) + " KB)，请 AI 关注主要模式";
+                }
+                String userPrompt = CodeReviewPrompts.fileReviewUser(
+                        repoName, dto.getCommitSha(), fd.file, diffContent);
+                String stage = "FILE_REVIEW_" + safeStageSegment(fd.file);
+                try {
+                    LlmResponse resp = callLlm(userId, analysisId, stage,
+                            "审查文件 " + fd.file,
+                            CodeReviewPrompts.fileReviewSystem(), userPrompt);
+                    List<RepoAnalysisFinding> parsed = parseFindings(analysisId, resp.getContent(), fd.file);
+                    allFindings.addAll(parsed);
+                } catch (Exception e) {
+                    log.warn("[CodeAnalysis] 审查文件 {} 失败: {}", fd.file, e.getMessage());
+                }
+            }
+
+            // 去重（同文件+同 title）
+            List<RepoAnalysisFinding> dedupFindings = dedupFindings(allFindings);
+            int high = (int) dedupFindings.stream().filter(f -> "HIGH".equals(f.getLevel())).count();
+            int med = (int) dedupFindings.stream().filter(f -> "MEDIUM".equals(f.getLevel())).count();
+            int low = dedupFindings.size() - high - med;
+
+            // 最终合并 + 总结
+            updateProgress(analysisId, "FINAL", 85, "合并所有文件审查结果 + 生成总结...");
+            String findingsJsonJoined = findingsAsBrief(dedupFindings);
+            String userPrompt = CodeReviewPrompts.reviewMergeUser(repoName, dto.getCommitSha(), findingsJsonJoined);
+            LlmResponse resp = callLlm(userId, analysisId, "FINAL", "合并总结",
+                    CodeReviewPrompts.reviewMergeSystem(), userPrompt);
+
+            JsonNode root = parseJson(resp.getContent());
+            Integer score = root.has("overallScore") && !root.get("overallScore").isNull()
+                    ? root.get("overallScore").asInt()
+                    : Math.max(0, 100 - high * 15 - med * 5 - low);
+
+            for (RepoAnalysisFinding f : dedupFindings) findingMapper.insert(f);
+
+            updateProgress(analysisId, "RENDERING", 95, "写入结果...");
+            RepoAnalysis upd = new RepoAnalysis();
+            upd.setId(analysisId);
+            upd.setStatus("SUCCESS");
+            upd.setStage("DONE");
+            upd.setProgressPercent(100);
+            upd.setProgressMessage("分析完成");
+            upd.setOverallScore(score);
+            upd.setHighCount(high);
+            upd.setMediumCount(med);
+            upd.setLowCount(low);
+            upd.setSummaryMd(getText(root, "summaryMd"));
+            upd.setDurationMs(System.currentTimeMillis() - start);
+            upd.setLlmTokensUsed(sumTokens(analysisId));
+            analysisMapper.updateById(upd);
+
+            log.info("[CodeAnalysis] commitReview OK id={} files={} findings={} score={} totalTokens={}",
+                    analysisId, total, dedupFindings.size(), score, upd.getLlmTokensUsed());
         } catch (Exception e) {
             log.error("[CodeAnalysis] commitReview FAILED id={}", analysisId, e);
             markFailed(analysisId, e.getMessage());
@@ -146,28 +297,86 @@ public class CodeAnalysisAsyncRunner {
         }
     }
 
+    // ============================================================
+    //   对比分析（DiffReview）：同提交审查，只是 diff 来源不同
+    // ============================================================
+
     @Async
     public void runDiffReview(Long userId, Long analysisId, AnalyzeRepoDTO dto) {
         long start = System.currentTimeMillis();
         File repo = null;
         try {
-            updateProgress(analysisId, "CLONING", 10, "克隆仓库中...");
+            updateProgress(analysisId, "CLONING", 5, "克隆仓库中...");
             RepoAuthCredential cred = credentialService.resolveForUrl(userId, dto.getGitUrl()).orElse(null);
             repo = gitRepoService.shallowClone(dto.getGitUrl(), dto.getBranch(), 100, cred);
 
-            updateProgress(analysisId, "SCANNING", 30, "读取 diff...");
-            String diff = gitRepoService.readDiff(repo, dto.getBaseRef(), dto.getHeadRef(), MAX_DIFF_BYTES);
+            updateProgress(analysisId, "SCANNING", 10, "读取 diff 并按文件切分...");
+            List<FileDiff> diffs = gitRepoService.readDiffByFile(repo, dto.getBaseRef(), dto.getHeadRef());
+            if (diffs.isEmpty()) {
+                throw new RuntimeException("两个 ref 之间没有文件变更");
+            }
 
-            updateProgress(analysisId, "ANALYZING", 60, "调用 LLM 做对比审查...");
             String repoName = extractRepoName(dto.getGitUrl());
-            String userPrompt = CodeReviewPrompts.diffReviewUser(repoName,
-                    dto.getBaseRef(), dto.getHeadRef(), diff);
+            int total = diffs.size();
+            List<RepoAnalysisFinding> allFindings = new ArrayList<>();
 
-            LlmResponse resp = callLlm(CodeReviewPrompts.diffReviewSystem(), userPrompt);
+            for (int i = 0; i < diffs.size(); i++) {
+                FileDiff fd = diffs.get(i);
+                int pct = 15 + (int) Math.floor((i + 1) * 65.0 / total);
+                updateProgress(analysisId, "FILE_REVIEW", pct,
+                        String.format("审查文件 %d/%d: %s (%d KB)",
+                                i + 1, total, fd.file, fd.bytes / 1024));
 
-            updateProgress(analysisId, "RENDERING", 90, "解析并入库...");
-            persistReviewResult(analysisId, resp, start);
-            log.info("[CodeAnalysis] diffReview OK id={}", analysisId);
+                String userPrompt = CodeReviewPrompts.fileReviewUser(
+                        repoName, dto.getBaseRef() + ".." + dto.getHeadRef(), fd.file, fd.diff);
+                String stage = "FILE_REVIEW_" + safeStageSegment(fd.file);
+                try {
+                    LlmResponse resp = callLlm(userId, analysisId, stage,
+                            "审查文件 " + fd.file,
+                            CodeReviewPrompts.fileReviewSystem(), userPrompt);
+                    allFindings.addAll(parseFindings(analysisId, resp.getContent(), fd.file));
+                } catch (Exception e) {
+                    log.warn("[CodeAnalysis] 审查文件 {} 失败: {}", fd.file, e.getMessage());
+                }
+            }
+
+            List<RepoAnalysisFinding> dedupFindings = dedupFindings(allFindings);
+            int high = (int) dedupFindings.stream().filter(f -> "HIGH".equals(f.getLevel())).count();
+            int med = (int) dedupFindings.stream().filter(f -> "MEDIUM".equals(f.getLevel())).count();
+            int low = dedupFindings.size() - high - med;
+
+            updateProgress(analysisId, "FINAL", 85, "合并并生成总结...");
+            String findingsJsonJoined = findingsAsBrief(dedupFindings);
+            String userPrompt = CodeReviewPrompts.reviewMergeUser(
+                    repoName, dto.getBaseRef() + ".." + dto.getHeadRef(), findingsJsonJoined);
+            LlmResponse resp = callLlm(userId, analysisId, "FINAL", "合并总结",
+                    CodeReviewPrompts.reviewMergeSystem(), userPrompt);
+
+            JsonNode root = parseJson(resp.getContent());
+            Integer score = root.has("overallScore") && !root.get("overallScore").isNull()
+                    ? root.get("overallScore").asInt()
+                    : Math.max(0, 100 - high * 15 - med * 5 - low);
+
+            for (RepoAnalysisFinding f : dedupFindings) findingMapper.insert(f);
+
+            updateProgress(analysisId, "RENDERING", 95, "写入结果...");
+            RepoAnalysis upd = new RepoAnalysis();
+            upd.setId(analysisId);
+            upd.setStatus("SUCCESS");
+            upd.setStage("DONE");
+            upd.setProgressPercent(100);
+            upd.setProgressMessage("分析完成");
+            upd.setOverallScore(score);
+            upd.setHighCount(high);
+            upd.setMediumCount(med);
+            upd.setLowCount(low);
+            upd.setSummaryMd(getText(root, "summaryMd"));
+            upd.setDurationMs(System.currentTimeMillis() - start);
+            upd.setLlmTokensUsed(sumTokens(analysisId));
+            analysisMapper.updateById(upd);
+
+            log.info("[CodeAnalysis] diffReview OK id={} files={} findings={}",
+                    analysisId, total, dedupFindings.size());
         } catch (Exception e) {
             log.error("[CodeAnalysis] diffReview FAILED id={}", analysisId, e);
             markFailed(analysisId, e.getMessage());
@@ -176,70 +385,73 @@ public class CodeAnalysisAsyncRunner {
         }
     }
 
-    // ================== 内部工具（供三个 @Async 方法共用） ==================
+    // ============================================================
+    //   LLM 调用封装 + 日志
+    // ============================================================
 
-    private void persistReviewResult(Long analysisId, LlmResponse resp, long start) {
-        JsonNode root = parseJson(resp.getContent());
-
-        int high = 0, medium = 0, low = 0;
-        List<RepoAnalysisFinding> findings = new ArrayList<>();
-        JsonNode findingsNode = root.get("findings");
-        if (findingsNode != null && findingsNode.isArray()) {
-            for (JsonNode f : findingsNode) {
-                RepoAnalysisFinding fe = new RepoAnalysisFinding();
-                fe.setAnalysisId(analysisId);
-                fe.setLevel(upperOrDefault(getText(f, "level"), "LOW"));
-                fe.setCategory(getText(f, "category"));
-                fe.setTitle(truncate(getText(f, "title"), 255));
-                fe.setFile(getText(f, "file"));
-                fe.setLineRange(getText(f, "lineRange"));
-                fe.setDescription(getText(f, "description"));
-                fe.setSuggestion(getText(f, "suggestion"));
-                fe.setCodeSnippet(getText(f, "codeSnippet"));
-                fe.setRuleRef(getText(f, "ruleRef"));
-                fe.setStatus("UNRESOLVED");
-                findings.add(fe);
-                switch (fe.getLevel()) {
-                    case "HIGH" -> high++;
-                    case "MEDIUM" -> medium++;
-                    default -> low++;
-                }
+    private LlmResponse callLlm(Long userId, Long analysisId, String stage, String label,
+                                String systemPrompt, String userPrompt) {
+        long t0 = System.currentTimeMillis();
+        LlmProvider providerEnum = LlmProvider.valueOf(defaultProviderCode.toUpperCase());
+        LlmResponse resp = null;
+        String errorMsg = null;
+        boolean success = false;
+        try {
+            List<ChatMessage> messages = new ArrayList<>();
+            messages.add(ChatMessage.system(systemPrompt));
+            messages.add(ChatMessage.user(userPrompt));
+            LlmConfig cfg = LlmConfig.builder()
+                    .model(model)
+                    .temperature(temperature)
+                    .apiKey(systemApiKey)
+                    .build();
+            resp = llmRouter.get(providerEnum).chat(messages, cfg);
+            success = true;
+            return resp;
+        } catch (Exception e) {
+            errorMsg = e.getMessage();
+            throw e;
+        } finally {
+            // 无论成功失败都记一条 log
+            LlmCallLog logEntry = new LlmCallLog();
+            logEntry.setAnalysisId(analysisId);
+            logEntry.setUserId(userId);
+            logEntry.setStage(stage);
+            logEntry.setStageLabel(label);
+            logEntry.setProvider(providerEnum.name());
+            logEntry.setModel(model);
+            if (resp != null) {
+                logEntry.setPromptTokens(resp.getPromptTokens());
+                logEntry.setCompletionTokens(resp.getCompletionTokens());
+                logEntry.setTotalTokens(safeTotal(resp));
+            } else {
+                logEntry.setPromptTokens(0);
+                logEntry.setCompletionTokens(0);
+                logEntry.setTotalTokens(0);
             }
+            logEntry.setLatencyMs(System.currentTimeMillis() - t0);
+            logEntry.setSuccess(success ? 1 : 0);
+            logEntry.setErrorMsg(truncate(errorMsg, 500));
+            try { llmCallLogMapper.insert(logEntry); }
+            catch (Exception ex) { log.warn("[LLM log] 写入失败: {}", ex.getMessage()); }
         }
-        for (RepoAnalysisFinding f : findings) findingMapper.insert(f);
-
-        Integer score = root.has("overallScore") && !root.get("overallScore").isNull()
-                ? root.get("overallScore").asInt()
-                : Math.max(0, 100 - high * 15 - medium * 5 - low);
-
-        RepoAnalysis upd = new RepoAnalysis();
-        upd.setId(analysisId);
-        upd.setStatus("SUCCESS");
-        upd.setStage("DONE");
-        upd.setProgressPercent(100);
-        upd.setProgressMessage("分析完成");
-        upd.setOverallScore(score);
-        upd.setHighCount(high);
-        upd.setMediumCount(medium);
-        upd.setLowCount(low);
-        upd.setSummaryMd(getText(root, "summaryMd"));
-        upd.setDurationMs(System.currentTimeMillis() - start);
-        upd.setLlmTokensUsed(safeTotal(resp));
-        analysisMapper.updateById(upd);
     }
 
-    private LlmResponse callLlm(String systemPrompt, String userPrompt) {
-        List<ChatMessage> messages = new ArrayList<>();
-        messages.add(ChatMessage.system(systemPrompt));
-        messages.add(ChatMessage.user(userPrompt));
-        LlmConfig cfg = LlmConfig.builder()
-                .model(model)
-                .temperature(temperature)
-                .apiKey(systemApiKey)
-                .build();
-        return llmRouter.get(LlmProvider.valueOf(defaultProviderCode.toUpperCase()))
-                .chat(messages, cfg);
+    /** 汇总某次分析的所有 LLM 调用 token（用于更新 RepoAnalysis.llmTokensUsed） */
+    private Integer sumTokens(Long analysisId) {
+        try {
+            List<LlmCallLog> logs = llmCallLogMapper.selectList(
+                    new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<LlmCallLog>()
+                            .eq(LlmCallLog::getAnalysisId, analysisId));
+            return logs.stream().mapToInt(l -> l.getTotalTokens() == null ? 0 : l.getTotalTokens()).sum();
+        } catch (Exception e) {
+            return 0;
+        }
     }
+
+    // ============================================================
+    //   辅助工具
+    // ============================================================
 
     private void updateProgress(Long id, String stage, int percent, String msg) {
         RepoAnalysis u = new RepoAnalysis();
@@ -257,6 +469,7 @@ public class CodeAnalysisAsyncRunner {
         u.setStatus("FAILED");
         u.setProgressPercent(100);
         u.setErrorMsg(truncate(err, 1000));
+        u.setLlmTokensUsed(sumTokens(id));
         analysisMapper.updateById(u);
     }
 
@@ -266,10 +479,73 @@ public class CodeAnalysisAsyncRunner {
         try {
             return JsonUtil.mapper().readTree(cleaned);
         } catch (Exception e) {
-            log.warn("[CodeAnalysis] JSON 解析失败，原始输出前 500 字：\n{}",
+            log.warn("[CodeAnalysis] JSON 解析失败，前 500 字：\n{}",
                     cleaned.substring(0, Math.min(500, cleaned.length())));
             throw new RuntimeException("LLM 返回 JSON 解析失败: " + e.getMessage());
         }
+    }
+
+    private List<RepoAnalysisFinding> parseFindings(Long analysisId, String content, String fallbackFile) {
+        try {
+            JsonNode root = parseJson(content);
+            JsonNode findingsNode = root.get("findings");
+            if (findingsNode == null || !findingsNode.isArray()) return List.of();
+            List<RepoAnalysisFinding> list = new ArrayList<>();
+            for (JsonNode f : findingsNode) {
+                RepoAnalysisFinding fe = new RepoAnalysisFinding();
+                fe.setAnalysisId(analysisId);
+                fe.setLevel(upperOrDefault(getText(f, "level"), "LOW"));
+                fe.setCategory(getText(f, "category"));
+                fe.setTitle(truncate(getText(f, "title"), 255));
+                String file = getText(f, "file");
+                fe.setFile(file != null && !file.isBlank() ? file : fallbackFile);
+                fe.setLineRange(getText(f, "lineRange"));
+                fe.setDescription(getText(f, "description"));
+                fe.setSuggestion(getText(f, "suggestion"));
+                fe.setCodeSnippet(getText(f, "codeSnippet"));
+                fe.setRuleRef(getText(f, "ruleRef"));
+                fe.setStatus("UNRESOLVED");
+                list.add(fe);
+            }
+            return list;
+        } catch (Exception e) {
+            log.warn("[CodeAnalysis] 解析 findings 失败: {}", e.getMessage());
+            return List.of();
+        }
+    }
+
+    private List<RepoAnalysisFinding> dedupFindings(List<RepoAnalysisFinding> all) {
+        Map<String, RepoAnalysisFinding> dedup = new LinkedHashMap<>();
+        for (RepoAnalysisFinding f : all) {
+            String key = (f.getFile() == null ? "" : f.getFile()) + "|"
+                    + (f.getLineRange() == null ? "" : f.getLineRange()) + "|"
+                    + (f.getTitle() == null ? "" : f.getTitle());
+            dedup.putIfAbsent(key, f);
+        }
+        return new ArrayList<>(dedup.values());
+    }
+
+    /** 把 findings 简要描述拼起来给最终 merge LLM 调用用 */
+    private String findingsAsBrief(List<RepoAnalysisFinding> findings) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < findings.size(); i++) {
+            RepoAnalysisFinding f = findings.get(i);
+            sb.append(String.format("[%d] %s | %s | %s:%s | %s%n",
+                    i + 1, f.getLevel(),
+                    f.getCategory() == null ? "-" : f.getCategory(),
+                    f.getFile() == null ? "-" : f.getFile(),
+                    f.getLineRange() == null ? "-" : f.getLineRange(),
+                    f.getTitle()));
+        }
+        return sb.toString();
+    }
+
+    private String buildFileList(List<SourceFile> files) {
+        StringBuilder sb = new StringBuilder();
+        for (SourceFile f : files) {
+            sb.append("- ").append(f.path).append(" (").append(f.lines).append(" lines)\n");
+        }
+        return sb.toString();
     }
 
     private static String stripCodeFence(String s) {
@@ -285,11 +561,8 @@ public class CodeAnalysisAsyncRunner {
 
     private String writeJson(Object obj) {
         if (obj == null) return null;
-        try {
-            return JsonUtil.mapper().writeValueAsString(obj);
-        } catch (Exception e) {
-            return null;
-        }
+        try { return JsonUtil.mapper().writeValueAsString(obj); }
+        catch (Exception e) { return null; }
     }
 
     private String getText(JsonNode node, String field) {
@@ -340,9 +613,16 @@ public class CodeAnalysisAsyncRunner {
 
     private static Integer safeTotal(LlmResponse r) {
         if (r == null) return null;
-        Integer prompt = r.getPromptTokens();
-        Integer completion = r.getCompletionTokens();
-        if (prompt == null && completion == null) return null;
-        return (prompt == null ? 0 : prompt) + (completion == null ? 0 : completion);
+        Integer p = r.getPromptTokens();
+        Integer c = r.getCompletionTokens();
+        if (p == null && c == null) return null;
+        return (p == null ? 0 : p) + (c == null ? 0 : c);
+    }
+
+    /** 把阶段标识里的特殊字符替换，保证 VARCHAR 64 装得下 */
+    private static String safeStageSegment(String raw) {
+        if (raw == null) return "unknown";
+        String s = raw.replaceAll("[^A-Za-z0-9\\-_.]", "_");
+        return s.length() > 40 ? s.substring(0, 40) : s;
     }
 }

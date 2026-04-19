@@ -77,6 +77,14 @@ function extractRepoName(url: string) {
   const i = u.lastIndexOf('/')
   return i >= 0 ? u.slice(i + 1) : u
 }
+
+/** 把 Token 数字格式化为 K / M 展示 */
+function fmtTokens(n?: number) {
+  if (n == null || n === 0) return '0'
+  if (n < 1000) return String(n)
+  if (n < 1_000_000) return (n / 1000).toFixed(1) + 'K'
+  return (n / 1_000_000).toFixed(2) + 'M'
+}
 </script>
 
 <template>
@@ -109,6 +117,13 @@ function extractRepoName(url: string) {
         <div class="m-body">
           <div class="m-value">{{ stats?.resolvedCount ?? 0 }}</div>
           <div class="m-label">已解决风险</div>
+        </div>
+      </div>
+      <div class="metric-card m-cyan" :title="`Prompt ${fmtTokens(stats?.tokensMonthlyPrompt)} · Completion ${fmtTokens(stats?.tokensMonthlyCompletion)}`">
+        <div class="m-icon">🧮</div>
+        <div class="m-body">
+          <div class="m-value">{{ fmtTokens(stats?.tokensMonthly) }}</div>
+          <div class="m-label">本月 Token 消耗（{{ stats?.llmCallsMonthly ?? 0 }} 次调用）</div>
         </div>
       </div>
     </div>
@@ -191,7 +206,13 @@ function extractRepoName(url: string) {
 .ca-dashboard { padding: 20px; }
 
 /* 指标卡 */
-.metric-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 20px; }
+.metric-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; margin-bottom: 20px; }
+@media (max-width: 1280px) {
+  .metric-row { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 720px) {
+  .metric-row { grid-template-columns: 1fr 1fr; }
+}
 .metric-card {
   background: #fff;
   border-radius: 12px;
@@ -210,6 +231,7 @@ function extractRepoName(url: string) {
 .metric-card.m-purple::before { background: linear-gradient(180deg, #8b5cf6, #6d28d9); }
 .metric-card.m-red::before    { background: linear-gradient(180deg, #ef4444, #b91c1c); }
 .metric-card.m-green::before  { background: linear-gradient(180deg, #10b981, #059669); }
+.metric-card.m-cyan::before   { background: linear-gradient(180deg, #06b6d4, #0891b2); }
 .m-icon { font-size: 36px; }
 .m-value { font-size: 28px; font-weight: 700; color: #111827; line-height: 1.2; }
 .m-label { color: #6b7280; font-size: 13px; margin-top: 4px; }

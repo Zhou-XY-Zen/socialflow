@@ -9,7 +9,7 @@ import { ElMessage } from 'element-plus'
 import MarkdownIt from 'markdown-it'
 import { codeAnalysisApi } from '@/api/codeAnalysis'
 import { useMermaid } from '@/composables/useMermaid'
-import type { CodeAnalysis, FindingLevel } from '@/types/codeAnalysis'
+import type { CodeAnalysis, FindingLevel, LlmCallLog } from '@/types/codeAnalysis'
 import ScoreGauge from '@/components/code-analysis/ScoreGauge.vue'
 import FindingCard from '@/components/code-analysis/FindingCard.vue'
 
@@ -21,6 +21,47 @@ const current = ref<CodeAnalysis>()
 const loading = ref(true)
 const filterLevel = ref<FindingLevel | 'ALL'>('ALL')
 let poller: number | null = null
+
+// LLM 调用链路
+const llmCalls = ref<LlmCallLog[]>([])
+const llmCallsExpanded = ref(false)
+const llmCallsLoaded = ref(false)
+
+async function toggleLlmCalls() {
+  if (llmCallsExpanded.value) {
+    llmCallsExpanded.value = false
+    return
+  }
+  llmCallsExpanded.value = true
+  if (!llmCallsLoaded.value && current.value) {
+    try {
+      llmCalls.value = await codeAnalysisApi.llmCalls(current.value.id)
+      llmCallsLoaded.value = true
+    } catch (e: any) {
+      ElMessage.error('加载 LLM 调用链路失败：' + (e?.message || ''))
+    }
+  }
+}
+
+const llmTotal = computed(() => {
+  const sum = llmCalls.value.reduce((acc, c) => acc + (c.totalTokens || 0), 0)
+  const prompt = llmCalls.value.reduce((acc, c) => acc + (c.promptTokens || 0), 0)
+  const completion = llmCalls.value.reduce((acc, c) => acc + (c.completionTokens || 0), 0)
+  return { sum, prompt, completion, count: llmCalls.value.length }
+})
+
+function fmtTokens(n?: number): string {
+  if (n == null) return '-'
+  if (n < 1000) return String(n)
+  if (n < 1000000) return (n / 1000).toFixed(1) + 'K'
+  return (n / 1000000).toFixed(2) + 'M'
+}
+
+function fmtLatency(ms?: number): string {
+  if (ms == null) return '-'
+  if (ms < 1000) return ms + ' ms'
+  return (ms / 1000).toFixed(1) + ' s'
+}
 
 async function load() {
   // route.params.id 已经是 string，切勿 Number() 转换（雪花 ID 会丢精度）
@@ -178,6 +219,63 @@ function exportMd() {
         <FindingCard v-for="f in filteredFindings" :key="f.id" :finding="f"
                      @updated="(u) => { const i = current!.findings!.findIndex(x => x.id === u.id); if (i >= 0) current!.findings![i] = u }" />
       </div>
+
+      <!-- LLM 调用详情 -->
+      <div class="content-card">
+        <div class="llm-header" @click="toggleLlmCalls">
+          <div class="card-title">🧮 LLM 调用详情
+            <span v-if="current.llmTokensUsed != null" class="llm-total-inline">
+              · 本次共 {{ fmtTokens(current.llmTokensUsed) }} tokens
+            </span>
+          </div>
+          <el-icon class="llm-arrow" :class="{ expanded: llmCallsExpanded }"><ArrowDown /></el-icon>
+        </div>
+
+        <div v-if="llmCallsExpanded" class="llm-body">
+          <div v-if="!llmCallsLoaded" class="llm-loading">加载中...</div>
+          <template v-else>
+            <div class="llm-summary-row">
+              <div class="llm-sum-card"><span>调用次数</span><strong>{{ llmTotal.count }}</strong></div>
+              <div class="llm-sum-card"><span>输入 Tokens</span><strong>{{ fmtTokens(llmTotal.prompt) }}</strong></div>
+              <div class="llm-sum-card"><span>输出 Tokens</span><strong>{{ fmtTokens(llmTotal.completion) }}</strong></div>
+              <div class="llm-sum-card"><span>合计 Tokens</span><strong>{{ fmtTokens(llmTotal.sum) }}</strong></div>
+            </div>
+
+            <table class="llm-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>阶段</th>
+                  <th>模型</th>
+                  <th>状态</th>
+                  <th>输入</th>
+                  <th>输出</th>
+                  <th>合计</th>
+                  <th>耗时</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(l, idx) in llmCalls" :key="l.id" :class="{ 'row-fail': !l.success }">
+                  <td class="c-idx">{{ idx + 1 }}</td>
+                  <td class="c-stage">
+                    <div class="stage-label">{{ l.stageLabel || l.stage }}</div>
+                    <div class="stage-code">{{ l.stage }}</div>
+                  </td>
+                  <td class="c-model">{{ l.provider }} / {{ l.model }}</td>
+                  <td>
+                    <span v-if="l.success" class="tag tag-ok">✓</span>
+                    <span v-else class="tag tag-fail" :title="l.errorMsg">✗</span>
+                  </td>
+                  <td class="c-num">{{ fmtTokens(l.promptTokens) }}</td>
+                  <td class="c-num">{{ fmtTokens(l.completionTokens) }}</td>
+                  <td class="c-num c-total">{{ fmtTokens(l.totalTokens) }}</td>
+                  <td class="c-num">{{ fmtLatency(l.latencyMs) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </template>
+        </div>
+      </div>
     </template>
   </div>
 </template>
@@ -230,4 +328,33 @@ function exportMd() {
 .mermaid-svg { display: flex; justify-content: center; overflow-x: auto; }
 .mermaid-svg :deep(svg) { max-width: 100%; height: auto; }
 .mermaid-error { background: #fef2f2; color: #b91c1c; padding: 10px; border-radius: 6px; font-size: 13px; }
+
+/* LLM 调用详情 */
+.llm-header { display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; }
+.llm-total-inline { color: #6b7280; font-weight: 400; font-size: 13px; margin-left: 6px; }
+.llm-arrow { color: #9ca3af; transition: transform 0.2s; }
+.llm-arrow.expanded { transform: rotate(180deg); }
+.llm-body { margin-top: 14px; }
+.llm-loading { text-align: center; padding: 20px; color: #9ca3af; }
+
+.llm-summary-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
+.llm-sum-card { background: #f9fafb; border-radius: 8px; padding: 12px 14px; }
+.llm-sum-card span { display: block; font-size: 12px; color: #6b7280; margin-bottom: 4px; }
+.llm-sum-card strong { font-size: 18px; color: #111827; font-weight: 700; }
+
+.llm-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.llm-table thead th { text-align: left; padding: 8px 10px; background: #f3f4f6; color: #374151; font-weight: 600; border-bottom: 1px solid #e5e7eb; }
+.llm-table tbody td { padding: 8px 10px; border-bottom: 1px solid #f3f4f6; vertical-align: top; }
+.llm-table tbody tr:hover { background: #f9fafb; }
+.llm-table .c-idx { color: #9ca3af; font-family: monospace; width: 32px; }
+.llm-table .c-stage { min-width: 200px; }
+.llm-table .stage-label { color: #111827; font-weight: 500; }
+.llm-table .stage-code { color: #9ca3af; font-size: 11px; font-family: 'SF Mono', Menlo, monospace; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; max-width: 240px; white-space: nowrap; }
+.llm-table .c-model { color: #6b7280; font-family: 'SF Mono', Menlo, monospace; font-size: 11px; }
+.llm-table .c-num { text-align: right; font-variant-numeric: tabular-nums; }
+.llm-table .c-total { font-weight: 600; color: #6d28d9; }
+.llm-table .row-fail { background: #fef2f2; }
+.tag { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+.tag-ok { background: #d1fae5; color: #059669; }
+.tag-fail { background: #fee2e2; color: #dc2626; cursor: help; }
 </style>

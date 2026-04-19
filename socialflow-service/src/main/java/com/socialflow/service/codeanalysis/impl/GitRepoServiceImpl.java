@@ -459,4 +459,113 @@ public class GitRepoServiceImpl implements GitRepoService {
             return 0L;
         }
     }
+
+    // ==================== 全量分析实现 ====================
+
+    @Override
+    public Map<String, List<SourceFile>> scanSourcesByModule(File repoDir, List<String> excludeDirs, int perFileMaxBytes) {
+        Set<String> excludes = merge(excludeDirs);
+        Map<String, List<SourceFile>> result = new LinkedHashMap<>();
+        Path root = repoDir.toPath();
+        try (Stream<Path> stream = Files.walk(root)) {
+            stream.filter(Files::isRegularFile)
+                    .filter(p -> !isExcluded(root, p, excludes))
+                    .filter(p -> {
+                        String ext = extOf(p.getFileName().toString());
+                        return LANG_BY_EXT.containsKey(ext);
+                    })
+                    .sorted()
+                    .forEach(p -> {
+                        Path rel = root.relativize(p);
+                        String moduleName = rel.getNameCount() > 1 ? rel.getName(0).toString() : "ROOT";
+                        byte[] bytes;
+                        try {
+                            bytes = Files.readAllBytes(p);
+                        } catch (IOException e) { return; }
+                        // 按字节截断保留头部，保留完整行结尾
+                        String content;
+                        if (bytes.length <= perFileMaxBytes) {
+                            content = new String(bytes, StandardCharsets.UTF_8);
+                        } else {
+                            content = new String(bytes, 0, perFileMaxBytes, StandardCharsets.UTF_8)
+                                    + "\n// ... [文件被截断，原大小 " + bytes.length + " 字节] ...";
+                        }
+                        int lines = (int) safeCountLines(p);
+                        result.computeIfAbsent(moduleName, k -> new ArrayList<>())
+                              .add(new SourceFile(rel.toString().replace('\\', '/'), content, lines));
+                    });
+        } catch (IOException e) {
+            log.warn("[Git] scanSourcesByModule failed: {}", e.getMessage());
+        }
+        return result;
+    }
+
+    @Override
+    public List<FileDiff> readCommitDiffByFile(File repoDir, String commitSha) {
+        try (Git git = Git.open(repoDir)) {
+            Repository repo = git.getRepository();
+            ObjectId target = repo.resolve(commitSha);
+            if (target == null) throw new BusinessException("commitSha 无法解析: " + commitSha);
+            try (RevWalk walk = new RevWalk(repo)) {
+                RevCommit commit = walk.parseCommit(target);
+                RevCommit parent = commit.getParentCount() > 0
+                        ? walk.parseCommit(commit.getParent(0).getId()) : null;
+                return formatDiffByFile(repo, parent, commit);
+            }
+        } catch (Exception e) {
+            throw new BusinessException("读取 commit diff 失败: " + e.getMessage());
+        }
+    }
+
+    @Override
+    public List<FileDiff> readDiffByFile(File repoDir, String baseRef, String headRef) {
+        try (Git git = Git.open(repoDir)) {
+            Repository repo = git.getRepository();
+            ObjectId base = repo.resolve(baseRef);
+            ObjectId head = repo.resolve(headRef);
+            if (base == null || head == null) {
+                throw new BusinessException("ref 无法解析: " + baseRef + " / " + headRef);
+            }
+            try (RevWalk walk = new RevWalk(repo)) {
+                return formatDiffByFile(repo, walk.parseCommit(base), walk.parseCommit(head));
+            }
+        } catch (Exception e) {
+            throw new BusinessException("读取 diff 失败: " + e.getMessage());
+        }
+    }
+
+    /** 把 diff 按文件切分，每个文件一条 FileDiff，不截断 */
+    private List<FileDiff> formatDiffByFile(Repository repo, RevCommit base, RevCommit head) throws IOException {
+        List<FileDiff> result = new ArrayList<>();
+        List<DiffEntry> entries;
+        // scan 一次 DiffEntry 列表
+        try (DiffFormatter scanner = new DiffFormatter(ByteArrayOutputStream.nullOutputStream())) {
+            scanner.setRepository(repo);
+            scanner.setDetectRenames(true);
+            if (base == null) {
+                try (RevWalk walk = new RevWalk(repo)) {
+                    CanonicalTreeParser emptyTree = new CanonicalTreeParser();
+                    CanonicalTreeParser newTree = new CanonicalTreeParser();
+                    newTree.reset(repo.newObjectReader(), head.getTree());
+                    entries = scanner.scan(emptyTree, newTree);
+                }
+            } else {
+                entries = scanner.scan(base.getTree(), head.getTree());
+            }
+        }
+        // 对每个 DiffEntry 单独格式化
+        for (DiffEntry e : entries) {
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            try (DiffFormatter df = new DiffFormatter(out)) {
+                df.setRepository(repo);
+                df.setDetectRenames(true);
+                df.format(e);
+            }
+            byte[] bytes = out.toByteArray();
+            String path = e.getNewPath() != null && !"/dev/null".equals(e.getNewPath())
+                    ? e.getNewPath() : e.getOldPath();
+            result.add(new FileDiff(path, new String(bytes, StandardCharsets.UTF_8), bytes.length));
+        }
+        return result;
+    }
 }
