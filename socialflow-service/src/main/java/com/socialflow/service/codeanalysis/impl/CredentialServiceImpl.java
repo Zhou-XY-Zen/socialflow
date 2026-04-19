@@ -5,9 +5,13 @@ import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.socialflow.common.exception.BusinessException;
 import com.socialflow.common.util.AesGcmUtil;
 import com.socialflow.dao.mapper.RepoAuthCredentialMapper;
+import com.socialflow.dao.mapper.RepoCredentialProjectMapper;
 import com.socialflow.model.dto.SaveCredentialDTO;
+import com.socialflow.model.dto.SaveCredentialProjectDTO;
 import com.socialflow.model.entity.RepoAuthCredential;
+import com.socialflow.model.entity.RepoCredentialProject;
 import com.socialflow.model.vo.RepoAuthCredentialVO;
+import com.socialflow.model.vo.RepoCredentialProjectVO;
 import com.socialflow.service.codeanalysis.CredentialService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -38,6 +42,7 @@ import java.util.Optional;
 public class CredentialServiceImpl implements CredentialService {
 
     private final RepoAuthCredentialMapper credentialMapper;
+    private final RepoCredentialProjectMapper projectMapper;
 
     @Value("${socialflow.ai.encryption-key:***REDACTED-EXAMPLE-AES-KEY***}")
     private String encryptionKey;
@@ -270,5 +275,77 @@ public class CredentialServiceImpl implements CredentialService {
 
     private static String truncate(String s, int len) {
         return s == null || s.length() <= len ? s : s.substring(0, len);
+    }
+
+    // ==================== 子级：凭证下的仓库项目 ====================
+
+    @Override
+    public List<RepoCredentialProjectVO> listProjects(Long userId, Long credentialId) {
+        ensureOwnership(userId, credentialId);
+        List<RepoCredentialProject> rows = projectMapper.selectList(
+                new LambdaQueryWrapper<RepoCredentialProject>()
+                        .eq(RepoCredentialProject::getCredentialId, credentialId)
+                        .orderByDesc(RepoCredentialProject::getLastUsedAt)
+                        .orderByDesc(RepoCredentialProject::getCreateTime));
+        return rows.stream().map(this::toProjectVo).toList();
+    }
+
+    @Override
+    public RepoCredentialProjectVO saveProject(Long userId, Long credentialId, SaveCredentialProjectDTO dto) {
+        ensureOwnership(userId, credentialId);
+        RepoCredentialProject p;
+        if (dto.getId() != null) {
+            p = projectMapper.selectById(dto.getId());
+            if (p == null || !p.getCredentialId().equals(credentialId)) {
+                throw new BusinessException("项目不存在或不属于该凭证");
+            }
+        } else {
+            p = new RepoCredentialProject();
+            p.setCredentialId(credentialId);
+        }
+        String nickname = dto.getNickname();
+        if (nickname == null || nickname.isBlank()) {
+            nickname = repoNameFromUrl(dto.getGitUrl());
+        }
+        p.setNickname(nickname);
+        p.setGitUrl(dto.getGitUrl().trim());
+        p.setBranch(dto.getBranch() != null && !dto.getBranch().isBlank() ? dto.getBranch().trim() : "main");
+
+        if (dto.getId() != null) projectMapper.updateById(p);
+        else projectMapper.insert(p);
+
+        return toProjectVo(projectMapper.selectById(p.getId()));
+    }
+
+    @Override
+    public void deleteProject(Long userId, Long projectId) {
+        RepoCredentialProject p = projectMapper.selectById(projectId);
+        if (p == null) return;
+        ensureOwnership(userId, p.getCredentialId());
+        projectMapper.deleteById(projectId);
+    }
+
+    private void ensureOwnership(Long userId, Long credentialId) {
+        RepoAuthCredential c = credentialMapper.selectById(credentialId);
+        if (c == null || !c.getUserId().equals(userId)) {
+            throw new BusinessException("凭证不存在");
+        }
+    }
+
+    private RepoCredentialProjectVO toProjectVo(RepoCredentialProject p) {
+        RepoCredentialProjectVO v = new RepoCredentialProjectVO();
+        org.springframework.beans.BeanUtils.copyProperties(p, v);
+        return v;
+    }
+
+    /** 从 URL 末尾提取仓库名：https://github.com/user/repo.git → repo */
+    private static String repoNameFromUrl(String url) {
+        if (url == null) return "";
+        String s = url.trim();
+        if (s.endsWith(".git")) s = s.substring(0, s.length() - 4);
+        int slash = s.lastIndexOf('/');
+        int colon = s.lastIndexOf(':');  // git@github.com:user/repo 形式
+        int cut = Math.max(slash, colon);
+        return cut >= 0 && cut + 1 < s.length() ? s.substring(cut + 1) : s;
     }
 }

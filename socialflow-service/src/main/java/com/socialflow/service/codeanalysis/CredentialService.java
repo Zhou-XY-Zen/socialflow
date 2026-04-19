@@ -1,8 +1,10 @@
 package com.socialflow.service.codeanalysis;
 
 import com.socialflow.model.dto.SaveCredentialDTO;
+import com.socialflow.model.dto.SaveCredentialProjectDTO;
 import com.socialflow.model.entity.RepoAuthCredential;
 import com.socialflow.model.vo.RepoAuthCredentialVO;
+import com.socialflow.model.vo.RepoCredentialProjectVO;
 
 import java.util.List;
 import java.util.Optional;
@@ -40,4 +42,14 @@ public interface CredentialService {
 
     /** 根据 id 取凭证（含解密后 token），校验归属 */
     RepoAuthCredential getDecrypted(Long userId, Long id);
+
+    // ==================== 子级：凭证下的仓库项目 ====================
+
+    /** 列出某凭证下所有仓库 */
+    List<RepoCredentialProjectVO> listProjects(Long userId, Long credentialId);
+
+    /** 在某凭证下新增/更新仓库 */
+    RepoCredentialProjectVO saveProject(Long userId, Long credentialId, SaveCredentialProjectDTO dto);
+
+    void deleteProject(Long userId, Long projectId);
 }

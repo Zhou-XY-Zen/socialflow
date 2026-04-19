@@ -8,7 +8,7 @@ import { ElMessage } from 'element-plus'
 import MarkdownIt from 'markdown-it'
 import { codeAnalysisApi } from '@/api/codeAnalysis'
 import { useMermaid } from '@/composables/useMermaid'
-import { useCredentialMatch } from '@/composables/useCredentialMatch'
+import RepoPicker from '@/components/code-analysis/RepoPicker.vue'
 import type { CodeAnalysis, RepoBookmark } from '@/types/codeAnalysis'
 
 const router = useRouter()
@@ -21,9 +21,20 @@ const form = reactive({
   cloneDepth: 1,
 })
 
-// 凭证匹配反馈
-const { match: credMatch } = useCredentialMatch()
-const credStatus = computed(() => credMatch(form.gitUrl))
+// 用于 v-model 给 RepoPicker
+const pickerValue = reactive<{ gitUrl: string; branch?: string; credentialId?: string }>({
+  gitUrl: '',
+  branch: 'main',
+  credentialId: undefined,
+})
+// picker 变化时同步到 form
+function onPickerChange(v: { gitUrl: string; branch?: string; credentialId?: string }) {
+  form.gitUrl = v.gitUrl || ''
+  form.branch = v.branch || 'main'
+  pickerValue.gitUrl = v.gitUrl || ''
+  pickerValue.branch = v.branch || 'main'
+  pickerValue.credentialId = v.credentialId
+}
 const loading = ref(false)
 const current = ref<CodeAnalysis>()
 const bookmarks = ref<RepoBookmark[]>([])
@@ -122,10 +133,16 @@ const totalLines = computed(() =>
 
 onMounted(() => {
   loadBookmarks()
-  // 从 URL 查询参数预填（来自凭证页 / 收藏页的"用此凭证/收藏分析"跳转）
+  // 从 URL 查询参数预填（来自凭证页的"用此凭证/仓库分析"跳转）
   const q = route.query
-  if (typeof q.git === 'string' && q.git) form.gitUrl = q.git
-  if (typeof q.branch === 'string' && q.branch) form.branch = q.branch
+  if (typeof q.git === 'string' && q.git) {
+    form.gitUrl = q.git
+    pickerValue.gitUrl = q.git
+  }
+  if (typeof q.branch === 'string' && q.branch) {
+    form.branch = q.branch
+    pickerValue.branch = q.branch
+  }
 })
 onUnmounted(stopPoll)
 </script>
@@ -139,25 +156,8 @@ onUnmounted(stopPoll)
         <div class="hint">输入 Git 仓库地址，AI 自动生成项目介绍、技术栈、模块分层与关键文件导读。</div>
 
         <el-form label-position="top" @submit.prevent>
-          <el-form-item label="Git 仓库 URL">
-            <el-input v-model="form.gitUrl" placeholder="https://github.com/user/repo.git" clearable />
-
-            <!-- 凭证匹配反馈 -->
-            <div v-if="credStatus.state === 'matched'" class="cred-badge cred-ok">
-              🔑 已匹配凭证：<strong>{{ credStatus.credential?.nickname }}</strong>
-              <span class="cred-type">{{ credStatus.credential?.authType === 'PASSWORD' ? '密码' : 'Token' }}</span>
-              <span v-if="(credStatus.count ?? 0) > 1" class="cred-more">
-                （同 host 下还有 {{ (credStatus.count ?? 0) - 1 }} 条其他凭证）
-              </span>
-            </div>
-            <div v-else-if="credStatus.state === 'missing'" class="cred-badge cred-miss">
-              ⚠️ 未找到 <code>{{ credStatus.host }}</code> 的凭证。
-              公开仓库无需凭证；私有仓库请
-              <el-link type="primary" @click="$router.push('/code-analysis/credentials')">去添加凭证</el-link>
-            </div>
-          </el-form-item>
-          <el-form-item label="分支">
-            <el-input v-model="form.branch" placeholder="main / master / develop" />
+          <el-form-item label="选择要分析的仓库">
+            <RepoPicker :model-value="pickerValue" @update:model-value="onPickerChange" :show-branch="true" />
           </el-form-item>
           <el-form-item label="克隆深度">
             <el-input-number v-model="form.cloneDepth" :min="1" :max="10" />

@@ -6,7 +6,7 @@ import { onUnmounted, ref, computed, reactive } from 'vue'
 import { ElMessage } from 'element-plus'
 import MarkdownIt from 'markdown-it'
 import { codeAnalysisApi } from '@/api/codeAnalysis'
-import { useCredentialMatch } from '@/composables/useCredentialMatch'
+import RepoPicker from '@/components/code-analysis/RepoPicker.vue'
 import type { CodeAnalysis, FindingLevel } from '@/types/codeAnalysis'
 import ScoreGauge from '@/components/code-analysis/ScoreGauge.vue'
 import FindingCard from '@/components/code-analysis/FindingCard.vue'
@@ -14,9 +14,16 @@ import FindingCard from '@/components/code-analysis/FindingCard.vue'
 const md = new MarkdownIt({ html: false, linkify: true, breaks: true })
 
 const form = reactive({ gitUrl: '', branch: '', baseRef: '', headRef: '' })
-
-const { match: credMatch } = useCredentialMatch()
-const credStatus = computed(() => credMatch(form.gitUrl))
+const pickerValue = reactive<{ gitUrl: string; branch?: string; credentialId?: string }>({
+  gitUrl: '', branch: '',
+})
+function onPickerChange(v: { gitUrl: string; branch?: string; credentialId?: string }) {
+  form.gitUrl = v.gitUrl || ''
+  form.branch = v.branch || ''
+  pickerValue.gitUrl = v.gitUrl || ''
+  pickerValue.branch = v.branch || ''
+  pickerValue.credentialId = v.credentialId
+}
 const current = ref<CodeAnalysis>()
 const loading = ref(false)
 const filterLevel = ref<FindingLevel | 'ALL'>('ALL')
@@ -68,16 +75,8 @@ onUnmounted(stopPoll)
       <div class="hint">比较两个 ref（分支名、tag 或 commit SHA）之间的累积 diff，适合做 PR review。</div>
 
       <el-form label-position="top" @submit.prevent>
-        <el-form-item label="Git 仓库 URL">
-          <el-input v-model="form.gitUrl" placeholder="https://github.com/user/repo.git" />
-          <div v-if="credStatus.state === 'matched'" class="cred-badge cred-ok">
-            🔑 已匹配凭证：<strong>{{ credStatus.credential?.nickname }}</strong>
-            <span class="cred-type">{{ credStatus.credential?.authType === 'PASSWORD' ? '密码' : 'Token' }}</span>
-          </div>
-          <div v-else-if="credStatus.state === 'missing'" class="cred-badge cred-miss">
-            ⚠️ 未找到 <code>{{ credStatus.host }}</code> 的凭证。
-            <el-link type="primary" @click="$router.push('/code-analysis/credentials')">去添加</el-link>
-          </div>
+        <el-form-item label="选择仓库">
+          <RepoPicker :model-value="pickerValue" @update:model-value="onPickerChange" :show-branch="true" />
         </el-form-item>
         <div class="form-row">
           <el-form-item label="Base（基线）">
@@ -87,9 +86,6 @@ onUnmounted(stopPoll)
             <el-input v-model="form.headRef" placeholder="feat/xxx / v1.1.0 / def5678" />
           </el-form-item>
         </div>
-        <el-form-item label="分支（Clone 时用）">
-          <el-input v-model="form.branch" placeholder="可留空（默认拉默认分支）" />
-        </el-form-item>
         <el-button type="primary" size="large" :loading="loading" class="submit-btn" @click="start">
           🚀 开始对比审查
         </el-button>

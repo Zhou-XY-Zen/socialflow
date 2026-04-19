@@ -153,11 +153,29 @@ export interface RepoAuthCredential {
 export interface SaveCredentialDTO {
   id?: string | number
   nickname: string
-  gitHost: string
+  gitHost?: string       // 可选，后端会从 defaultRepoUrl 自动提取
   authType?: CredentialAuthType
   username: string
   token?: string        // 编辑时留空 = 不改；新增必填（token 或 password）
   defaultRepoUrl?: string
   isDefault?: number
+}
+
+/** 凭证下的仓库项目（一对多关系的"子"）*/
+export interface RepoCredentialProject {
+  id: string
+  credentialId: string
+  nickname?: string
+  gitUrl: string
+  branch: string
+  lastUsedAt?: string
+  createTime?: string
+}
+
+export interface SaveCredentialProjectDTO {
+  id?: string | number
+  nickname?: string
+  gitUrl: string
+  branch?: string
 }
 

@@ -7,7 +7,7 @@ import { onUnmounted, ref, computed, reactive } from 'vue'
 import { ElMessage } from 'element-plus'
 import MarkdownIt from 'markdown-it'
 import { codeAnalysisApi } from '@/api/codeAnalysis'
-import { useCredentialMatch } from '@/composables/useCredentialMatch'
+import RepoPicker from '@/components/code-analysis/RepoPicker.vue'
 import type { CodeAnalysis, RepoCommit, FindingLevel } from '@/types/codeAnalysis'
 import ScoreGauge from '@/components/code-analysis/ScoreGauge.vue'
 import FindingCard from '@/components/code-analysis/FindingCard.vue'
@@ -17,8 +17,16 @@ const md = new MarkdownIt({ html: false, linkify: true, breaks: true })
 const step = ref<1 | 2 | 3>(1)
 const form = reactive({ gitUrl: '', branch: 'main' })
 
-const { match: credMatch } = useCredentialMatch()
-const credStatus = computed(() => credMatch(form.gitUrl))
+const pickerValue = reactive<{ gitUrl: string; branch?: string; credentialId?: string }>({
+  gitUrl: '', branch: 'main',
+})
+function onPickerChange(v: { gitUrl: string; branch?: string; credentialId?: string }) {
+  form.gitUrl = v.gitUrl || ''
+  form.branch = v.branch || 'main'
+  pickerValue.gitUrl = v.gitUrl || ''
+  pickerValue.branch = v.branch || 'main'
+  pickerValue.credentialId = v.credentialId
+}
 const commits = ref<RepoCommit[]>([])
 const loadingCommits = ref(false)
 const searchKw = ref('')
@@ -143,21 +151,11 @@ onUnmounted(stopPoll)
         <div class="step-title">🔎 选择要审查的仓库</div>
         <div class="step-hint">基于阿里巴巴 Java 开发手册（嵩山版）进行代码审查。</div>
         <el-form label-position="top" @submit.prevent>
-          <el-form-item label="Git 仓库 URL">
-            <el-input v-model="form.gitUrl" placeholder="https://github.com/user/repo.git" size="large" clearable />
-            <div v-if="credStatus.state === 'matched'" class="cred-badge cred-ok">
-              🔑 已匹配凭证：<strong>{{ credStatus.credential?.nickname }}</strong>
-              <span class="cred-type">{{ credStatus.credential?.authType === 'PASSWORD' ? '密码' : 'Token' }}</span>
-            </div>
-            <div v-else-if="credStatus.state === 'missing'" class="cred-badge cred-miss">
-              ⚠️ 未找到 <code>{{ credStatus.host }}</code> 的凭证。私有仓库请
-              <el-link type="primary" @click="$router.push('/code-analysis/credentials')">去添加凭证</el-link>
-            </div>
+          <el-form-item label="选择要审查的仓库">
+            <RepoPicker :model-value="pickerValue" @update:model-value="onPickerChange" :show-branch="true" />
           </el-form-item>
-          <el-form-item label="分支">
-            <el-input v-model="form.branch" size="large" />
-          </el-form-item>
-          <el-button type="primary" size="large" :loading="loadingCommits" @click="fetchCommits" class="submit-btn">
+          <el-button type="primary" size="large" :loading="loadingCommits" @click="fetchCommits" class="submit-btn"
+                     :disabled="!form.gitUrl">
             下一步：拉取提交列表 →
           </el-button>
         </el-form>

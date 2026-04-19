@@ -14,8 +14,10 @@ import type {
   RepoAuthCredential,
   RepoBookmark,
   RepoCommit,
+  RepoCredentialProject,
   SaveBookmarkDTO,
   SaveCredentialDTO,
+  SaveCredentialProjectDTO,
 } from '@/types/codeAnalysis'
 
 export interface PageResult<T> {
@@ -74,4 +76,13 @@ export const codeAnalysisApi = {
   deleteCredential: (id: Id) => del<void>(`/code-analysis/credential/${id}`),
   testCredential: (id: Id) =>
     post<RepoAuthCredential>(`/code-analysis/credential/${id}/test`),
+
+  // 凭证下的仓库项目（一对多）
+  listCredentialProjects: (credentialId: Id) =>
+    get<RepoCredentialProject[]>(`/code-analysis/credential/${credentialId}/projects`),
+  saveCredentialProject: (credentialId: Id, dto: SaveCredentialProjectDTO) =>
+    post<RepoCredentialProject, SaveCredentialProjectDTO>(
+      `/code-analysis/credential/${credentialId}/projects`, dto),
+  deleteCredentialProject: (projectId: Id) =>
+    del<void>(`/code-analysis/credential/project/${projectId}`),
 }

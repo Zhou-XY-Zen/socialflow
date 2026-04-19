@@ -1,49 +1,64 @@
 <!--
-  Credentials.vue —— Git 仓库凭证管理
-  功能：
-    - 列表展示（token 掩码 / 默认徽章 / 测试状态）
-    - 添加 / 编辑 / 删除 / 测试连接
-    - 凭证按 git_host 划分，触发分析时自动匹配
+  Credentials.vue —— Git 仓库凭证管理（父-子树形）
+  父：凭证（Token / 密码 + Host + Username）
+  子：此凭证下的 Git 仓库（一对多）
 -->
 <script setup lang="ts">
 import { onMounted, ref, computed, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { codeAnalysisApi } from '@/api/codeAnalysis'
-import type { RepoAuthCredential } from '@/types/codeAnalysis'
+import type { RepoAuthCredential, RepoCredentialProject } from '@/types/codeAnalysis'
 
 const router = useRouter()
 const list = ref<RepoAuthCredential[]>([])
 const loading = ref(false)
+
+/** 凭证 id → 其下的仓库列表（展开时加载） */
+const projectsMap = ref<Record<string, RepoCredentialProject[]>>({})
+const expanded = ref<Set<string>>(new Set())
+
 const dialogVisible = ref(false)
 const testingId = ref<string | null>(null)
 const showToken = ref(false)
 
+// ===== 凭证表单 =====
 const form = reactive<{
   id?: string | number
   nickname: string
-  gitHost: string
   authType: 'TOKEN' | 'PASSWORD'
   username: string
   token: string
-  defaultRepoUrl: string
-  isDefault: number
+  seedRepoUrl: string   // 新建凭证时可选：顺手录入第一个仓库
 }>({
   nickname: '',
-  gitHost: 'github.com',
   authType: 'TOKEN',
   username: '',
   token: '',
-  defaultRepoUrl: '',
-  isDefault: 0,
+  seedRepoUrl: '',
+})
+const isEdit = computed(() => form.id != null)
+const autoHost = computed(() => extractHost(form.seedRepoUrl))
+const githubPasswordWarn = computed(() =>
+  form.authType === 'PASSWORD' && /^github\.com$/i.test(autoHost.value))
+
+// ===== 项目（仓库）对话框 =====
+const projectDialog = reactive<{
+  visible: boolean
+  credentialId: string | null
+  id?: string | number
+  nickname: string
+  gitUrl: string
+  branch: string
+}>({
+  visible: false,
+  credentialId: null,
+  nickname: '',
+  gitUrl: '',
+  branch: 'main',
 })
 
-// 注：Host 字段已下线，改由 form.defaultRepoUrl 自动解析（autoHost computed）
-
-const isEdit = computed(() => form.id != null)
-
-/** 从仓库 URL 实时提取 host（模板驱动展示） */
-function extractHostFromUrl(url: string): string {
+function extractHost(url: string): string {
   if (!url) return ''
   const u = url.trim()
   if (u.startsWith('git@')) {
@@ -53,13 +68,6 @@ function extractHostFromUrl(url: string): string {
   const m = u.match(/^https?:\/\/([^\/]+)/i)
   return m ? m[1].toLowerCase() : ''
 }
-
-/** 自动解析的 host —— 只读展示，保存时传给后端 */
-const autoHost = computed(() => extractHostFromUrl(form.defaultRepoUrl) || form.gitHost)
-
-/** GitHub 自 2021-08-13 起禁用密码克隆 */
-const githubPasswordWarn = computed(() =>
-  form.authType === 'PASSWORD' && /^github\.com$/i.test(autoHost.value.trim()))
 
 async function load() {
   loading.value = true
@@ -71,18 +79,17 @@ async function load() {
     loading.value = false
   }
 }
-
 onMounted(load)
+
+// ===== 凭证 CRUD =====
 
 function openAdd() {
   form.id = undefined
   form.nickname = ''
-  form.gitHost = ''
   form.authType = 'TOKEN'
   form.username = ''
   form.token = ''
-  form.defaultRepoUrl = ''
-  form.isDefault = 0
+  form.seedRepoUrl = ''
   showToken.value = false
   dialogVisible.value = true
 }
@@ -90,26 +97,12 @@ function openAdd() {
 function openEdit(c: RepoAuthCredential) {
   form.id = c.id
   form.nickname = c.nickname
-  form.gitHost = c.gitHost
   form.authType = (c.authType as 'TOKEN' | 'PASSWORD') || 'TOKEN'
   form.username = c.username
-  form.token = ''  // 编辑时留空 = 不修改
-  form.defaultRepoUrl = c.defaultRepoUrl || ''
-  form.isDefault = c.isDefault || 0
+  form.token = ''
+  form.seedRepoUrl = c.gitHost ? `https://${c.gitHost}/` : ''
   showToken.value = false
   dialogVisible.value = true
-}
-
-/** 用此凭证直接去项目概览分析（预填仓库 URL）*/
-function analyzeWithCred(c: RepoAuthCredential) {
-  if (!c.defaultRepoUrl) {
-    ElMessage.info('该凭证未填"常用仓库 URL"，先点编辑填一下再来')
-    return
-  }
-  router.push({
-    path: '/code-analysis/project',
-    query: { git: c.defaultRepoUrl, branch: 'main' },
-  })
 }
 
 async function save() {
@@ -117,35 +110,43 @@ async function save() {
     ElMessage.warning('昵称、用户名必填')
     return
   }
-  if (!autoHost.value) {
-    ElMessage.warning('请填写 Git 仓库 URL（会自动识别 Host）')
+  if (!isEdit.value && !form.seedRepoUrl) {
+    ElMessage.warning('请填写第一个 Git 仓库 URL（Host 会自动识别）')
     return
   }
   if (!isEdit.value && !form.token) {
     ElMessage.warning(form.authType === 'PASSWORD' ? '新建凭证必须填写密码' : '新建凭证必须填写 Token')
     return
   }
-  // GitHub 密码登录在 2021-08-13 起被 GitHub 官方禁用
   if (githubPasswordWarn.value) {
     try {
       await ElMessageBox.confirm(
-        'GitHub 自 2021-08-13 起已停止支持密码克隆，必须用 Personal Access Token。\n确定仍然使用密码保存吗？（大概率会认证失败）',
+        'GitHub 自 2021-08-13 起已停止支持密码克隆，必须用 Personal Access Token。\n确定仍然使用密码保存吗？',
         '⚠️ 认证方式可能不兼容',
         { type: 'warning', confirmButtonText: '仍然保存', cancelButtonText: '改用 Token' }
       )
     } catch { return }
   }
   try {
-    await codeAnalysisApi.saveCredential({
+    const host = autoHost.value || extractHost(form.seedRepoUrl)
+    const saved = await codeAnalysisApi.saveCredential({
       id: form.id,
       nickname: form.nickname,
-      gitHost: autoHost.value,          // 自动解析出来的 host
+      gitHost: host,
       authType: form.authType,
       username: form.username,
       token: form.token || undefined,
-      defaultRepoUrl: form.defaultRepoUrl || undefined,
-      isDefault: form.isDefault,
+      defaultRepoUrl: form.seedRepoUrl || undefined,
+      isDefault: 1,
     })
+    if (!isEdit.value && form.seedRepoUrl) {
+      try {
+        await codeAnalysisApi.saveCredentialProject(saved.id, {
+          gitUrl: form.seedRepoUrl,
+          branch: 'main',
+        })
+      } catch { /* 忽略，可手动补 */ }
+    }
     ElMessage.success(isEdit.value ? '已更新' : '已添加')
     dialogVisible.value = false
     load()
@@ -155,10 +156,8 @@ async function save() {
 }
 
 async function remove(c: RepoAuthCredential) {
-  await ElMessageBox.confirm(`确定删除凭证「${c.nickname}」？`, '警告', {
-    type: 'warning',
-    confirmButtonText: '删除',
-    confirmButtonClass: 'el-button--danger',
+  await ElMessageBox.confirm(`确定删除凭证「${c.nickname}」？其下的仓库关联也会一起消失。`, '警告', {
+    type: 'warning', confirmButtonText: '删除', confirmButtonClass: 'el-button--danger',
   })
   await codeAnalysisApi.deleteCredential(c.id)
   ElMessage.success('已删除')
@@ -171,16 +170,84 @@ async function test(c: RepoAuthCredential) {
     const updated = await codeAnalysisApi.testCredential(c.id)
     const idx = list.value.findIndex(x => x.id === c.id)
     if (idx >= 0) list.value[idx] = updated
-    if (updated.testStatus === 'SUCCESS') {
-      ElMessage.success('测试成功：' + (updated.testMessage || '连接正常'))
-    } else {
-      ElMessage.error('测试失败：' + (updated.testMessage || '未知错误'))
-    }
+    ElMessage[updated.testStatus === 'SUCCESS' ? 'success' : 'error'](
+      `${updated.testStatus === 'SUCCESS' ? '✅' : '❌'} ${updated.testMessage}`)
   } catch (e: any) {
     ElMessage.error(e?.message || '测试请求失败')
   } finally {
     testingId.value = null
   }
+}
+
+// ===== 项目（子仓库）操作 =====
+
+async function toggleProjects(c: RepoAuthCredential) {
+  if (expanded.value.has(c.id)) {
+    expanded.value.delete(c.id)
+    return
+  }
+  expanded.value.add(c.id)
+  if (!projectsMap.value[c.id]) await loadProjects(c.id)
+}
+
+async function loadProjects(credentialId: string) {
+  try {
+    projectsMap.value[credentialId] = await codeAnalysisApi.listCredentialProjects(credentialId)
+  } catch (e: any) {
+    ElMessage.error('加载仓库列表失败：' + (e?.message || ''))
+  }
+}
+
+function openAddProject(c: RepoAuthCredential) {
+  projectDialog.visible = true
+  projectDialog.credentialId = c.id
+  projectDialog.id = undefined
+  projectDialog.nickname = ''
+  projectDialog.gitUrl = ''
+  projectDialog.branch = 'main'
+}
+
+function openEditProject(credentialId: string, p: RepoCredentialProject) {
+  projectDialog.visible = true
+  projectDialog.credentialId = credentialId
+  projectDialog.id = p.id
+  projectDialog.nickname = p.nickname || ''
+  projectDialog.gitUrl = p.gitUrl
+  projectDialog.branch = p.branch || 'main'
+}
+
+async function saveProject() {
+  if (!projectDialog.gitUrl) {
+    ElMessage.warning('请填写 Git 仓库 URL')
+    return
+  }
+  try {
+    await codeAnalysisApi.saveCredentialProject(projectDialog.credentialId!, {
+      id: projectDialog.id,
+      nickname: projectDialog.nickname || undefined,
+      gitUrl: projectDialog.gitUrl,
+      branch: projectDialog.branch,
+    })
+    ElMessage.success(projectDialog.id ? '已更新' : '已添加')
+    projectDialog.visible = false
+    await loadProjects(projectDialog.credentialId!)
+  } catch (e: any) {
+    ElMessage.error(e?.message || '保存失败')
+  }
+}
+
+async function deleteProject(credentialId: string, p: RepoCredentialProject) {
+  await ElMessageBox.confirm(`删除仓库「${p.nickname || p.gitUrl}」？`, '警告', { type: 'warning' })
+  await codeAnalysisApi.deleteCredentialProject(p.id)
+  ElMessage.success('已删除')
+  await loadProjects(credentialId)
+}
+
+function analyzeProject(p: RepoCredentialProject) {
+  router.push({
+    path: '/code-analysis/project',
+    query: { git: p.gitUrl, branch: p.branch || 'main' },
+  })
 }
 
 const statusMeta: Record<string, { label: string; color: string; icon: string }> = {
@@ -192,102 +259,96 @@ const statusMeta: Record<string, { label: string; color: string; icon: string }>
 
 <template>
   <div class="cred-page" v-loading="loading">
-    <!-- 顶部说明 -->
     <div class="top-card">
       <div class="top-left">
         <div class="page-title">🔐 仓库凭证</div>
         <div class="page-sub">
-          添加你的 GitHub/Gitee/GitLab 等 Token，分析时会按 Git URL 的 host 自动匹配，
-          用于访问 <strong>私有仓库 / 公司内部仓库</strong>。
-          Token 使用 AES-256-GCM 加密存储，前端只能看到掩码。
+          按"一个凭证 ↔ 多个仓库"组织：添加一次 Token，下面挂该凭证能访问的全部仓库。
+          Token 用 AES-256-GCM 加密存储，前端只看得到掩码。
         </div>
       </div>
       <el-button type="primary" size="large" @click="openAdd">+ 添加凭证</el-button>
     </div>
 
-    <!-- 使用说明 -->
     <el-alert v-if="list.length === 0" type="info" :closable="false" style="margin: 16px 0">
-      <template #title>
-        <span style="font-size: 14px; font-weight: 600">还没有任何凭证</span>
-      </template>
+      <template #title>还没有任何凭证</template>
       <div style="font-size: 13px; line-height: 1.8; margin-top: 6px">
-        点击右上角「+ 添加凭证」开始配置。获取 Token 的方式：<br>
-        🐙 GitHub：<a href="https://github.com/settings/tokens" target="_blank">Settings → Developer settings → Personal access tokens</a><br>
+        🐙 GitHub：<a href="https://github.com/settings/tokens" target="_blank">Settings → Developer settings → PAT</a><br>
         🦊 GitLab：User Settings → Access Tokens<br>
-        🔶 Gitee：设置 → 私人令牌<br>
-        🏢 公司自建：联系你们 DevOps 管理员
+        🔶 Gitee：设置 → 私人令牌
       </div>
     </el-alert>
 
-    <!-- 卡片网格 -->
-    <div v-else class="cred-grid">
+    <div v-else class="cred-list">
       <div v-for="c in list" :key="c.id" class="cred-card">
-        <div class="card-header">
-          <div class="card-title-row">
-            <span class="card-title">{{ c.nickname }}</span>
-            <span v-if="c.isDefault === 1" class="default-badge">⭐ 默认</span>
-          </div>
-          <div class="card-status" :style="{ color: statusMeta[c.testStatus || 'UNKNOWN'].color }">
-            {{ statusMeta[c.testStatus || 'UNKNOWN'].icon }} {{ statusMeta[c.testStatus || 'UNKNOWN'].label }}
-          </div>
-        </div>
-
-        <div class="card-body">
-          <div class="card-row"><span class="k">🌐 Host</span><span class="v">{{ c.gitHost }}</span></div>
-          <div class="card-row">
-            <span class="k">🔐 方式</span>
-            <span class="v">
+        <div class="cred-header">
+          <div class="header-left">
+            <div class="title-row">
+              <span class="cred-title">{{ c.nickname }}</span>
               <span class="auth-tag" :class="c.authType === 'PASSWORD' ? 'auth-pwd' : 'auth-token'">
                 {{ c.authType === 'PASSWORD' ? '账号密码' : 'Token' }}
               </span>
-            </span>
+              <span v-if="c.isDefault === 1" class="default-badge">⭐</span>
+            </div>
+            <div class="meta-row">
+              🌐 {{ c.gitHost }} · 👤 {{ c.username }} · 🔑 <span class="mono">{{ c.tokenHint }}</span>
+              <span class="status-inline" :style="{ color: statusMeta[c.testStatus || 'UNKNOWN'].color }">
+                · {{ statusMeta[c.testStatus || 'UNKNOWN'].icon }} {{ statusMeta[c.testStatus || 'UNKNOWN'].label }}
+              </span>
+            </div>
           </div>
-          <div class="card-row"><span class="k">👤 用户</span><span class="v">{{ c.username }}</span></div>
-          <div class="card-row">
-            <span class="k">{{ c.authType === 'PASSWORD' ? '🔒 密码' : '🔑 Token' }}</span>
-            <span class="v mono">{{ c.tokenHint || '—' }}</span>
-          </div>
-          <div v-if="c.defaultRepoUrl" class="card-row">
-            <span class="k">📦 仓库</span>
-            <span class="v mono repo-url" :title="c.defaultRepoUrl">{{ c.defaultRepoUrl }}</span>
-          </div>
-          <div v-else class="card-row">
-            <span class="k">📦 仓库</span>
-            <span class="v muted">未设置（建议编辑补填）</span>
-          </div>
-          <div v-if="c.lastUsedAt" class="card-row"><span class="k">🕐 最近</span><span class="v">{{ new Date(c.lastUsedAt).toLocaleString('zh-CN') }}</span></div>
-          <div v-if="c.testMessage" class="card-msg" :style="{ color: statusMeta[c.testStatus || 'UNKNOWN'].color }">
-            {{ c.testMessage }}
+          <div class="header-actions">
+            <el-button size="small" @click="toggleProjects(c)">
+              📁 仓库 ({{ projectsMap[c.id] ? projectsMap[c.id].length : '…' }})
+              {{ expanded.has(c.id) ? '▼' : '▶' }}
+            </el-button>
+            <el-button size="small" :loading="testingId === c.id" @click="test(c)">🔄 测试</el-button>
+            <el-button size="small" type="primary" plain @click="openEdit(c)">✏️ 编辑</el-button>
+            <el-button size="small" type="danger" plain @click="remove(c)">🗑️</el-button>
           </div>
         </div>
 
-        <div class="card-actions">
-          <el-button v-if="c.defaultRepoUrl" size="small" type="success" plain
-                     @click="analyzeWithCred(c)">📖 用此凭证分析</el-button>
-          <el-button size="small" :loading="testingId === c.id" @click="test(c)">🔄 测试</el-button>
-          <el-button size="small" type="primary" plain @click="openEdit(c)">✏️ 编辑</el-button>
-          <el-button size="small" type="danger" plain @click="remove(c)">🗑️ 删除</el-button>
+        <div v-if="expanded.has(c.id)" class="cred-projects">
+          <div v-if="!projectsMap[c.id]" class="project-loading">加载中...</div>
+          <template v-else>
+            <div v-if="projectsMap[c.id].length === 0" class="project-empty">
+              💡 该凭证下还没有仓库，点下方「+ 添加仓库」开始
+            </div>
+            <div v-for="p in projectsMap[c.id]" :key="p.id" class="project-row">
+              <div class="p-main">
+                <span class="p-name">{{ p.nickname || '（未命名）' }}</span>
+                <span class="p-url mono">{{ p.gitUrl }}</span>
+                <span class="p-branch">🔀 {{ p.branch }}</span>
+              </div>
+              <div class="p-actions">
+                <el-button size="small" type="success" plain @click="analyzeProject(p)">📖 分析</el-button>
+                <el-button size="small" link @click="openEditProject(c.id, p)">✏️</el-button>
+                <el-button size="small" type="danger" link @click="deleteProject(c.id, p)">🗑️</el-button>
+              </div>
+            </div>
+            <div class="add-project-row">
+              <el-button size="small" type="primary" plain @click="openAddProject(c)">+ 添加仓库</el-button>
+            </div>
+          </template>
         </div>
       </div>
     </div>
 
-    <!-- 添加/编辑对话框 -->
     <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑凭证' : '添加新凭证'" width="560px">
       <el-form label-position="top" @submit.prevent>
         <el-form-item label="昵称" required>
           <el-input v-model="form.nickname" placeholder="例如：我的 GitHub 个人、公司 GitLab" />
         </el-form-item>
 
-        <el-form-item label="Git 仓库 URL" required>
-          <el-input v-model="form.defaultRepoUrl"
-                    placeholder="https://github.com/Zhou-XY-Zen/socialflow.git" clearable />
+        <el-form-item v-if="!isEdit" label="第一个 Git 仓库 URL" required>
+          <el-input v-model="form.seedRepoUrl"
+                    placeholder="https://github.com/your-org/your-repo.git" clearable />
           <div class="auto-host" v-if="autoHost">
             ✓ 自动识别 Host：<span class="host-chip">{{ autoHost }}</span>
-            <span class="host-tip">（此凭证将用于访问 {{ autoHost }} 下的所有仓库）</span>
+            <span class="host-tip">（此凭证会用于访问 {{ autoHost }} 下的所有仓库）</span>
           </div>
           <div v-else class="form-hint">
-            填完整的 https:// 或 git@ 地址，Host 会自动识别。<br>
-            示例：<code>https://github.com/user/repo.git</code> · <code>https://gitlab.company.com/team/backend.git</code>
+            保存后凭证下会自动建一条仓库记录，后续还能继续在该凭证下追加
           </div>
         </el-form-item>
 
@@ -296,28 +357,15 @@ const statusMeta: Record<string, { label: string; color: string; icon: string }>
             <el-radio-button value="TOKEN">🔑 Personal Access Token（推荐）</el-radio-button>
             <el-radio-button value="PASSWORD">🔐 账号密码</el-radio-button>
           </el-radio-group>
-          <div class="form-hint">
-            <template v-if="form.authType === 'TOKEN'">
-              Token 认证更安全：可设权限范围、可单独撤销，即使泄漏影响面小。
-            </template>
-            <template v-else>
-              账号密码方式更简单但安全性差：很多 Git 平台已弃用（GitHub 2021.8 / Bitbucket 2022.3）。
-              仅推荐公司内部老版本 GitLab/Gitea 使用。
-            </template>
-          </div>
         </el-form-item>
 
         <el-alert v-if="githubPasswordWarn" type="error" :closable="false" style="margin-bottom: 14px">
           <template #title>GitHub 已禁用密码克隆</template>
-          <div style="font-size: 12px; line-height: 1.6">
-            GitHub 自 2021-08-13 起强制要求使用 PAT，密码认证会直接 401。
-            推荐切换到 Token：Settings → Developer settings → Personal access tokens → Generate new token。
-          </div>
+          <div style="font-size: 12px">GitHub 2021-08-13 起强制 PAT，密码认证会直接 401。</div>
         </el-alert>
 
         <el-form-item label="用户名" required>
-          <el-input v-model="form.username"
-                    :placeholder="form.authType === 'PASSWORD' ? 'Git 账号用户名' : 'Git 用户名（可与 Token 所属账号一致）'" />
+          <el-input v-model="form.username" placeholder="Git 账号用户名" />
         </el-form-item>
 
         <el-form-item
@@ -325,35 +373,37 @@ const statusMeta: Record<string, { label: string; color: string; icon: string }>
             ? (isEdit ? '密码（留空 = 不修改）' : '账号密码')
             : (isEdit ? 'Token（留空 = 不修改）' : 'Personal Access Token')"
           :required="!isEdit">
-          <el-input
-            v-model="form.token"
-            :type="showToken ? 'text' : 'password'"
-            :placeholder="form.authType === 'PASSWORD'
-              ? (isEdit ? '如需更换密码请填入新值' : '账号密码')
-              : (isEdit ? '如需更换 Token 请填入新值' : 'ghp_xxxxxxxxxxxxxx / glpat-xxxx / xxx')"
-            :show-password="!showToken"
-          >
+          <el-input v-model="form.token"
+                    :type="showToken ? 'text' : 'password'"
+                    :placeholder="form.authType === 'PASSWORD' ? '账号密码' : 'ghp_xxxx / glpat-xxxx'"
+                    :show-password="!showToken">
             <template #append>
-              <el-button @click="showToken = !showToken">
-                {{ showToken ? '🙈' : '👁️' }}
-              </el-button>
+              <el-button @click="showToken = !showToken">{{ showToken ? '🙈' : '👁️' }}</el-button>
             </template>
           </el-input>
-          <div class="form-hint">
-            存储时会用 AES-256-GCM 加密，前端列表只显示掩码。
-          </div>
-        </el-form-item>
-
-        <el-form-item>
-          <el-checkbox v-model="form.isDefault" :true-value="1" :false-value="0">
-            设为此 Host 的默认凭证（同 host 下其他凭证会自动取消默认）
-          </el-checkbox>
         </el-form-item>
       </el-form>
-
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
         <el-button type="primary" @click="save">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="projectDialog.visible" :title="projectDialog.id ? '编辑仓库' : '添加仓库'" width="500px">
+      <el-form label-position="top">
+        <el-form-item label="Git 仓库 URL" required>
+          <el-input v-model="projectDialog.gitUrl" placeholder="https://github.com/user/repo.git" clearable />
+        </el-form-item>
+        <el-form-item label="分支">
+          <el-input v-model="projectDialog.branch" placeholder="main / develop / release/v2" />
+        </el-form-item>
+        <el-form-item label="昵称（可选）">
+          <el-input v-model="projectDialog.nickname" placeholder="留空默认取仓库名" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="projectDialog.visible = false">取消</el-button>
+        <el-button type="primary" @click="saveProject">保存</el-button>
       </template>
     </el-dialog>
   </div>
@@ -366,64 +416,58 @@ const statusMeta: Record<string, { label: string; color: string; icon: string }>
   background: linear-gradient(135deg, #667eea, #764ba2);
   color: #fff; border-radius: 12px; padding: 24px;
   display: flex; justify-content: space-between; align-items: center;
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
 }
 .top-left { flex: 1; margin-right: 20px; }
 .page-title { font-size: 20px; font-weight: 700; margin-bottom: 6px; }
 .page-sub { font-size: 13px; line-height: 1.65; opacity: 0.92; }
 
-.cred-grid {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
-  gap: 16px; margin-top: 18px;
-}
+.cred-list { display: flex; flex-direction: column; gap: 12px; margin-top: 18px; }
 
 .cred-card {
-  background: #fff; border-radius: 12px; padding: 18px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
-  transition: box-shadow 0.2s, transform 0.2s;
-  display: flex; flex-direction: column;
+  background: #fff; border-radius: 12px; padding: 0;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06); overflow: hidden;
 }
-.cred-card:hover { box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08); transform: translateY(-2px); }
+.cred-card:hover { box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08); }
 
-.card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; }
-.card-title-row { display: flex; align-items: center; gap: 8px; }
-.card-title { font-size: 15px; font-weight: 600; color: #111827; }
-.default-badge {
-  background: linear-gradient(135deg, #fbbf24, #f59e0b);
-  color: #fff; font-size: 11px; padding: 2px 8px; border-radius: 10px;
+.cred-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 16px 20px; gap: 16px;
 }
-.card-status { font-size: 12px; font-weight: 600; }
-
-.card-body { flex: 1; margin-bottom: 14px; }
-.card-row { display: flex; font-size: 13px; margin-bottom: 5px; }
-.card-row .k { color: #6b7280; width: 68px; flex-shrink: 0; }
-.card-row .v { color: #111827; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.card-row .v.mono { font-family: 'SF Mono', Menlo, monospace; color: #6d28d9; }
-.card-msg {
-  margin-top: 8px; padding: 6px 10px; background: #f9fafb;
-  border-radius: 6px; font-size: 12px; line-height: 1.5;
-}
-
-.card-actions { display: flex; gap: 6px; justify-content: flex-end; }
-
-.form-hint { color: #9ca3af; font-size: 12px; margin-top: 4px; line-height: 1.5; }
+.header-left { flex: 1; min-width: 0; }
+.title-row { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+.cred-title { font-size: 16px; font-weight: 600; color: #111827; }
+.meta-row { color: #6b7280; font-size: 12px; }
+.mono { font-family: 'SF Mono', Menlo, monospace; color: #6d28d9; }
+.status-inline { margin-left: 4px; font-weight: 500; }
 
 .auth-tag { padding: 1px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
 .auth-tag.auth-token { background: #ede9fe; color: #6d28d9; }
 .auth-tag.auth-pwd   { background: #fef3c7; color: #b45309; }
-.optional { color: #9ca3af; font-weight: 400; font-size: 12px; }
-.repo-url { color: #0369a1 !important; font-size: 12px; }
-.muted    { color: #9ca3af; font-size: 12px; }
+.default-badge { background: linear-gradient(135deg, #fbbf24, #f59e0b); color: #fff; font-size: 11px; padding: 2px 8px; border-radius: 10px; }
+
+.header-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
+.cred-projects { background: #f9fafb; border-top: 1px solid #e5e7eb; padding: 10px 20px; }
+.project-loading, .project-empty { color: #9ca3af; font-size: 13px; padding: 10px 0; text-align: center; }
+
+.project-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 12px; background: #fff; border-radius: 6px; margin-bottom: 6px;
+  border: 1px solid #e5e7eb;
+}
+.p-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.p-name { font-weight: 600; color: #111827; font-size: 13px; }
+.p-url { color: #0369a1 !important; font-size: 12px; overflow: hidden; text-overflow: ellipsis; max-width: 500px; }
+.p-branch { color: #6b7280; font-size: 11px; }
+.p-actions { display: flex; gap: 4px; flex-shrink: 0; }
+
+.add-project-row { padding: 6px; text-align: center; }
 
 .auto-host {
   margin-top: 8px; padding: 8px 12px; background: #f0fdf4;
-  border: 1px solid #bbf7d0; border-radius: 6px;
-  color: #059669; font-size: 13px;
+  border: 1px solid #bbf7d0; border-radius: 6px; color: #059669; font-size: 13px;
 }
-.host-chip {
-  font-family: 'SF Mono', Menlo, monospace; background: #fff;
-  padding: 2px 8px; border-radius: 4px; color: #6d28d9; font-weight: 600;
-}
-.host-tip { color: #6b7280; margin-left: 6px; font-size: 12px; }
-.form-hint code { background: #f3f4f6; padding: 1px 5px; border-radius: 3px; font-size: 11px; color: #6d28d9; }
+.host-chip { font-family: monospace; background: #fff; padding: 2px 8px; border-radius: 4px; color: #6d28d9; font-weight: 600; }
+.host-tip  { color: #6b7280; margin-left: 6px; font-size: 12px; }
+.form-hint { color: #9ca3af; font-size: 12px; margin-top: 4px; line-height: 1.5; }
 </style>
