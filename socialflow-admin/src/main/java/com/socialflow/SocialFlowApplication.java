@@ -63,15 +63,5 @@ public class SocialFlowApplication {
      */
     public static void main(String[] args) {
         SpringApplication.run(SocialFlowApplication.class, args);
-        System.out.println("""
-
-                  ____             _       _ _____ _
-                 / ___|  ___   ___(_) __ _| |  ___| | _____      __
-                 \\___ \\ / _ \\ / __| |/ _` | | |_  | |/ _ \\ \\ /\\ / /
-                  ___) | (_) | (__| | (_| | |  _| | | (_) \\ V  V /
-                 |____/ \\___/ \\___|_|\\__,_|_|_|   |_|\\___/ \\_/\\_/
-
-                  :: SocialFlow ::  http://localhost:8080/doc.html
-                """);
     }
 }

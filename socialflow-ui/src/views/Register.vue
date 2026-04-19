@@ -1,6 +1,5 @@
 <!--
-  Register.vue —— 用户注册页面
-  与 Login.vue 同风格左右分栏设计
+  Register.vue —— 用户注册页面（与 Login 同风格，共用 BrandPanel）
 -->
 
 <script setup lang="ts">
@@ -8,6 +7,7 @@ import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { authApi } from '@/api/auth'
+import BrandPanel from '@/components/BrandPanel.vue'
 
 const router = useRouter()
 const form = reactive({ email: '', password: '', nickname: '' })
@@ -27,47 +27,8 @@ async function onRegister() {
 
 <template>
   <div class="login-page">
-    <!-- 左侧品牌区（与 Login 一致） -->
-    <div class="login-brand">
-      <div class="brand-content">
-        <div class="brand-logo">S</div>
-        <h1 class="brand-title">SocialFlow</h1>
-        <p class="brand-slogan">AI 驱动的社交媒体内容创作平台</p>
+    <BrandPanel />
 
-        <div class="brand-features">
-          <div class="feature-item">
-            <div class="feature-icon">&#x270D;</div>
-            <div>
-              <div class="feature-name">AI 文案生成</div>
-              <div class="feature-desc">多平台适配，一键生成高质量文案</div>
-            </div>
-          </div>
-          <div class="feature-item">
-            <div class="feature-icon">&#x1F4DA;</div>
-            <div>
-              <div class="feature-name">知识库 RAG</div>
-              <div class="feature-desc">基于专属知识库增强生成效果</div>
-            </div>
-          </div>
-          <div class="feature-item">
-            <div class="feature-icon">&#x1F3A8;</div>
-            <div>
-              <div class="feature-name">AI 智能配图</div>
-              <div class="feature-desc">文案自动匹配 AI 生成精美配图</div>
-            </div>
-          </div>
-          <div class="feature-item">
-            <div class="feature-icon">&#x1F680;</div>
-            <div>
-              <div class="feature-name">多平台分发</div>
-              <div class="feature-desc">小红书、抖音、朋友圈一键分发</div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 右侧注册表单区 -->
     <div class="login-form-area">
       <div class="form-container">
         <h2 class="form-title">创建账号</h2>
@@ -112,37 +73,6 @@ async function onRegister() {
 
 <style scoped>
 .login-page { display: flex; height: 100vh; overflow: hidden; }
-
-.login-brand {
-  flex: 5;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  display: flex; align-items: center; justify-content: center;
-  padding: 60px; position: relative; overflow: hidden;
-}
-.login-brand::before {
-  content: ''; position: absolute; width: 400px; height: 400px; border-radius: 50%;
-  background: rgba(255,255,255,0.05); top: -100px; right: -100px;
-}
-.login-brand::after {
-  content: ''; position: absolute; width: 300px; height: 300px; border-radius: 50%;
-  background: rgba(255,255,255,0.05); bottom: -80px; left: -80px;
-}
-.brand-content { color: #fff; position: relative; z-index: 1; max-width: 440px; }
-.brand-logo {
-  width: 64px; height: 64px; background: rgba(255,255,255,0.2); border-radius: 16px;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 32px; font-weight: 700; backdrop-filter: blur(10px); margin-bottom: 24px;
-}
-.brand-title { font-size: 40px; font-weight: 700; margin: 0 0 12px; }
-.brand-slogan { font-size: 18px; opacity: 0.9; margin: 0 0 48px; }
-.brand-features { display: flex; flex-direction: column; gap: 20px; }
-.feature-item {
-  display: flex; align-items: center; gap: 16px; padding: 14px 18px;
-  background: rgba(255,255,255,0.1); border-radius: 12px; backdrop-filter: blur(10px);
-}
-.feature-icon { font-size: 24px; width: 40px; text-align: center; flex-shrink: 0; }
-.feature-name { font-size: 15px; font-weight: 600; margin-bottom: 2px; }
-.feature-desc { font-size: 13px; opacity: 0.75; }
 
 .login-form-area {
   flex: 4; display: flex; align-items: center; justify-content: center;

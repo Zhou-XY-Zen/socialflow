@@ -41,6 +41,12 @@ dist-ssr/
 .eslintcache
 *.tsbuildinfo
 
+# TypeScript/Vue SFC 误落源码目录的编译产物
+socialflow-ui/src/**/*.js
+socialflow-ui/src/**/*.js.map
+socialflow-ui/vite.config.js
+socialflow-ui/vite.config.js.map
+
 # =========================
 # Secrets & local data
 # =========================

@@ -1,0 +1,142 @@
+<!--
+  BrandPanel.vue —— 登录/注册页左侧共用的品牌展示区
+-->
+
+<template>
+  <div class="login-brand">
+    <div class="brand-content">
+      <div class="brand-logo">S</div>
+      <h1 class="brand-title">SocialFlow</h1>
+      <p class="brand-slogan">AI 驱动的社交媒体内容创作平台</p>
+
+      <div class="brand-features">
+        <div v-for="f in features" :key="f.name" class="feature-item">
+          <div class="feature-icon" v-html="f.icon" />
+          <div>
+            <div class="feature-name">{{ f.name }}</div>
+            <div class="feature-desc">{{ f.desc }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+const features = [
+  { icon: '&#x270D;', name: 'AI 文案生成', desc: '多平台适配，一键生成高质量文案' },
+  { icon: '&#x1F4DA;', name: '知识库 RAG', desc: '基于专属知识库增强生成效果' },
+  { icon: '&#x1F3A8;', name: 'AI 智能配图', desc: '文案自动匹配 AI 生成精美配图' },
+  { icon: '&#x1F680;', name: '多平台分发', desc: '小红书、抖音、朋友圈一键分发' },
+]
+</script>
+
+<style scoped>
+.login-brand {
+  flex: 5;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 60px;
+  position: relative;
+  overflow: hidden;
+}
+
+.login-brand::before {
+  content: '';
+  position: absolute;
+  width: 400px;
+  height: 400px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.05);
+  top: -100px;
+  right: -100px;
+}
+
+.login-brand::after {
+  content: '';
+  position: absolute;
+  width: 300px;
+  height: 300px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.05);
+  bottom: -80px;
+  left: -80px;
+}
+
+.brand-content {
+  color: #fff;
+  position: relative;
+  z-index: 1;
+  max-width: 440px;
+}
+
+.brand-logo {
+  width: 64px;
+  height: 64px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  font-weight: 700;
+  color: #fff;
+  backdrop-filter: blur(10px);
+  margin-bottom: 24px;
+}
+
+.brand-title {
+  font-size: 40px;
+  font-weight: 700;
+  margin: 0 0 12px;
+  letter-spacing: -0.5px;
+}
+
+.brand-slogan {
+  font-size: 18px;
+  opacity: 0.9;
+  margin: 0 0 48px;
+  line-height: 1.6;
+}
+
+.brand-features {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.feature-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 18px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  backdrop-filter: blur(10px);
+  transition: background 0.3s;
+}
+
+.feature-item:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.feature-icon {
+  font-size: 24px;
+  width: 40px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.feature-name {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.feature-desc {
+  font-size: 13px;
+  opacity: 0.75;
+}
+</style>

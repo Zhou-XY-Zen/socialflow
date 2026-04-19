@@ -205,7 +205,7 @@ public class RagPipelineServiceImpl implements RagPipelineService {
      * "假设性回答"，再用这个回答去检索，通常能找到更相关的内容。
      *
      * @param query 用户的原始查询
-     * @return 重写后的查询（当前为 TODO 桩实现，直接返回原始查询）
+     * @return LLM 生成的假设性回答；调用失败时回退到原始查询
      */
     protected String hydeRewrite(String query) {
         try {
