@@ -75,9 +75,9 @@ public interface UserService {
     UserVO updateProfile(Long userId, String nickname, String avatarUrl);
 
     /**
-     * 上传用户头像到 MinIO 对象存储。
+     * 上传用户头像到 对象存储 对象存储。
      *
-     * 将头像文件上传到 MinIO 的 avatar/{userId}/ 路径下，
+     * 将头像文件上传到 对象存储 的 avatar/{userId}/ 路径下，
      * 并更新用户表中的 avatarUrl 字段。
      *
      * @param userId 用户 ID

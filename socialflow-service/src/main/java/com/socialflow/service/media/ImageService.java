@@ -11,7 +11,7 @@ import com.socialflow.model.vo.ImageTaskStatusVO;
  *   1. 从文案内容中智能提取适合绘图的英文提示词
  *   2. 调用 DashScope wanx 模型提交异步文生图任务
  *   3. 查询文生图任务状态与结果
- *   4. 将生成的远程图片下载到 MinIO 并保存为素材记录
+ *   4. 将生成的远程图片下载到 对象存储 并保存为素材记录
  */
 public interface ImageService {
 
@@ -51,9 +51,9 @@ public interface ImageService {
     ImageTaskStatusVO getTaskStatus(String taskId);
 
     /**
-     * 下载远程图片并保存到 MinIO + 数据库。
+     * 下载远程图片并保存到 对象存储 + 数据库。
      *
-     * 将 DashScope 生成的临时图片 URL 下载到本地 MinIO 存储，
+     * 将 DashScope 生成的临时图片 URL 下载到本地 对象存储 存储，
      * 并创建 MediaAsset 数据库记录，使其成为素材库中的正式素材。
      *
      * @param userId 用户 ID

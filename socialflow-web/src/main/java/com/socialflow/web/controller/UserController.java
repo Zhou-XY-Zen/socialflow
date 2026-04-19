@@ -158,7 +158,7 @@ public class UserController {
      *
      * 接口路径：POST /api/v1/auth/avatar
      *
-     * 功能：接收头像文件并上传到 MinIO 对象存储，
+     * 功能：接收头像文件并上传到对象存储（腾讯云 COS），
      * 同时更新用户表中的头像 URL 字段。
      *
      * @param file 头像图片文件

@@ -23,7 +23,7 @@ public interface MediaService {
      * 上传一个媒体文件。
      *
      * 文件上传后，系统会自动提取文件类型、尺寸等元信息，
-     * 并将文件存储到对象存储服务（如 MinIO、阿里云 OSS 等）。
+     * 并将文件存储到对象存储服务（腾讯云 COS）。
      *
      * @param userId 当前登录用户的 ID
      * @param file   上传的文件（Spring 的 MultipartFile 对象）

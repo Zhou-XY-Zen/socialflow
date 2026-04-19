@@ -23,10 +23,10 @@ import java.io.InputStream;
 import java.util.UUID;
 
 /**
- * 媒体素材服务实现类 —— 基于统一存储服务（COS/MinIO）的素材管理。
+ * 媒体素材服务实现类 —— 基于腾讯云 COS 对象存储的素材管理。
  *
  * 负责文件上传、数据库元信息管理、文件删除等操作。
- * 底层存储通过 StorageService 接口抽象，支持腾讯云 COS 和 MinIO。
+ * 底层存储通过 StorageService 接口抽象，当前实现为 CosStorageService。
  */
 @Slf4j
 @Service

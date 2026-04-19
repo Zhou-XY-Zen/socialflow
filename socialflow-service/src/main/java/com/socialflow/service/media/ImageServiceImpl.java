@@ -40,12 +40,12 @@ import java.util.UUID;
  * 核心能力：
  *   1. 使用 Qwen LLM 从文案中提取英文绘图提示词
  *   2. 调用 DashScope text2image API 异步生成图片
- *   3. 将生成的图片下载到 MinIO 并保存为素材记录
+ *   3. 将生成的图片下载到 对象存储 并保存为素材记录
  *
  * DashScope text2image API 是异步的：
  *   - 提交任务 → 返回 task_id
  *   - 轮询任务状态 → SUCCEEDED 时获取图片 URL
- *   - 图片 URL 有时效，需及时下载到 MinIO
+ *   - 图片 URL 有时效，需及时下载到 对象存储
  */
 @Slf4j
 @Service
@@ -300,18 +300,18 @@ public class ImageServiceImpl implements ImageService {
         }
     }
 
-    // ==================== 4. 下载保存到 MinIO ====================
+    // ==================== 4. 下载保存到 对象存储 ====================
 
     /**
-     * 将远程图片下载到 MinIO 并创建 MediaAsset 记录。
+     * 将远程图片下载到 对象存储 并创建 MediaAsset 记录。
      *
      * 流程：
      *   1. HTTP GET 下载图片字节数据
-     *   2. 生成 MinIO objectKey: media/{userId}/{UUID}_ai_generated.png
-     *   3. 调用 minioClient.putObject 上传
+     *   2. 生成 对象存储 objectKey: media/{userId}/{UUID}_ai_generated.png
+     *   3. 调用 cosClient.putObject 上传
      *   4. 创建 MediaAsset 实体并写入数据库
      *
-     * 复用与 MediaServiceImpl.upload() 完全一致的 MinIO 上传模式。
+     * 复用与 MediaServiceImpl.upload() 完全一致的 对象存储 上传模式。
      */
     @Override
     public MediaAsset downloadAndSave(Long userId, String imageUrl, String tags) {
@@ -344,7 +344,7 @@ public class ImageServiceImpl implements ImageService {
             String fileName = "ai_" + UUID.randomUUID().toString().substring(0, 8) + ext;
             String objectKey = "media/" + userId + "/" + UUID.randomUUID() + "_" + fileName;
 
-            // 3. 上传到对象存储（COS 或 MinIO）
+            // 3. 上传到对象存储（腾讯云 COS）
             storageService.upload(objectKey, imageBytes, contentType);
 
             // 4. 获取公开访问 URL

@@ -4,6 +4,9 @@ version: "3.8"
 # Run:  docker compose up -d
 # Stop: docker compose down
 # Reset: docker compose down -v
+#
+# 生产对象存储使用腾讯云 COS（见 application.yml 的 socialflow.storage 配置）。
+# 本地开发如需本地对象存储，可自行 pull minio 并配置 COS 兼容的 S3 endpoint。
 
 services:
   mysql:
@@ -23,8 +26,9 @@ services:
       - "3306:3306"
     volumes:
       - ./data/mysql:/var/lib/mysql
-      - ./sql/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
-      - ./sql/init-data.sql:/docker-entrypoint-initdb.d/02-init-data.sql:ro
+      # schema + 种子数据由 Flyway 迁移脚本管理（socialflow-admin/.../db/migration/V*.sql）
+      # 旧的 sql/init-data.sql 仅含早期模板（1001-1004）若需要可挂载
+      - ./sql/init-data.sql:/docker-entrypoint-initdb.d/01-init-data.sql:ro
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       interval: 10s
@@ -42,25 +46,6 @@ services:
       - ./data/redis:/data
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-***REDACTED-DB-PASSWORD***}", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  minio:
-    image: minio/minio:latest
-    container_name: socialflow-minio
-    restart: unless-stopped
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
-    ports:
-      - "9000:9000"  # S3 API
-      - "9001:9001"  # web console
-    volumes:
-      - ./data/minio:/data
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -83,37 +68,3 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-
-  # Optional: Milvus (uncomment to enable; comment out pgvector to save resources)
-  # milvus-etcd:
-  #   image: quay.io/coreos/etcd:v3.5.5
-  #   container_name: socialflow-milvus-etcd
-  #   command: etcd -advertise-client-urls=http://127.0.0.1:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
-  #   volumes:
-  #     - ./data/milvus/etcd:/etcd
-  #
-  # milvus-minio:
-  #   image: minio/minio:latest
-  #   container_name: socialflow-milvus-minio
-  #   command: minio server /minio_data
-  #   environment:
-  #     MINIO_ACCESS_KEY: minioadmin
-  #     MINIO_SECRET_KEY: minioadmin
-  #   volumes:
-  #     - ./data/milvus/minio:/minio_data
-  #
-  # milvus:
-  #   image: milvusdb/milvus:v2.4.13
-  #   container_name: socialflow-milvus
-  #   command: ["milvus", "run", "standalone"]
-  #   environment:
-  #     ETCD_ENDPOINTS: milvus-etcd:2379
-  #     MINIO_ADDRESS: milvus-minio:9000
-  #   depends_on:
-  #     - milvus-etcd
-  #     - milvus-minio
-  #   ports:
-  #     - "19530:19530"
-  #     - "9091:9091"
-  #   volumes:
-  #     - ./data/milvus/db:/var/lib/milvus

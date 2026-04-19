@@ -20,7 +20,7 @@ export interface MediaAssetVO {
   fileName: string          // 原始文件名
   fileType: string          // 文件类型：IMAGE / VIDEO
   mimeType: string          // MIME 类型，如 image/jpeg、video/mp4
-  fileUrl: string           // 文件访问 URL（MinIO 地址）
+  fileUrl: string           // 文件访问 URL（COS 公有读域名）
   thumbnailUrl?: string     // 缩略图 URL（当前与 fileUrl 相同）
   fileSize: number          // 文件大小（字节）
   tags?: string             // 标签（逗号分隔）

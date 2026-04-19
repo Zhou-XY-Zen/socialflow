@@ -40,7 +40,6 @@
         <sa-token.version>1.39.0</sa-token.version>
         <knife4j.version>4.5.0</knife4j.version>
         <hutool.version>5.8.32</hutool.version>
-        <minio.version>8.5.12</minio.version>
         <cos.version>5.6.227</cos.version>
         <spring-cloud.version>2023.0.4</spring-cloud.version>
         <spring-cloud-alibaba.version>2023.0.3.2</spring-cloud-alibaba.version>
@@ -148,13 +147,6 @@
                 <groupId>cn.hutool</groupId>
                 <artifactId>hutool-all</artifactId>
                 <version>${hutool.version}</version>
-            </dependency>
-
-            <!-- MinIO（保留兼容，本地开发可用） -->
-            <dependency>
-                <groupId>io.minio</groupId>
-                <artifactId>minio</artifactId>
-                <version>${minio.version}</version>
             </dependency>
 
             <!-- 腾讯云 COS 对象存储 -->

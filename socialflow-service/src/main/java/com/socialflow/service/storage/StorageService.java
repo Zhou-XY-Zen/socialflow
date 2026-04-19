@@ -6,7 +6,8 @@ import java.io.InputStream;
  * 统一对象存储服务接口。
  *
  * 抽象出上传、删除、获取 URL 等操作，
- * 底层实现可以是腾讯云 COS、MinIO、阿里云 OSS 等。
+ * 当前实现为腾讯云 COS（{@link CosStorageService}），如需切换其他云厂商
+（阿里云 OSS、AWS S3 等），新增一个实现类并调整 Spring Bean 优先级即可。
  */
 public interface StorageService {
 

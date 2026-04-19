@@ -169,7 +169,7 @@ public class ImageController {
     }
 
     /**
-     * 下载远程图片到 MinIO 并保存为素材。
+     * 下载远程图片到 对象存储 并保存为素材。
      */
     @Operation(summary = "下载远程图片保存到素材库")
     @PostMapping("/download")

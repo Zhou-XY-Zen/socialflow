@@ -4,7 +4,7 @@
 > that exercises RAG, vector search, knowledge bases, AI Guardrails, Skills/Tools,
 > Multi-Agent workflows, LLM-as-Judge evaluation, SSE streaming, and memory management.
 
-**Version:** 1.0.0-SNAPSHOT  •  **Stack:** Spring Boot 3.3 + LangChain4j + Vue 3 + MySQL + pgvector + Redis + MinIO  •  **JDK:** 21+
+**Version:** 1.0.0-SNAPSHOT  •  **Stack:** Spring Boot 3.3 + LangChain4j + Vue 3 + MySQL + pgvector + Redis + 腾讯云 COS  •  **JDK:** 21+
 
 ---
 
@@ -34,7 +34,7 @@
                          │
        ┌─────────┬───────┼────────┬──────────┐
        ▼         ▼       ▼        ▼          ▼
-    MySQL     Redis    MinIO   pgvector    LLM APIs
+    MySQL     Redis    pgvector   (COS on cloud)    LLM APIs
     :3306    :6379    :9000    :5432
 ```
 
@@ -43,7 +43,7 @@
 ```
 socialflow/
 ├── pom.xml                           # parent (dependency management)
-├── docker-compose.yml                # local infra (MySQL/Redis/MinIO/pgvector)
+├── docker-compose.yml                # local infra (MySQL/Redis/pgvector)
 ├── .env.example
 ├── sql/
 │   ├── schema.sql                    # all 18 MySQL tables
@@ -81,7 +81,7 @@ cp .env.example .env
 docker compose up -d
 ```
 
-This starts MySQL (port 3306), Redis (6379), MinIO (9000/9001) and pgvector (5432),
+This starts MySQL (port 3306), Redis (6379), pgvector (5432),
 and seeds MySQL from `sql/schema.sql` + `sql/init-data.sql`.
 
 ### 3. Initialize pgvector
@@ -121,7 +121,7 @@ See `.env.example` for the complete list. Required:
 | `AI_ENCRYPTION_KEY` | AES-256-GCM key (32 bytes hex = 64 chars) used to encrypt user API keys |
 | `DB_PASSWORD` | MySQL root password |
 | `REDIS_PASSWORD` | Redis AUTH password |
-| `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` | MinIO credentials |
+| `COS_SECRET_ID` / `COS_SECRET_KEY` | 腾讯云 COS credentials |
 | `PG_PASSWORD` | pgvector postgres password |
 | `WECHAT_MP_SECRET` | WeChat Official Account AppSecret (if auto-publish is enabled) |
 

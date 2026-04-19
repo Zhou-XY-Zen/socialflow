@@ -93,16 +93,13 @@ knife4j:
 # SocialFlow 自定义配置（本地开发兜底值）
 socialflow:
   storage:
+    # 对象存储：使用腾讯云 COS
     type: cos
     cos-secret-id: ${COS_SECRET_ID:your-cos-secret-id}
     cos-secret-key: ${COS_SECRET_KEY:your-cos-secret-key}
     cos-region: ap-guangzhou
     cos-bucket: socialflow-1315728369
     public-url: https://socialflow-1315728369.cos.ap-guangzhou.myqcloud.com
-    endpoint: http://localhost:9000
-    access-key: minioadmin
-    secret-key: minioadmin123
-    bucket: socialflow
   ai:
     default-provider: deepseek
     encryption-key: ***REDACTED-EXAMPLE-AES-KEY***

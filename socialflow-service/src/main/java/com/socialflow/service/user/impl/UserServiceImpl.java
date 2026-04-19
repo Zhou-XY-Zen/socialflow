@@ -40,7 +40,7 @@ public class UserServiceImpl implements UserService {
     /** 系统用户数据库映射器 */
     private final SysUserMapper sysUserMapper;
 
-    /** 统一存储服务（COS / MinIO） */
+    /** 统一对象存储服务（腾讯云 COS） */
     private final StorageService storageService;
 
     /**
@@ -188,7 +188,7 @@ public class UserServiceImpl implements UserService {
     }
 
     /**
-     * 上传用户头像到 MinIO 对象存储。
+     * 上传用户头像到对象存储。
      *
      * 文件存储路径：avatar/{userId}/avatar.jpg
      * 上传成功后更新 sys_user 表的 avatar_url 字段。

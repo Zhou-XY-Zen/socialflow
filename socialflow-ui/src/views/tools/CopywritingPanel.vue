@@ -216,7 +216,7 @@ function toggleImageUrl(url: string) {
   selectedImageUrls.value = new Set(selectedImageUrls.value)
 }
 
-/** 下载选中图片到 MinIO 并绑定到文案 */
+/** 下载选中图片到 COS 并绑定到文案 */
 async function saveSelectedImages() {
   if (selectedImageUrls.value.size === 0) {
     ElMessage.warning('请先勾选要保存的图片')

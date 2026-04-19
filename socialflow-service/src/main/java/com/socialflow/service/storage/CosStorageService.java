@@ -20,7 +20,7 @@ import java.io.InputStream;
  * 腾讯云 COS 对象存储服务实现。
  *
  * 基于腾讯云 COS Java SDK，提供文件上传、删除、URL 获取等操作。
- * 替代原有的 MinIO 存储方案，图片通过 COS 公有读域名直接访问。
+ * 图片通过 COS 公有读域名直接访问，适合需要 CDN 加速的生产场景。
  */
 @Slf4j
 @Service

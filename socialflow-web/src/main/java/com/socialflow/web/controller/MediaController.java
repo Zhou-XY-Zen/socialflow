@@ -23,9 +23,9 @@ import org.springframework.web.multipart.MultipartFile;
  * 媒体素材控制器 —— 管理用户上传的图片、视频等媒体资源。
  *
  * 本控制器处理的基础 URL 路径为 {@code /api/v1/media}，提供以下功能：
- *     - 上传媒体文件（图片、视频）到 MinIO 对象存储
+ *     - 上传媒体文件（图片、视频）到 对象存储 对象存储
  *     - 分页浏览素材列表，支持按类型筛选和关键词搜索
- *     - 删除素材（同时删除 MinIO 中的文件和数据库记录）
+ *     - 删除素材（同时删除 对象存储 中的文件和数据库记录）
  *
  * 所有接口都需要用户登录后才能访问，通过 Sa-Token 的 {@code StpUtil.getLoginIdAsLong()}
  * 获取当前登录用户的 ID，确保用户只能操作自己的素材。
@@ -46,7 +46,7 @@ public class MediaController {
      *
      * 接口路径：POST /api/v1/media/upload
      *
-     * 功能：将用户上传的图片或视频文件存储到 MinIO，同时在数据库中创建元信息记录。
+     * 功能：将用户上传的图片或视频文件存储到 对象存储，同时在数据库中创建元信息记录。
      * 前端需要以 multipart/form-data 格式提交文件。
      *
      * @param file 上传的媒体文件（通过 multipart 表单上传）
@@ -88,7 +88,7 @@ public class MediaController {
      *
      * 接口路径：DELETE /api/v1/media/{id}
      *
-     * 功能：删除指定的媒体素材，同时从 MinIO 中移除实际文件。
+     * 功能：删除指定的媒体素材，同时从 对象存储 中移除实际文件。
      * 只有素材的所有者才能执行删除操作。
      *
      * @param id 要删除的素材 ID（从 URL 路径中获取）

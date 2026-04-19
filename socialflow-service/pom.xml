@@ -62,12 +62,6 @@
             <artifactId>redisson-spring-boot-starter</artifactId>
         </dependency>
 
-        <!-- MinIO（本地开发可选） -->
-        <dependency>
-            <groupId>io.minio</groupId>
-            <artifactId>minio</artifactId>
-        </dependency>
-
         <!-- 腾讯云 COS -->
         <dependency>
             <groupId>com.qcloud</groupId>
