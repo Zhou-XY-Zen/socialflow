@@ -20,6 +20,10 @@ public class RepoAuthCredentialVO implements Serializable {
     private Long id;
     private String nickname;
     private String gitHost;
+
+    /** TOKEN / PASSWORD */
+    private String authType;
+
     private String username;
 
     /** 掩码：ghp_****f8a；前端永远拿不到明文 */

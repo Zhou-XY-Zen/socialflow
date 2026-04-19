@@ -132,13 +132,16 @@ export interface FindingStatusDTO {
   resolutionNote?: string
 }
 
+export type CredentialAuthType = 'TOKEN' | 'PASSWORD'
+
 /** Git 仓库凭证（返回给前端时 token 永远是掩码）*/
 export interface RepoAuthCredential {
   id: string
   nickname: string
   gitHost: string
+  authType?: CredentialAuthType
   username: string
-  tokenHint?: string        // ghp_****f8a
+  tokenHint?: string        // TOKEN: ghp_****f8a；PASSWORD: ********
   isDefault?: number        // 0 / 1
   testStatus?: 'UNKNOWN' | 'SUCCESS' | 'FAILED'
   testMessage?: string
@@ -150,8 +153,9 @@ export interface SaveCredentialDTO {
   id?: string | number
   nickname: string
   gitHost: string
+  authType?: CredentialAuthType
   username: string
-  token?: string        // 编辑时留空 = 不改；新增必填
+  token?: string        // 编辑时留空 = 不改；新增必填（token 或 password）
   isDefault?: number
 }
 

@@ -29,10 +29,14 @@ public class SaveCredentialDTO implements Serializable {
     @Schema(description = "Git Host，例 github.com / gitee.com / gitlab.company.com")
     private String gitHost;
 
+    @Schema(description = "认证方式：TOKEN（推荐）/ PASSWORD；留空默认 TOKEN",
+            allowableValues = {"TOKEN", "PASSWORD"})
+    private String authType;
+
     @NotBlank(message = "用户名不能为空")
     private String username;
 
-    @Schema(description = "Personal Access Token / 密码。编辑时留空代表不修改")
+    @Schema(description = "Token 或密码。编辑时留空代表不修改")
     private String token;
 
     /** 同 host 下是否设为默认 */

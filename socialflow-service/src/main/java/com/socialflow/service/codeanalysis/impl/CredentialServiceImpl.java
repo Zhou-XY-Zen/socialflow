@@ -70,14 +70,23 @@ public class CredentialServiceImpl implements CredentialService {
         }
         e.setNickname(dto.getNickname());
         e.setGitHost(normalizeHost(dto.getGitHost()));
+        // 认证类型：仅允许 TOKEN / PASSWORD，默认 TOKEN
+        String authType = dto.getAuthType();
+        if (authType == null || authType.isBlank()) authType = "TOKEN";
+        authType = authType.toUpperCase();
+        if (!"TOKEN".equals(authType) && !"PASSWORD".equals(authType)) {
+            throw new BusinessException("认证类型必须是 TOKEN 或 PASSWORD");
+        }
+        e.setAuthType(authType);
         e.setUsername(dto.getUsername());
         if (dto.getToken() != null && !dto.getToken().isBlank()) {
             e.setTokenEncrypted(AesGcmUtil.encrypt(dto.getToken(), encryptionKey));
-            e.setTokenHint(maskToken(dto.getToken()));
-            e.setTestStatus("UNKNOWN");  // token 换了 → 重置测试状态
+            e.setTokenHint(maskToken(dto.getToken(), authType));
+            e.setTestStatus("UNKNOWN");  // 秘钥换了 → 重置测试状态
             e.setTestMessage(null);
         } else if (isNew) {
-            throw new BusinessException("新建凭证必须填写 Token");
+            throw new BusinessException(
+                    "PASSWORD".equals(authType) ? "新建凭证必须填写密码" : "新建凭证必须填写 Token");
         }
         Integer wantDefault = dto.getIsDefault() == null ? 0 : dto.getIsDefault();
         e.setIsDefault(wantDefault);
@@ -233,10 +242,17 @@ public class CredentialServiceImpl implements CredentialService {
         return h;
     }
 
-    /** 生成掩码：ghp_****f8a —— 前 4 + "****" + 后 3 */
-    public static String maskToken(String token) {
-        if (token == null || token.length() < 8) return "****";
-        return token.substring(0, 4) + "****" + token.substring(token.length() - 3);
+    /** 生成掩码：
+     *  TOKEN 模式：ghp_****f8a —— 前 4 + "****" + 后 3（Token 前缀一般是 provider 特征）
+     *  PASSWORD 模式：********（不泄漏任何长度/字符信息，也不暴露用户密码习惯）
+     */
+    public static String maskToken(String plain, String authType) {
+        if (plain == null) return "****";
+        if ("PASSWORD".equalsIgnoreCase(authType)) {
+            return "********";
+        }
+        if (plain.length() < 8) return "****";
+        return plain.substring(0, 4) + "****" + plain.substring(plain.length() - 3);
     }
 
     private static String truncate(String s, int len) {

@@ -27,6 +27,9 @@ public class RepoAuthCredential extends BaseEntity {
     /** Git Host：github.com / gitee.com / gitlab.company.com / 10.0.0.5:3000 */
     private String gitHost;
 
+    /** 认证方式：TOKEN（个人访问令牌，推荐）/ PASSWORD（账号密码） */
+    private String authType;
+
     private String username;
 
     /** AES-256-GCM 加密后的 Base64 串 */

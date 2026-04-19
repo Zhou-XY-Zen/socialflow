@@ -21,18 +21,24 @@ const form = reactive<{
   id?: string | number
   nickname: string
   gitHost: string
+  authType: 'TOKEN' | 'PASSWORD'
   username: string
   token: string
   isDefault: number
 }>({
   nickname: '',
   gitHost: 'github.com',
+  authType: 'TOKEN',
   username: '',
   token: '',
   isDefault: 0,
 })
 
 const isEdit = computed(() => form.id != null)
+
+/** GitHub 自 2021-08-13 起禁用密码克隆，选 PASSWORD + github.com 时警告 */
+const githubPasswordWarn = computed(() =>
+  form.authType === 'PASSWORD' && /^github\.com$/i.test(form.gitHost.trim()))
 
 const COMMON_HOSTS = [
   'github.com',
@@ -60,6 +66,7 @@ function openAdd() {
   form.id = undefined
   form.nickname = ''
   form.gitHost = 'github.com'
+  form.authType = 'TOKEN'
   form.username = ''
   form.token = ''
   form.isDefault = 0
@@ -71,6 +78,7 @@ function openEdit(c: RepoAuthCredential) {
   form.id = c.id
   form.nickname = c.nickname
   form.gitHost = c.gitHost
+  form.authType = (c.authType as 'TOKEN' | 'PASSWORD') || 'TOKEN'
   form.username = c.username
   form.token = ''  // 编辑时留空 = 不修改
   form.isDefault = c.isDefault || 0
@@ -84,14 +92,25 @@ async function save() {
     return
   }
   if (!isEdit.value && !form.token) {
-    ElMessage.warning('新建凭证必须填写 Token')
+    ElMessage.warning(form.authType === 'PASSWORD' ? '新建凭证必须填写密码' : '新建凭证必须填写 Token')
     return
+  }
+  // GitHub 密码登录在 2021-08-13 起被 GitHub 官方禁用
+  if (githubPasswordWarn.value) {
+    try {
+      await ElMessageBox.confirm(
+        'GitHub 自 2021-08-13 起已停止支持密码克隆，必须用 Personal Access Token。\n确定仍然使用密码保存吗？（大概率会认证失败）',
+        '⚠️ 认证方式可能不兼容',
+        { type: 'warning', confirmButtonText: '仍然保存', cancelButtonText: '改用 Token' }
+      )
+    } catch { return }
   }
   try {
     await codeAnalysisApi.saveCredential({
       id: form.id,
       nickname: form.nickname,
       gitHost: form.gitHost,
+      authType: form.authType,
       username: form.username,
       token: form.token || undefined,  // 空串不传
       isDefault: form.isDefault,
@@ -184,8 +203,19 @@ const statusMeta: Record<string, { label: string; color: string; icon: string }>
 
         <div class="card-body">
           <div class="card-row"><span class="k">🌐 Host</span><span class="v">{{ c.gitHost }}</span></div>
+          <div class="card-row">
+            <span class="k">🔐 方式</span>
+            <span class="v">
+              <span class="auth-tag" :class="c.authType === 'PASSWORD' ? 'auth-pwd' : 'auth-token'">
+                {{ c.authType === 'PASSWORD' ? '账号密码' : 'Token' }}
+              </span>
+            </span>
+          </div>
           <div class="card-row"><span class="k">👤 用户</span><span class="v">{{ c.username }}</span></div>
-          <div class="card-row"><span class="k">🔑 Token</span><span class="v mono">{{ c.tokenHint || '—' }}</span></div>
+          <div class="card-row">
+            <span class="k">{{ c.authType === 'PASSWORD' ? '🔒 密码' : '🔑 Token' }}</span>
+            <span class="v mono">{{ c.tokenHint || '—' }}</span>
+          </div>
           <div v-if="c.lastUsedAt" class="card-row"><span class="k">🕐 最近</span><span class="v">{{ new Date(c.lastUsedAt).toLocaleString('zh-CN') }}</span></div>
           <div v-if="c.testMessage" class="card-msg" :style="{ color: statusMeta[c.testStatus || 'UNKNOWN'].color }">
             {{ c.testMessage }}
@@ -217,15 +247,46 @@ const statusMeta: Record<string, { label: string; color: string; icon: string }>
           </div>
         </el-form-item>
 
-        <el-form-item label="用户名" required>
-          <el-input v-model="form.username" placeholder="Git 用户名" />
+        <el-form-item label="认证方式" required>
+          <el-radio-group v-model="form.authType">
+            <el-radio-button value="TOKEN">🔑 Personal Access Token（推荐）</el-radio-button>
+            <el-radio-button value="PASSWORD">🔐 账号密码</el-radio-button>
+          </el-radio-group>
+          <div class="form-hint">
+            <template v-if="form.authType === 'TOKEN'">
+              Token 认证更安全：可设权限范围、可单独撤销，即使泄漏影响面小。
+            </template>
+            <template v-else>
+              账号密码方式更简单但安全性差：很多 Git 平台已弃用（GitHub 2021.8 / Bitbucket 2022.3）。
+              仅推荐公司内部老版本 GitLab/Gitea 使用。
+            </template>
+          </div>
         </el-form-item>
 
-        <el-form-item :label="isEdit ? 'Token（留空 = 不修改）' : 'Personal Access Token'" :required="!isEdit">
+        <el-alert v-if="githubPasswordWarn" type="error" :closable="false" style="margin-bottom: 14px">
+          <template #title>GitHub 已禁用密码克隆</template>
+          <div style="font-size: 12px; line-height: 1.6">
+            GitHub 自 2021-08-13 起强制要求使用 PAT，密码认证会直接 401。
+            推荐切换到 Token：Settings → Developer settings → Personal access tokens → Generate new token。
+          </div>
+        </el-alert>
+
+        <el-form-item label="用户名" required>
+          <el-input v-model="form.username"
+                    :placeholder="form.authType === 'PASSWORD' ? 'Git 账号用户名' : 'Git 用户名（可与 Token 所属账号一致）'" />
+        </el-form-item>
+
+        <el-form-item
+          :label="form.authType === 'PASSWORD'
+            ? (isEdit ? '密码（留空 = 不修改）' : '账号密码')
+            : (isEdit ? 'Token（留空 = 不修改）' : 'Personal Access Token')"
+          :required="!isEdit">
           <el-input
             v-model="form.token"
             :type="showToken ? 'text' : 'password'"
-            :placeholder="isEdit ? '如需更换 Token 请填入新值' : 'ghp_xxxxxxxxxxxxxx / glpat-xxxx / xxx'"
+            :placeholder="form.authType === 'PASSWORD'
+              ? (isEdit ? '如需更换密码请填入新值' : '账号密码')
+              : (isEdit ? '如需更换 Token 请填入新值' : 'ghp_xxxxxxxxxxxxxx / glpat-xxxx / xxx')"
             :show-password="!showToken"
           >
             <template #append>
@@ -302,4 +363,8 @@ const statusMeta: Record<string, { label: string; color: string; icon: string }>
 .card-actions { display: flex; gap: 6px; justify-content: flex-end; }
 
 .form-hint { color: #9ca3af; font-size: 12px; margin-top: 4px; line-height: 1.5; }
+
+.auth-tag { padding: 1px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+.auth-tag.auth-token { background: #ede9fe; color: #6d28d9; }
+.auth-tag.auth-pwd   { background: #fef3c7; color: #b45309; }
 </style>
