@@ -114,13 +114,18 @@ def tail_flyway_log(ssh, lines=20):
 
 
 def start_backend(ssh, profile="prod"):
-    """启动后端并返回新进程 PID。"""
+    """启动后端并返回新进程 PID。
+
+    用 `< /dev/null` 关闭 stdin 并 `disown` 脱离 shell 作业表，否则 paramiko 的
+    stdout.read() 会一直等到 java 进程继承的 fd 关闭（启动可能持续 30-60s），
+    触发 channel 超时。
+    """
     start_cmd = (
         f"cd {REMOTE_DIR} && "
         f"SPRING_PROFILES_ACTIVE={profile} "
         f"nohup java -Xms512m -Xmx1536m "
-        f"-jar socialflow.jar > {REMOTE_DIR}/logs/app.log 2>&1 & "
-        f"echo $!"
+        f"-jar socialflow.jar > {REMOTE_DIR}/logs/app.log 2>&1 < /dev/null & "
+        f"pid=$!; disown; echo $pid"
     )
     out, _, _ = run(ssh, start_cmd)
     return out.strip().split("\n")[-1]
