@@ -143,7 +143,8 @@ onMounted(loadCreds)
             </span>
           </el-option>
         </el-select>
-        <div class="row-action">
+        <!-- 空状态引导：未选凭证时才显示 -->
+        <div v-if="!selectedCredId" class="row-action">
           <el-link type="primary" size="small" @click="goManageCredentials">+ 管理凭证</el-link>
         </div>
       </div>
@@ -169,10 +170,11 @@ onMounted(loadCreds)
             </div>
           </template>
         </el-select>
-        <div v-if="projects.length > 0" class="row-action">
+        <!-- 未选仓库时才显示添加链接；选完了就隐藏，界面聚焦在"将分析"摘要 -->
+        <div v-if="!selectedProjectId && projects.length > 0" class="row-action">
           <el-link type="primary" size="small" @click="goAddProject">+ 添加新仓库到此凭证</el-link>
         </div>
-        <div v-else-if="selectedCredId" class="row-action warn">
+        <div v-else-if="projects.length === 0 && selectedCredId" class="row-action warn">
           ⚠️ 该凭证下还没有仓库，
           <el-link type="primary" size="small" @click="goAddProject">点此去添加</el-link>
         </div>
