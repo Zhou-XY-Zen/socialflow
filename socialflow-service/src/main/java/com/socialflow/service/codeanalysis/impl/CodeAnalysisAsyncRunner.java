@@ -8,6 +8,8 @@ import com.socialflow.dao.mapper.RepoAnalysisMapper;
 import com.socialflow.model.dto.AnalyzeRepoDTO;
 import com.socialflow.model.entity.RepoAnalysis;
 import com.socialflow.model.entity.RepoAnalysisFinding;
+import com.socialflow.model.entity.RepoAuthCredential;
+import com.socialflow.service.codeanalysis.CredentialService;
 import com.socialflow.model.vo.LanguageStatVO;
 import com.socialflow.service.ai.llm.ChatMessage;
 import com.socialflow.service.ai.llm.LlmConfig;
@@ -47,6 +49,7 @@ public class CodeAnalysisAsyncRunner {
     private final RepoAnalysisFindingMapper findingMapper;
     private final GitRepoService gitRepoService;
     private final LlmRouter llmRouter;
+    private final CredentialService credentialService;
 
     @Value("${socialflow.ai.system-api-key:}")
     private String systemApiKey;
@@ -65,13 +68,14 @@ public class CodeAnalysisAsyncRunner {
     private static final int TREE_DEPTH = 3;
 
     @Async
-    public void runProjectOverview(Long analysisId, AnalyzeRepoDTO dto) {
+    public void runProjectOverview(Long userId, Long analysisId, AnalyzeRepoDTO dto) {
         long start = System.currentTimeMillis();
         File repo = null;
         try {
             updateProgress(analysisId, "CLONING", 10, "克隆仓库中...");
+            RepoAuthCredential cred = credentialService.resolveForUrl(userId, dto.getGitUrl()).orElse(null);
             repo = gitRepoService.shallowClone(dto.getGitUrl(), dto.getBranch(),
-                    dto.getCloneDepth() != null ? dto.getCloneDepth() : 1);
+                    dto.getCloneDepth() != null ? dto.getCloneDepth() : 1, cred);
 
             updateProgress(analysisId, "SCANNING", 30, "扫描语言与目录结构...");
             Map<String, Long> langs = gitRepoService.scanLanguageStats(repo, dto.getExcludeDirs());
@@ -113,13 +117,14 @@ public class CodeAnalysisAsyncRunner {
     }
 
     @Async
-    public void runCommitReview(Long analysisId, AnalyzeRepoDTO dto) {
+    public void runCommitReview(Long userId, Long analysisId, AnalyzeRepoDTO dto) {
         long start = System.currentTimeMillis();
         File repo = null;
         try {
             updateProgress(analysisId, "CLONING", 10, "克隆仓库中...");
             int depth = dto.getCloneDepth() != null ? dto.getCloneDepth() : 50;
-            repo = gitRepoService.shallowClone(dto.getGitUrl(), dto.getBranch(), depth);
+            RepoAuthCredential cred = credentialService.resolveForUrl(userId, dto.getGitUrl()).orElse(null);
+            repo = gitRepoService.shallowClone(dto.getGitUrl(), dto.getBranch(), depth, cred);
 
             updateProgress(analysisId, "SCANNING", 30, "读取提交 diff...");
             String diff = gitRepoService.readCommitDiff(repo, dto.getCommitSha(), MAX_DIFF_BYTES);
@@ -142,12 +147,13 @@ public class CodeAnalysisAsyncRunner {
     }
 
     @Async
-    public void runDiffReview(Long analysisId, AnalyzeRepoDTO dto) {
+    public void runDiffReview(Long userId, Long analysisId, AnalyzeRepoDTO dto) {
         long start = System.currentTimeMillis();
         File repo = null;
         try {
             updateProgress(analysisId, "CLONING", 10, "克隆仓库中...");
-            repo = gitRepoService.shallowClone(dto.getGitUrl(), dto.getBranch(), 100);
+            RepoAuthCredential cred = credentialService.resolveForUrl(userId, dto.getGitUrl()).orElse(null);
+            repo = gitRepoService.shallowClone(dto.getGitUrl(), dto.getBranch(), 100, cred);
 
             updateProgress(analysisId, "SCANNING", 30, "读取 diff...");
             String diff = gitRepoService.readDiff(repo, dto.getBaseRef(), dto.getHeadRef(), MAX_DIFF_BYTES);

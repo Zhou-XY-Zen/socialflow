@@ -1,6 +1,7 @@
 package com.socialflow.service.codeanalysis.impl;
 
 import com.socialflow.common.exception.BusinessException;
+import com.socialflow.model.entity.RepoAuthCredential;
 import com.socialflow.model.vo.RepoCommitVO;
 import com.socialflow.service.codeanalysis.GitRepoService;
 import lombok.extern.slf4j.Slf4j;
@@ -11,6 +12,7 @@ import org.eclipse.jgit.lib.ObjectId;
 import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.revwalk.RevWalk;
+import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider;
 import org.eclipse.jgit.treewalk.CanonicalTreeParser;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -101,31 +103,46 @@ public class GitRepoServiceImpl implements GitRepoService {
 
     @Override
     public File shallowClone(String gitUrl, String branch, Integer depth) {
+        return shallowClone(gitUrl, branch, depth, null);
+    }
+
+    @Override
+    public File shallowClone(String gitUrl, String branch, Integer depth, RepoAuthCredential credential) {
         int cloneDepth = (depth == null || depth <= 0) ? 1 : depth;
         String primaryUrl = gitUrl;
         String fallbackUrl = mirrorUrl(gitUrl);
 
-        // 如果启用了镜像且原 URL 是 github.com，直接优先用镜像（国内机房直连 github 基本必超时）
-        if (fallbackUrl != null && !fallbackUrl.equals(primaryUrl)) {
-            log.info("[Git] github.com 国内直连通常超时，直接用镜像: {} → {}", primaryUrl, fallbackUrl);
+        // 有凭证时优先直连原 host（镜像可能拒绝带 token 的请求）
+        if (credential != null) {
+            log.info("[Git] 使用用户凭证直连 {} (用户={})", primaryUrl, credential.getUsername());
             try {
-                return doClone(fallbackUrl, branch, cloneDepth);
+                return doClone(primaryUrl, branch, cloneDepth, credential);
+            } catch (Exception e) {
+                String friendly = buildFriendlyError(primaryUrl, e, true);
+                throw new BusinessException(friendly);
+            }
+        }
+
+        // 无凭证 + GitHub：尝试镜像（国内机房直连 github 通常超时）
+        if (fallbackUrl != null && !fallbackUrl.equals(primaryUrl)) {
+            log.info("[Git] 无凭证，github.com 走镜像: {} → {}", primaryUrl, fallbackUrl);
+            try {
+                return doClone(fallbackUrl, branch, cloneDepth, null);
             } catch (Exception e) {
                 log.warn("[Git] 镜像克隆失败，回退原 URL: {}", e.getMessage());
-                // 镜像失败回退原 URL 再试（某些企业自建网络能通 github 但不通镜像）
             }
         }
 
         try {
-            return doClone(primaryUrl, branch, cloneDepth);
+            return doClone(primaryUrl, branch, cloneDepth, null);
         } catch (Exception e) {
-            String friendly = buildFriendlyError(primaryUrl, e);
+            String friendly = buildFriendlyError(primaryUrl, e, false);
             throw new BusinessException(friendly);
         }
     }
 
-    /** 单次克隆尝试，带超时 */
-    private File doClone(String url, String branch, int cloneDepth) throws Exception {
+    /** 单次克隆尝试，带超时 + 可选凭证 */
+    private File doClone(String url, String branch, int cloneDepth, RepoAuthCredential credential) throws Exception {
         File target;
         try {
             target = Files.createTempDirectory("sfca-" + System.currentTimeMillis() + "-").toFile();
@@ -145,6 +162,11 @@ public class GitRepoServiceImpl implements GitRepoService {
             if (branch != null && !branch.isBlank()) {
                 cloneCmd.setBranch(branch);
                 cloneCmd.setBranchesToClone(List.of("refs/heads/" + branch));
+            }
+            if (credential != null && credential.getTokenEncrypted() != null) {
+                // credential.getTokenEncrypted() 此时已是解密后的明文 token（约定由 CredentialService.resolveForUrl 保证）
+                cloneCmd.setCredentialsProvider(new UsernamePasswordCredentialsProvider(
+                        credential.getUsername(), credential.getTokenEncrypted()));
             }
             try (Git git = cloneCmd.call()) {
                 log.info("[Git] cloned OK, head={}", git.getRepository().resolve("HEAD"));
@@ -170,17 +192,35 @@ public class GitRepoServiceImpl implements GitRepoService {
         return null;
     }
 
-    private String buildFriendlyError(String url, Exception e) {
+    private String buildFriendlyError(String url, Exception e, boolean withCredential) {
         String cause = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
-        boolean looksNetwork = cause.contains("timed out") || cause.contains("connection")
-                || cause.contains("Connection") || cause.contains("Read timed out")
-                || cause.contains("unreachable");
-        if (looksNetwork && url.contains("github.com")) {
-            return "克隆 GitHub 仓库失败：服务器无法直连 github.com（国内机房常见）。已尝试镜像 " +
-                   githubMirror + " 仍失败。建议：1) 切换到 Gitee 镜像地址；2) 在 Settings 里" +
-                   "关闭镜像配置 kkgithub 换其他；3) 管理员在服务器配置 HTTP/SOCKS 代理。原始错误：" + cause;
+        String lower = cause.toLowerCase();
+        boolean looksNetwork = lower.contains("timed out") || lower.contains("connection")
+                || lower.contains("read timed out") || lower.contains("unreachable");
+        boolean looksAuth = lower.contains("not authorized") || lower.contains("authentication")
+                || lower.contains(" 401") || lower.contains(" 403") || lower.contains("unauthorized");
+
+        if (looksAuth) {
+            if (withCredential) {
+                return "克隆失败：凭证认证失败（HTTP 401/403），请在"
+                        + "「代码分析 → 仓库凭证」里检查 Token 是否正确或已过期。原始错误：" + truncate(cause, 200);
+            }
+            return "克隆失败：该仓库需要认证。请在「代码分析 → 仓库凭证」里添加对应 Git Host 的凭证，"
+                    + "然后重新触发分析。原始错误：" + truncate(cause, 200);
         }
-        return "克隆仓库失败: " + cause;
+        if (looksNetwork && url.contains("github.com")) {
+            return "克隆 GitHub 仓库失败：服务器无法直连 github.com（国内机房常见）。已尝试镜像 "
+                    + githubMirror + " 仍失败。建议：1) 在「仓库凭证」里配置 GitHub PAT（带 token 多数时候能穿透）；"
+                    + "2) 换成 Gitee 镜像地址；3) 管理员在服务器配置 HTTP/SOCKS 代理。原始错误：" + truncate(cause, 200);
+        }
+        if (looksNetwork) {
+            return "克隆失败：网络无法到达 " + url + "。如果是公司内部仓库，请检查服务器能否访问该 host。原始错误：" + truncate(cause, 200);
+        }
+        return "克隆仓库失败: " + truncate(cause, 300);
+    }
+
+    private static String truncate(String s, int n) {
+        return s == null || s.length() <= n ? s : s.substring(0, n) + "...";
     }
 
     @Override

@@ -71,7 +71,7 @@ public class CodeAnalysisController {
     @PostMapping("/commits")
     public R<List<RepoCommitVO>> listCommits(@Valid @RequestBody AnalyzeRepoDTO dto) {
         return R.ok(codeAnalysisService.listCommits(
-                dto.getGitUrl(), dto.getBranch(), 50));
+                StpUtil.getLoginIdAsLong(), dto.getGitUrl(), dto.getBranch(), 50));
     }
 
     @Operation(summary = "触发提交审查分析（异步）")

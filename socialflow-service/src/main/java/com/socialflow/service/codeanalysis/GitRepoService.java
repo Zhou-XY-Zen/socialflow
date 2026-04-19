@@ -1,5 +1,6 @@
 package com.socialflow.service.codeanalysis;
 
+import com.socialflow.model.entity.RepoAuthCredential;
 import com.socialflow.model.vo.RepoCommitVO;
 
 import java.io.File;
@@ -26,6 +27,12 @@ public interface GitRepoService {
      * @return 克隆目录（调用方完成后应调用 {@link #cleanup(File)} 清理）
      */
     File shallowClone(String gitUrl, String branch, Integer depth);
+
+    /**
+     * 带凭证的浅克隆。credential 为 null 时等价于 {@link #shallowClone(String, String, Integer)}。
+     * credential 的 tokenEncrypted 字段**必须是已解密的明文 token**（调用方负责）。
+     */
+    File shallowClone(String gitUrl, String branch, Integer depth, RepoAuthCredential credential);
 
     /**
      * 读取最近 N 条提交。

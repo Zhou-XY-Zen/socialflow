@@ -11,9 +11,11 @@ import type {
   AnalyzeRepoDTO,
   CodeAnalysis,
   FindingStatusDTO,
+  RepoAuthCredential,
   RepoBookmark,
   RepoCommit,
   SaveBookmarkDTO,
+  SaveCredentialDTO,
 } from '@/types/codeAnalysis'
 
 export interface PageResult<T> {
@@ -64,4 +66,12 @@ export const codeAnalysisApi = {
   saveBookmark: (dto: SaveBookmarkDTO) =>
     post<RepoBookmark, SaveBookmarkDTO>('/code-analysis/bookmark', dto),
   deleteBookmark: (id: Id) => del<void>(`/code-analysis/bookmark/${id}`),
+
+  // 仓库凭证
+  listCredentials: () => get<RepoAuthCredential[]>('/code-analysis/credential'),
+  saveCredential: (dto: SaveCredentialDTO) =>
+    post<RepoAuthCredential, SaveCredentialDTO>('/code-analysis/credential', dto),
+  deleteCredential: (id: Id) => del<void>(`/code-analysis/credential/${id}`),
+  testCredential: (id: Id) =>
+    post<RepoAuthCredential>(`/code-analysis/credential/${id}/test`),
 }

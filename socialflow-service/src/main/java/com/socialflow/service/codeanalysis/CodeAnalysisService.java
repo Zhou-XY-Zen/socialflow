@@ -51,8 +51,9 @@ public interface CodeAnalysisService {
     /** 标注单条 finding 状态 */
     void updateFindingStatus(Long userId, Long findingId, FindingStatusDTO dto);
 
-    /** 拉取仓库最近 commit 列表（同步，用于选 commit） */
-    List<RepoCommitVO> listCommits(String gitUrl, String branch, Integer limit);
+    /** 拉取仓库最近 commit 列表（同步，用于选 commit）。
+     *  会按 userId 匹配凭证以访问私有仓库。 */
+    List<RepoCommitVO> listCommits(Long userId, String gitUrl, String branch, Integer limit);
 
     /** 仪表盘聚合统计 */
     AnalysisStatsVO dashboardStats(Long userId);

@@ -60,6 +60,8 @@ public class CodeAnalysisServiceImpl implements CodeAnalysisService {
     private final GitRepoService gitRepoService;
     /** 异步执行器（独立 bean，让 @Async 代理生效） */
     private final CodeAnalysisAsyncRunner asyncRunner;
+    /** Git 凭证服务（用户私有仓库认证） */
+    private final com.socialflow.service.codeanalysis.CredentialService credentialService;
     /** commit 列表默认条数 */
     private static final int DEFAULT_COMMIT_LIMIT = 50;
 
@@ -70,7 +72,7 @@ public class CodeAnalysisServiceImpl implements CodeAnalysisService {
         RepoAnalysis a = initRecord(userId, dto, "PROJECT_OVERVIEW");
         a.setBranch(dto.getBranch());
         analysisMapper.insert(a);
-        asyncRunner.runProjectOverview(a.getId(), dto);
+        asyncRunner.runProjectOverview(userId, a.getId(), dto);
         return a.getId();
     }
 
@@ -83,7 +85,7 @@ public class CodeAnalysisServiceImpl implements CodeAnalysisService {
         a.setCommitSha(dto.getCommitSha());
         a.setBranch(dto.getBranch());
         analysisMapper.insert(a);
-        asyncRunner.runCommitReview(a.getId(), dto);
+        asyncRunner.runCommitReview(userId, a.getId(), dto);
         return a.getId();
     }
 
@@ -96,7 +98,7 @@ public class CodeAnalysisServiceImpl implements CodeAnalysisService {
         a.setBaseRef(dto.getBaseRef());
         a.setHeadRef(dto.getHeadRef());
         analysisMapper.insert(a);
-        asyncRunner.runDiffReview(a.getId(), dto);
+        asyncRunner.runDiffReview(userId, a.getId(), dto);
         return a.getId();
     }
 
@@ -208,11 +210,13 @@ public class CodeAnalysisServiceImpl implements CodeAnalysisService {
     }
 
     @Override
-    public List<RepoCommitVO> listCommits(String gitUrl, String branch, Integer limit) {
+    public List<RepoCommitVO> listCommits(Long userId, String gitUrl, String branch, Integer limit) {
         File repo = null;
         try {
             int n = limit == null ? DEFAULT_COMMIT_LIMIT : limit;
-            repo = gitRepoService.shallowClone(gitUrl, branch, n);
+            var cred = userId == null ? java.util.Optional.<com.socialflow.model.entity.RepoAuthCredential>empty()
+                    : credentialService.resolveForUrl(userId, gitUrl);
+            repo = gitRepoService.shallowClone(gitUrl, branch, n, cred.orElse(null));
             return gitRepoService.listCommits(repo, n);
         } finally {
             if (repo != null) gitRepoService.cleanup(repo);

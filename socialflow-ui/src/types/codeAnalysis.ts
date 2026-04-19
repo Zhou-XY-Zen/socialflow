@@ -131,3 +131,27 @@ export interface FindingStatusDTO {
   status: FindingStatus
   resolutionNote?: string
 }
+
+/** Git 仓库凭证（返回给前端时 token 永远是掩码）*/
+export interface RepoAuthCredential {
+  id: string
+  nickname: string
+  gitHost: string
+  username: string
+  tokenHint?: string        // ghp_****f8a
+  isDefault?: number        // 0 / 1
+  testStatus?: 'UNKNOWN' | 'SUCCESS' | 'FAILED'
+  testMessage?: string
+  lastUsedAt?: string
+  createTime?: string
+}
+
+export interface SaveCredentialDTO {
+  id?: string | number
+  nickname: string
+  gitHost: string
+  username: string
+  token?: string        // 编辑时留空 = 不改；新增必填
+  isDefault?: number
+}
+
