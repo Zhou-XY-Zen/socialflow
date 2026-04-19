@@ -8,6 +8,7 @@ import { ElMessage } from 'element-plus'
 import MarkdownIt from 'markdown-it'
 import { codeAnalysisApi } from '@/api/codeAnalysis'
 import { useMermaid } from '@/composables/useMermaid'
+import { useCredentialMatch } from '@/composables/useCredentialMatch'
 import type { CodeAnalysis, RepoBookmark } from '@/types/codeAnalysis'
 
 const router = useRouter()
@@ -19,6 +20,10 @@ const form = reactive({
   branch: 'main',
   cloneDepth: 1,
 })
+
+// 凭证匹配反馈
+const { match: credMatch } = useCredentialMatch()
+const credStatus = computed(() => credMatch(form.gitUrl))
 const loading = ref(false)
 const current = ref<CodeAnalysis>()
 const bookmarks = ref<RepoBookmark[]>([])
@@ -136,6 +141,20 @@ onUnmounted(stopPoll)
         <el-form label-position="top" @submit.prevent>
           <el-form-item label="Git 仓库 URL">
             <el-input v-model="form.gitUrl" placeholder="https://github.com/user/repo.git" clearable />
+
+            <!-- 凭证匹配反馈 -->
+            <div v-if="credStatus.state === 'matched'" class="cred-badge cred-ok">
+              🔑 已匹配凭证：<strong>{{ credStatus.credential?.nickname }}</strong>
+              <span class="cred-type">{{ credStatus.credential?.authType === 'PASSWORD' ? '密码' : 'Token' }}</span>
+              <span v-if="(credStatus.count ?? 0) > 1" class="cred-more">
+                （同 host 下还有 {{ (credStatus.count ?? 0) - 1 }} 条其他凭证）
+              </span>
+            </div>
+            <div v-else-if="credStatus.state === 'missing'" class="cred-badge cred-miss">
+              ⚠️ 未找到 <code>{{ credStatus.host }}</code> 的凭证。
+              公开仓库无需凭证；私有仓库请
+              <el-link type="primary" @click="$router.push('/code-analysis/credentials')">去添加凭证</el-link>
+            </div>
           </el-form-item>
           <el-form-item label="分支">
             <el-input v-model="form.branch" placeholder="main / master / develop" />
@@ -345,6 +364,14 @@ onUnmounted(stopPoll)
 .mermaid-loading { color: #9ca3af; text-align: center; padding: 20px; font-size: 13px; }
 .mermaid-error { background: #fef2f2; color: #b91c1c; padding: 10px; border-radius: 6px; font-size: 13px; }
 .mermaid-code { background: #1e293b; color: #e2e8f0; padding: 12px; border-radius: 6px; font-size: 12px; overflow-x: auto; margin-top: 6px; max-height: 240px; overflow-y: auto; }
+
+/* 凭证匹配反馈 */
+.cred-badge { margin-top: 6px; padding: 6px 12px; border-radius: 6px; font-size: 12px; line-height: 1.6; }
+.cred-badge.cred-ok { background: #f0fdf4; border: 1px solid #bbf7d0; color: #059669; }
+.cred-badge.cred-miss { background: #fffbeb; border: 1px solid #fde68a; color: #b45309; }
+.cred-badge code { background: rgba(0,0,0,0.06); padding: 1px 5px; border-radius: 3px; font-size: 11px; color: #6d28d9; }
+.cred-type { margin-left: 6px; padding: 1px 8px; background: #ede9fe; color: #6d28d9; border-radius: 10px; font-size: 11px; }
+.cred-more { color: #6b7280; margin-left: 6px; font-size: 11px; }
 
 .markdown-body { line-height: 1.75; color: #1f2937; }
 .markdown-body :deep(h1) { font-size: 22px; margin: 20px 0 10px; color: #111827; border-bottom: 2px solid #e5e7eb; padding-bottom: 6px; }

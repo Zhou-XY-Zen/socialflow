@@ -69,7 +69,15 @@ public class CredentialServiceImpl implements CredentialService {
             }
         }
         e.setNickname(dto.getNickname());
-        e.setGitHost(normalizeHost(dto.getGitHost()));
+        // host 可由用户手填，也可从 defaultRepoUrl 自动提取（用户体验：只填完整 URL 即可）
+        String host = normalizeHost(dto.getGitHost());
+        if ((host == null || host.isBlank()) && dto.getDefaultRepoUrl() != null) {
+            host = extractHost(dto.getDefaultRepoUrl());
+        }
+        if (host == null || host.isBlank()) {
+            throw new BusinessException("请填 Git Host 或带 host 的完整仓库 URL");
+        }
+        e.setGitHost(host);
         // 认证类型：仅允许 TOKEN / PASSWORD，默认 TOKEN
         String authType = dto.getAuthType();
         if (authType == null || authType.isBlank()) authType = "TOKEN";

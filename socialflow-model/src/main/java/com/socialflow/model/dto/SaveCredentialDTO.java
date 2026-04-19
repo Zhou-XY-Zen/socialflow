@@ -25,8 +25,7 @@ public class SaveCredentialDTO implements Serializable {
     @NotBlank(message = "昵称不能为空")
     private String nickname;
 
-    @NotBlank(message = "Git host 不能为空")
-    @Schema(description = "Git Host，例 github.com / gitee.com / gitlab.company.com")
+    @Schema(description = "Git Host；若留空后端会从 defaultRepoUrl 自动提取。例 github.com / gitee.com / gitlab.company.com")
     private String gitHost;
 
     @Schema(description = "认证方式：TOKEN（推荐）/ PASSWORD；留空默认 TOKEN",

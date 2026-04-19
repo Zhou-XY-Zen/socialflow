@@ -7,6 +7,7 @@ import { onUnmounted, ref, computed, reactive } from 'vue'
 import { ElMessage } from 'element-plus'
 import MarkdownIt from 'markdown-it'
 import { codeAnalysisApi } from '@/api/codeAnalysis'
+import { useCredentialMatch } from '@/composables/useCredentialMatch'
 import type { CodeAnalysis, RepoCommit, FindingLevel } from '@/types/codeAnalysis'
 import ScoreGauge from '@/components/code-analysis/ScoreGauge.vue'
 import FindingCard from '@/components/code-analysis/FindingCard.vue'
@@ -15,6 +16,9 @@ const md = new MarkdownIt({ html: false, linkify: true, breaks: true })
 
 const step = ref<1 | 2 | 3>(1)
 const form = reactive({ gitUrl: '', branch: 'main' })
+
+const { match: credMatch } = useCredentialMatch()
+const credStatus = computed(() => credMatch(form.gitUrl))
 const commits = ref<RepoCommit[]>([])
 const loadingCommits = ref(false)
 const searchKw = ref('')
@@ -141,6 +145,14 @@ onUnmounted(stopPoll)
         <el-form label-position="top" @submit.prevent>
           <el-form-item label="Git 仓库 URL">
             <el-input v-model="form.gitUrl" placeholder="https://github.com/user/repo.git" size="large" clearable />
+            <div v-if="credStatus.state === 'matched'" class="cred-badge cred-ok">
+              🔑 已匹配凭证：<strong>{{ credStatus.credential?.nickname }}</strong>
+              <span class="cred-type">{{ credStatus.credential?.authType === 'PASSWORD' ? '密码' : 'Token' }}</span>
+            </div>
+            <div v-else-if="credStatus.state === 'missing'" class="cred-badge cred-miss">
+              ⚠️ 未找到 <code>{{ credStatus.host }}</code> 的凭证。私有仓库请
+              <el-link type="primary" @click="$router.push('/code-analysis/credentials')">去添加凭证</el-link>
+            </div>
           </el-form-item>
           <el-form-item label="分支">
             <el-input v-model="form.branch" size="large" />
@@ -379,4 +391,10 @@ onUnmounted(stopPoll)
 .markdown-body :deep(h2) { font-size: 16px; margin: 12px 0 6px; color: #1f2937; }
 .markdown-body :deep(p) { margin: 6px 0; }
 .markdown-body :deep(code) { background: #f3f4f6; padding: 2px 6px; border-radius: 3px; font-size: 0.9em; color: #6d28d9; }
+
+.cred-badge { margin-top: 8px; padding: 6px 12px; border-radius: 6px; font-size: 12px; line-height: 1.6; }
+.cred-badge.cred-ok { background: #f0fdf4; border: 1px solid #bbf7d0; color: #059669; }
+.cred-badge.cred-miss { background: #fffbeb; border: 1px solid #fde68a; color: #b45309; }
+.cred-badge code { background: rgba(0,0,0,0.06); padding: 1px 5px; border-radius: 3px; font-size: 11px; color: #6d28d9; }
+.cred-type { margin-left: 6px; padding: 1px 8px; background: #ede9fe; color: #6d28d9; border-radius: 10px; font-size: 11px; }
 </style>

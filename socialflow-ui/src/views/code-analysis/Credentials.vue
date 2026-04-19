@@ -38,33 +38,28 @@ const form = reactive<{
   isDefault: 0,
 })
 
-/** host 输入变化时，如果"默认仓库 URL"为空，尝试用 host 补一个模板 */
-function onHostChange(h: string) {
-  if (!form.defaultRepoUrl && h) {
-    form.defaultRepoUrl = `https://${h}/your-org/your-repo.git`
-  }
-}
-
-/** 从 URL 智能推断 host 填充（粘贴常用 URL 时）*/
-function onRepoUrlPaste() {
-  const m = form.defaultRepoUrl.match(/^https?:\/\/([^\/]+)/i)
-  if (m && m[1] && !form.gitHost) form.gitHost = m[1]
-}
+// 注：Host 字段已下线，改由 form.defaultRepoUrl 自动解析（autoHost computed）
 
 const isEdit = computed(() => form.id != null)
 
-/** GitHub 自 2021-08-13 起禁用密码克隆，选 PASSWORD + github.com 时警告 */
-const githubPasswordWarn = computed(() =>
-  form.authType === 'PASSWORD' && /^github\.com$/i.test(form.gitHost.trim()))
+/** 从仓库 URL 实时提取 host（模板驱动展示） */
+function extractHostFromUrl(url: string): string {
+  if (!url) return ''
+  const u = url.trim()
+  if (u.startsWith('git@')) {
+    const colon = u.indexOf(':', 4)
+    return colon > 4 ? u.slice(4, colon).toLowerCase() : ''
+  }
+  const m = u.match(/^https?:\/\/([^\/]+)/i)
+  return m ? m[1].toLowerCase() : ''
+}
 
-const COMMON_HOSTS = [
-  'github.com',
-  'gitee.com',
-  'gitlab.com',
-  'bitbucket.org',
-  'codeup.aliyun.com',
-  'e.coding.net',
-]
+/** 自动解析的 host —— 只读展示，保存时传给后端 */
+const autoHost = computed(() => extractHostFromUrl(form.defaultRepoUrl) || form.gitHost)
+
+/** GitHub 自 2021-08-13 起禁用密码克隆 */
+const githubPasswordWarn = computed(() =>
+  form.authType === 'PASSWORD' && /^github\.com$/i.test(autoHost.value.trim()))
 
 async function load() {
   loading.value = true
@@ -82,7 +77,7 @@ onMounted(load)
 function openAdd() {
   form.id = undefined
   form.nickname = ''
-  form.gitHost = 'github.com'
+  form.gitHost = ''
   form.authType = 'TOKEN'
   form.username = ''
   form.token = ''
@@ -118,8 +113,12 @@ function analyzeWithCred(c: RepoAuthCredential) {
 }
 
 async function save() {
-  if (!form.nickname || !form.gitHost || !form.username) {
-    ElMessage.warning('昵称、Host、用户名必填')
+  if (!form.nickname || !form.username) {
+    ElMessage.warning('昵称、用户名必填')
+    return
+  }
+  if (!autoHost.value) {
+    ElMessage.warning('请填写 Git 仓库 URL（会自动识别 Host）')
     return
   }
   if (!isEdit.value && !form.token) {
@@ -140,10 +139,10 @@ async function save() {
     await codeAnalysisApi.saveCredential({
       id: form.id,
       nickname: form.nickname,
-      gitHost: form.gitHost,
+      gitHost: autoHost.value,          // 自动解析出来的 host
       authType: form.authType,
       username: form.username,
-      token: form.token || undefined,  // 空串不传
+      token: form.token || undefined,
       defaultRepoUrl: form.defaultRepoUrl || undefined,
       isDefault: form.isDefault,
     })
@@ -279,28 +278,16 @@ const statusMeta: Record<string, { label: string; color: string; icon: string }>
           <el-input v-model="form.nickname" placeholder="例如：我的 GitHub 个人、公司 GitLab" />
         </el-form-item>
 
-        <el-form-item label="Git Host" required>
-          <el-select v-model="form.gitHost" filterable allow-create default-first-option
-                     placeholder="选择或输入 host" style="width: 100%"
-                     @change="onHostChange">
-            <el-option v-for="h in COMMON_HOSTS" :key="h" :label="h" :value="h" />
-          </el-select>
-          <div class="form-hint">
-            仅填 host（例：github.com / gitlab.company.com / 10.0.0.5:3000），不要带 https://
+        <el-form-item label="Git 仓库 URL" required>
+          <el-input v-model="form.defaultRepoUrl"
+                    placeholder="https://github.com/Zhou-XY-Zen/socialflow.git" clearable />
+          <div class="auto-host" v-if="autoHost">
+            ✓ 自动识别 Host：<span class="host-chip">{{ autoHost }}</span>
+            <span class="host-tip">（此凭证将用于访问 {{ autoHost }} 下的所有仓库）</span>
           </div>
-        </el-form-item>
-
-        <el-form-item>
-          <template #label>
-            <span>常用仓库 URL <span class="optional">（可选，但<strong>强烈推荐</strong>填）</span></span>
-          </template>
-          <el-input v-model="form.defaultRepoUrl" @change="onRepoUrlPaste"
-                    placeholder="https://gitlab.company.com/team/backend.git" clearable />
-          <div class="form-hint">
-            💡 填这个字段后：<br>
-            ① 点「测试」按钮会真的 clone 这个仓库做<strong>精准验证</strong>（不只是测 host 可达）<br>
-            ② 凭证卡片会显示"此凭证用来克隆 xxx"，一目了然<br>
-            ③ 卡片上会出现「📖 用此凭证分析」按钮，一键跳到项目概览并自动填 URL
+          <div v-else class="form-hint">
+            填完整的 https:// 或 git@ 地址，Host 会自动识别。<br>
+            示例：<code>https://github.com/user/repo.git</code> · <code>https://gitlab.company.com/team/backend.git</code>
           </div>
         </el-form-item>
 
@@ -427,4 +414,16 @@ const statusMeta: Record<string, { label: string; color: string; icon: string }>
 .optional { color: #9ca3af; font-weight: 400; font-size: 12px; }
 .repo-url { color: #0369a1 !important; font-size: 12px; }
 .muted    { color: #9ca3af; font-size: 12px; }
+
+.auto-host {
+  margin-top: 8px; padding: 8px 12px; background: #f0fdf4;
+  border: 1px solid #bbf7d0; border-radius: 6px;
+  color: #059669; font-size: 13px;
+}
+.host-chip {
+  font-family: 'SF Mono', Menlo, monospace; background: #fff;
+  padding: 2px 8px; border-radius: 4px; color: #6d28d9; font-weight: 600;
+}
+.host-tip { color: #6b7280; margin-left: 6px; font-size: 12px; }
+.form-hint code { background: #f3f4f6; padding: 1px 5px; border-radius: 3px; font-size: 11px; color: #6d28d9; }
 </style>
