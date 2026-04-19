@@ -46,6 +46,7 @@ export const codeAnalysisApi = {
   delete: (id: number) => del<void>(`/code-analysis/${id}`),
   toggleFavorite: (id: number) => post<void>(`/code-analysis/${id}/favorite`),
   share: (id: number) => post<{ shareToken: string }>(`/code-analysis/${id}/share`),
+  shared: (token: string) => get<CodeAnalysis>(`/code-analysis/shared/${token}`),
 
   // Finding 状态
   updateFindingStatus: (findingId: number, dto: FindingStatusDTO) =>

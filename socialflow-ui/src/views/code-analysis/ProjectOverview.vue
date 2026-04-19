@@ -2,11 +2,12 @@
   ProjectOverview.vue —— 根据 Git URL 生成项目介绍
 -->
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, computed, reactive } from 'vue'
+import { onMounted, onUnmounted, ref, computed, reactive, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import MarkdownIt from 'markdown-it'
 import { codeAnalysisApi } from '@/api/codeAnalysis'
+import { useMermaid } from '@/composables/useMermaid'
 import type { CodeAnalysis, RepoBookmark } from '@/types/codeAnalysis'
 
 const router = useRouter()
@@ -29,6 +30,12 @@ const STAGE_LABEL: Record<string, string> = {
 
 const summaryHtml = computed(() =>
   current.value?.summaryMd ? md.render(current.value.summaryMd) : '')
+
+// Mermaid 流程图渲染
+const { svg: mermaidSvg, error: mermaidError, render: renderMermaid } = useMermaid()
+watch(() => current.value?.mermaidCode, async (code) => {
+  await renderMermaid(code)
+}, { immediate: true })
 
 async function loadBookmarks() {
   try { bookmarks.value = await codeAnalysisApi.listBookmarks() } catch { /* ignore */ }
@@ -215,10 +222,18 @@ onUnmounted(stopPoll)
           </div>
         </div>
 
-        <!-- Mermaid 代码（暂文本展示，下一阶段真正渲染） -->
+        <!-- Mermaid 核心流程图（SVG 渲染） -->
         <div v-if="current.mermaidCode" class="mermaid-box">
-          <div class="mermaid-title">🧭 核心流程图（Mermaid）</div>
-          <pre class="mermaid-code">{{ current.mermaidCode }}</pre>
+          <div class="mermaid-title">🧭 核心流程图</div>
+          <div v-if="mermaidError" class="mermaid-error">
+            ⚠️ Mermaid 语法解析失败：{{ mermaidError }}
+            <details style="margin-top: 8px">
+              <summary>查看原始代码</summary>
+              <pre class="mermaid-code">{{ current.mermaidCode }}</pre>
+            </details>
+          </div>
+          <div v-else-if="mermaidSvg" class="mermaid-svg" v-html="mermaidSvg" />
+          <div v-else class="mermaid-loading">渲染中...</div>
         </div>
 
         <!-- Markdown 长文 -->
@@ -316,9 +331,13 @@ onUnmounted(stopPoll)
 .lang-fill { height: 100%; background: linear-gradient(90deg, #3b82f6, #8b5cf6); }
 .lang-percent { color: #6b7280; text-align: right; }
 
-.mermaid-box { background: #f9fafb; padding: 16px; border-radius: 8px; margin-bottom: 18px; }
-.mermaid-title { font-size: 13px; font-weight: 600; margin-bottom: 8px; color: #374151; }
-.mermaid-code { background: #1e293b; color: #e2e8f0; padding: 12px; border-radius: 6px; font-size: 12px; overflow-x: auto; margin: 0; max-height: 200px; overflow-y: auto; }
+.mermaid-box { background: #f9fafb; padding: 18px; border-radius: 8px; margin-bottom: 18px; border: 1px solid #e5e7eb; }
+.mermaid-title { font-size: 14px; font-weight: 600; margin-bottom: 14px; color: #374151; }
+.mermaid-svg { display: flex; justify-content: center; overflow-x: auto; }
+.mermaid-svg :deep(svg) { max-width: 100%; height: auto; }
+.mermaid-loading { color: #9ca3af; text-align: center; padding: 20px; font-size: 13px; }
+.mermaid-error { background: #fef2f2; color: #b91c1c; padding: 10px; border-radius: 6px; font-size: 13px; }
+.mermaid-code { background: #1e293b; color: #e2e8f0; padding: 12px; border-radius: 6px; font-size: 12px; overflow-x: auto; margin-top: 6px; max-height: 240px; overflow-y: auto; }
 
 .markdown-body { line-height: 1.75; color: #1f2937; }
 .markdown-body :deep(h1) { font-size: 22px; margin: 20px 0 10px; color: #111827; border-bottom: 2px solid #e5e7eb; padding-bottom: 6px; }

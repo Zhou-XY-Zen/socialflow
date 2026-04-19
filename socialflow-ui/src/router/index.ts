@@ -43,6 +43,14 @@ const routes: RouteRecordRaw[] = [
   { path: '/login', component: () => import('@/views/Login.vue'), meta: { public: true } },
   { path: '/register', component: () => import('@/views/Register.vue'), meta: { public: true } },
 
+  /* 代码分析 · 分享视图（免登录） */
+  {
+    path: '/code-analysis/shared/:token',
+    name: 'ca-shared',
+    component: () => import('@/views/code-analysis/SharedView.vue'),
+    meta: { public: true, title: '代码分析 · 分享' },
+  },
+
   {
     /*
      * 这是一个"布局路由"——它本身的路径也是 '/'，

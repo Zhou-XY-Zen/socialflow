@@ -3,11 +3,12 @@
   根据 analysisType 渲染不同布局
 -->
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, computed } from 'vue'
+import { onMounted, onUnmounted, ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import MarkdownIt from 'markdown-it'
 import { codeAnalysisApi } from '@/api/codeAnalysis'
+import { useMermaid } from '@/composables/useMermaid'
 import type { CodeAnalysis, FindingLevel } from '@/types/codeAnalysis'
 import ScoreGauge from '@/components/code-analysis/ScoreGauge.vue'
 import FindingCard from '@/components/code-analysis/FindingCard.vue'
@@ -52,6 +53,12 @@ onMounted(load)
 onUnmounted(stopPoll)
 
 const summaryHtml = computed(() => current.value?.summaryMd ? md.render(current.value.summaryMd) : '')
+
+// Mermaid
+const { svg: mermaidSvg, error: mermaidError, render: renderMermaid } = useMermaid()
+watch(() => current.value?.mermaidCode, async (code) => {
+  await renderMermaid(code)
+}, { immediate: true })
 const filteredFindings = computed(() => {
   if (!current.value?.findings) return []
   return filterLevel.value === 'ALL'
@@ -143,6 +150,13 @@ function exportMd() {
         </div>
       </div>
 
+      <!-- Mermaid 流程图（项目概览类型显示）-->
+      <div v-if="current.analysisType === 'PROJECT_OVERVIEW' && current.mermaidCode" class="content-card">
+        <div class="card-title">🧭 核心流程图</div>
+        <div v-if="mermaidError" class="mermaid-error">⚠️ {{ mermaidError }}</div>
+        <div v-else-if="mermaidSvg" class="mermaid-svg" v-html="mermaidSvg" />
+      </div>
+
       <!-- 摘要 -->
       <div v-if="summaryHtml" class="content-card">
         <div class="card-title">{{ current.analysisType === 'PROJECT_OVERVIEW' ? '📝 项目详细介绍' : '📝 审查总结' }}</div>
@@ -211,4 +225,8 @@ function exportMd() {
 .markdown-body :deep(p) { margin: 6px 0; }
 .markdown-body :deep(code) { background: #f3f4f6; padding: 2px 6px; border-radius: 3px; font-size: 0.9em; color: #6d28d9; }
 .markdown-body :deep(pre) { background: #1e293b; color: #e2e8f0; padding: 12px; border-radius: 6px; overflow-x: auto; }
+
+.mermaid-svg { display: flex; justify-content: center; overflow-x: auto; }
+.mermaid-svg :deep(svg) { max-width: 100%; height: auto; }
+.mermaid-error { background: #fef2f2; color: #b91c1c; padding: 10px; border-radius: 6px; font-size: 13px; }
 </style>

@@ -3,10 +3,11 @@
   可折叠展开 + 状态标注（已修复/忽略）+ 代码片段显示
 -->
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { CodeFinding, FindingStatus } from '@/types/codeAnalysis'
 import { codeAnalysisApi } from '@/api/codeAnalysis'
+import { highlight, languageFromFile } from '@/composables/useHighlight'
 
 const props = defineProps<{ finding: CodeFinding }>()
 const emit = defineEmits<{ updated: [CodeFinding] }>()
@@ -25,6 +26,13 @@ const statusMeta = {
   RESOLVED:   { color: '#10b981', label: '已修复' },
   IGNORED:    { color: '#6b7280', label: '已忽略' },
 } as const
+
+// 代码高亮 HTML
+const highlightedCode = computed(() => {
+  if (!props.finding.codeSnippet) return ''
+  const lang = languageFromFile(props.finding.file)
+  return highlight(props.finding.codeSnippet, lang)
+})
 
 async function setStatus(newStatus: FindingStatus, askNote = false) {
   let note = ''
@@ -82,7 +90,7 @@ async function setStatus(newStatus: FindingStatus, askNote = false) {
 
       <div v-if="finding.codeSnippet" class="f-section">
         <div class="f-section-title">相关代码</div>
-        <pre class="f-code">{{ finding.codeSnippet }}</pre>
+        <pre class="f-code hljs"><code v-html="highlightedCode" /></pre>
       </div>
 
       <div v-if="finding.suggestion" class="f-section">
@@ -182,14 +190,15 @@ async function setStatus(newStatus: FindingStatus, askNote = false) {
 .f-section-body { color: #4b5563; line-height: 1.6; font-size: 13.5px; }
 .f-section-body.note { background: #fffbeb; padding: 8px 10px; border-radius: 4px; }
 .f-code {
-  background: #1e293b;
-  color: #e2e8f0;
   padding: 10px 12px;
   border-radius: 6px;
   font-size: 12.5px;
   overflow-x: auto;
   margin: 0;
-  font-family: 'SF Mono', Menlo, monospace;
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  line-height: 1.6;
 }
+/* highlight.js atom-one-dark 由 useHighlight 全局引入 */
+.f-code :deep(code) { background: transparent; padding: 0; font-size: inherit; }
 .f-actions { margin-top: 12px; display: flex; gap: 8px; }
 </style>
