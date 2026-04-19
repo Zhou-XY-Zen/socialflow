@@ -111,34 +111,44 @@ public class GitRepoServiceImpl implements GitRepoService {
         int cloneDepth = (depth == null || depth <= 0) ? 1 : depth;
         String primaryUrl = gitUrl;
         String fallbackUrl = mirrorUrl(gitUrl);
+        boolean hasCredential = credential != null;
 
-        // 有凭证时优先直连原 host（镜像可能拒绝带 token 的请求）
-        if (credential != null) {
-            log.info("[Git] 使用用户凭证直连 {} (用户={})", primaryUrl, credential.getUsername());
-            try {
-                return doClone(primaryUrl, branch, cloneDepth, credential);
-            } catch (Exception e) {
-                String friendly = buildFriendlyError(primaryUrl, e, true);
-                throw new BusinessException(friendly);
-            }
-        }
+        // ============ 策略说明 ============
+        // 国内机房直连 github.com 是网络层超时（HTTPS 墙），与有没有 Token 无关。
+        // Token 只解决认证，不解决网络可达。所以 GitHub 类地址永远优先走镜像：
+        //   - kkgithub.com 作为全量 GitHub 代理，Basic Auth / Token 透传能正常工作
+        //   - 镜像失败才回退原 URL（覆盖企业内网可直连场景 / 镜像临时故障）
 
-        // 无凭证 + GitHub：尝试镜像（国内机房直连 github 通常超时）
+        Exception mirrorError = null;
         if (fallbackUrl != null && !fallbackUrl.equals(primaryUrl)) {
-            log.info("[Git] 无凭证，github.com 走镜像: {} → {}", primaryUrl, fallbackUrl);
+            log.info("[Git] 优先走镜像: {} → {} (hasCredential={})",
+                    primaryUrl, fallbackUrl, hasCredential);
             try {
-                return doClone(fallbackUrl, branch, cloneDepth, null);
+                return doClone(fallbackUrl, branch, cloneDepth, credential);
             } catch (Exception e) {
-                log.warn("[Git] 镜像克隆失败，回退原 URL: {}", e.getMessage());
+                mirrorError = e;
+                log.warn("[Git] 镜像克隆失败 ({}), 尝试回退原 URL: {}",
+                        fallbackUrl, truncateMsg(e.getMessage(), 160));
             }
         }
 
+        // 镜像失败或非 GitHub host → 尝试原 URL（可能是企业 GitLab / 自建 Gitea）
         try {
-            return doClone(primaryUrl, branch, cloneDepth, null);
+            log.info("[Git] 使用原 URL: {} (hasCredential={})", primaryUrl, hasCredential);
+            return doClone(primaryUrl, branch, cloneDepth, credential);
         } catch (Exception e) {
-            String friendly = buildFriendlyError(primaryUrl, e, false);
+            String friendly = buildFriendlyError(primaryUrl, e, hasCredential);
+            if (mirrorError != null) {
+                friendly += "\n（镜像 " + fallbackUrl + " 也失败：" +
+                        truncateMsg(mirrorError.getMessage(), 120) + "）";
+            }
             throw new BusinessException(friendly);
         }
+    }
+
+    private static String truncateMsg(String s, int n) {
+        if (s == null) return "null";
+        return s.length() <= n ? s : s.substring(0, n) + "...";
     }
 
     /** 单次克隆尝试，带超时 + 可选凭证 */
