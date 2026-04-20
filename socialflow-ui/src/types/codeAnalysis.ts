@@ -12,6 +12,9 @@ export type FindingStatus = 'UNRESOLVED' | 'RESOLVED' | 'IGNORED'
  *  注意：id / analysisId 是 Java Long 雪花 ID（19 位），
  *  JS Number 精度只有 2^53-1（16 位），所以必须用 string 接。
  */
+/** Wave 8 关闭原因：用户标 IGNORED / RESOLVED 时附带 */
+export type FindingDismissedReason = 'INVALID' | 'ALREADY_FIXED' | 'NOT_APPLICABLE' | 'OTHER'
+
 export interface CodeFinding {
   id: string
   analysisId: string
@@ -26,6 +29,7 @@ export interface CodeFinding {
   ruleRef?: string
   status: FindingStatus
   resolutionNote?: string
+  dismissedReason?: FindingDismissedReason
 }
 
 /** 语言统计 */
@@ -111,6 +115,12 @@ export interface AnalysisStats {
   tokensMonthlyCompletion?: number
   llmCallsMonthly?: number
   tokensPerAnalysisAvg?: number
+  // Wave 8 反馈闭环
+  feedbackInvalidCount?: number
+  feedbackIgnoredCount?: number
+  falsePositiveRate?: number
+  dismissedRulesCount?: number
+  topInvalidRules?: Array<{ ruleRef: string; count: number }>
 }
 
 /** LLM 调用日志（分析详情页里展开查看链路） */
@@ -153,6 +163,7 @@ export interface SaveBookmarkDTO {
 export interface FindingStatusDTO {
   status: FindingStatus
   resolutionNote?: string
+  dismissedReason?: FindingDismissedReason
 }
 
 export type CredentialAuthType = 'TOKEN' | 'PASSWORD'

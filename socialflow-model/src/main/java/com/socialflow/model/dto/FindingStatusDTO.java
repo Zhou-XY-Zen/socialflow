@@ -23,4 +23,8 @@ public class FindingStatusDTO implements Serializable {
 
     @Schema(description = "用户备注")
     private String resolutionNote;
+
+    @Schema(description = "关闭原因（Wave 8）：INVALID 误判 / ALREADY_FIXED 已修复 / NOT_APPLICABLE 不适用 / OTHER",
+            allowableValues = {"INVALID", "ALREADY_FIXED", "NOT_APPLICABLE", "OTHER"})
+    private String dismissedReason;
 }

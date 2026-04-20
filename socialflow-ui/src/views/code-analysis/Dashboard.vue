@@ -130,6 +130,14 @@ function fmtTokens(n?: number) {
           <div class="m-label">本月 Token 消耗（{{ stats?.llmCallsMonthly ?? 0 }} 次调用）</div>
         </div>
       </div>
+      <div class="metric-card m-pink"
+           :title="`累计 INVALID ${stats?.feedbackInvalidCount ?? 0} · IGNORED ${stats?.feedbackIgnoredCount ?? 0} · 屏蔽规约 ${stats?.dismissedRulesCount ?? 0} 条`">
+        <div class="m-icon">🚫</div>
+        <div class="m-body">
+          <div class="m-value">{{ stats?.falsePositiveRate ?? 0 }}<span class="m-unit">%</span></div>
+          <div class="m-label">误判率（{{ stats?.feedbackInvalidCount ?? 0 }} 条 / 屏蔽 {{ stats?.dismissedRulesCount ?? 0 }} 条规约）</div>
+        </div>
+      </div>
     </div>
 
     <!-- 图表区 -->
@@ -191,8 +199,20 @@ function fmtTokens(n?: number) {
       </div>
 
       <div class="panel">
-        <div class="panel-title">热门仓库 Top 5</div>
-        <div v-if="(stats?.topRepos?.length ?? 0) === 0" class="empty">暂无</div>
+        <div class="panel-title">
+          热门仓库 Top 5
+          <span v-if="(stats?.topInvalidRules?.length ?? 0) > 0" class="panel-sub">· 误报规约 Top {{ stats?.topInvalidRules?.length }}</span>
+        </div>
+        <div v-if="(stats?.topInvalidRules?.length ?? 0) > 0" class="invalid-list">
+          <div v-for="(r, i) in stats?.topInvalidRules" :key="r.ruleRef" class="invalid-item"
+               :title="`累计 ${r.count} 次被标 INVALID`">
+            <span class="hot-rank" :class="{ top: i < 3 }">#{{ i + 1 }}</span>
+            <span class="invalid-rule">🚫 {{ r.ruleRef }}</span>
+            <span class="invalid-count">{{ r.count }} 次</span>
+          </div>
+          <div class="invalid-divider" />
+        </div>
+        <div v-if="(stats?.topRepos?.length ?? 0) === 0" class="empty">暂无热门仓库</div>
         <div v-else class="hot-list">
           <div v-for="(r, i) in stats?.topRepos" :key="r.gitUrl" class="hot-item">
             <span class="hot-rank" :class="{ top: i < 3 }">#{{ i + 1 }}</span>
@@ -210,13 +230,14 @@ function fmtTokens(n?: number) {
 .ca-dashboard { padding: 20px; }
 
 /* 指标卡 */
-.metric-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; margin-bottom: 20px; }
-@media (max-width: 1280px) {
+.metric-row { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; margin-bottom: 20px; }
+@media (max-width: 1500px) {
   .metric-row { grid-template-columns: repeat(3, 1fr); }
 }
 @media (max-width: 720px) {
   .metric-row { grid-template-columns: 1fr 1fr; }
 }
+.m-unit { font-size: 18px; font-weight: 500; color: #6b7280; margin-left: 2px; }
 .metric-card {
   background: #fff;
   border-radius: 12px;
@@ -236,6 +257,7 @@ function fmtTokens(n?: number) {
 .metric-card.m-red::before    { background: linear-gradient(180deg, #ef4444, #b91c1c); }
 .metric-card.m-green::before  { background: linear-gradient(180deg, #10b981, #059669); }
 .metric-card.m-cyan::before   { background: linear-gradient(180deg, #06b6d4, #0891b2); }
+.metric-card.m-pink::before   { background: linear-gradient(180deg, #ec4899, #be185d); }
 .m-icon { font-size: 36px; }
 .m-value { font-size: 28px; font-weight: 700; color: #111827; line-height: 1.2; }
 .m-label { color: #6b7280; font-size: 13px; margin-top: 4px; }
@@ -332,5 +354,21 @@ function fmtTokens(n?: number) {
   border-radius: 4px;
   font-size: 11px;
   font-weight: 600;
+}
+
+/* Wave 8 误报 Top */
+.panel-sub { color: #9ca3af; font-size: 12px; font-weight: 400; margin-left: 6px; }
+.invalid-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.invalid-item { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+.invalid-rule {
+  flex: 1; color: #991b1b; font-family: 'SF Mono', Menlo, monospace; font-size: 12px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.invalid-count {
+  padding: 2px 8px; background: #fee2e2; color: #991b1b;
+  border-radius: 4px; font-size: 11px; font-weight: 600;
+}
+.invalid-divider {
+  border-top: 1px dashed #e5e7eb; margin: 4px 0 8px;
 }
 </style>

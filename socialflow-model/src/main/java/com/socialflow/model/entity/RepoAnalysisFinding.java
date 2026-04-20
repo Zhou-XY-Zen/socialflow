@@ -40,4 +40,14 @@ public class RepoAnalysisFinding extends BaseEntity {
     private String status;
 
     private String resolutionNote;
+
+    /**
+     * 关闭原因（Wave 8）：
+     *   INVALID         AI 误判
+     *   ALREADY_FIXED   代码已修复
+     *   NOT_APPLICABLE  本项目不适用
+     *   OTHER           其他
+     * 与 status=IGNORED/RESOLVED 配合用，仅 status != UNRESOLVED 时填值。
+     */
+    private String dismissedReason;
 }

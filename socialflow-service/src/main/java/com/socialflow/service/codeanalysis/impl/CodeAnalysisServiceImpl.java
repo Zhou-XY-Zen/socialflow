@@ -23,6 +23,7 @@ import com.socialflow.model.vo.LlmCallLogVO;
 import com.socialflow.model.vo.RepoBookmarkVO;
 import com.socialflow.model.vo.RepoCommitVO;
 import com.socialflow.service.codeanalysis.CodeAnalysisService;
+import com.socialflow.service.codeanalysis.FindingFeedbackService;
 import com.socialflow.service.codeanalysis.GitRepoService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -62,6 +63,7 @@ public class CodeAnalysisServiceImpl implements CodeAnalysisService {
     private final RepoBookmarkMapper bookmarkMapper;
     private final LlmCallLogMapper llmCallLogMapper;
     private final GitRepoService gitRepoService;
+    private final FindingFeedbackService findingFeedbackService;
     /** 异步执行器（独立 bean，让 @Async 代理生效） */
     private final CodeAnalysisAsyncRunner asyncRunner;
     /** Git 凭证服务（用户私有仓库认证） */
@@ -210,7 +212,17 @@ public class CodeAnalysisServiceImpl implements CodeAnalysisService {
         upd.setId(findingId);
         upd.setStatus(dto.getStatus());
         upd.setResolutionNote(dto.getResolutionNote());
+        // Wave 8 反馈闭环：UNRESOLVED 状态清空 reason，其他状态写入用户指定的 reason
+        upd.setDismissedReason("UNRESOLVED".equals(dto.getStatus()) ? null : dto.getDismissedReason());
         findingMapper.updateById(upd);
+        // INVALID 反馈触发屏蔽列表刷新（异步刷新避免阻塞 UI）
+        if ("INVALID".equals(dto.getDismissedReason())) {
+            try {
+                findingFeedbackService.refresh();
+            } catch (Exception e) {
+                log.warn("[Wave8] 屏蔽列表刷新失败: {}", e.getMessage());
+            }
+        }
     }
 
     @Override
@@ -344,6 +356,29 @@ public class CodeAnalysisServiceImpl implements CodeAnalysisService {
                         && a.getCreateTime() != null && a.getCreateTime().isAfter(monthStart0))
                 .count();
         vo.setTokensPerAnalysisAvg(monthlySuccess > 0 ? (int) (tokensMonthly / monthlySuccess) : 0);
+
+        // ========= Wave 8 反馈闭环指标 =========
+        try {
+            long invalidCount = findingFeedbackService.countInvalid();
+            long ignoredCount = findingFeedbackService.countIgnored();
+            long totalFindings = findingFeedbackService.countTotalFindings();
+            vo.setFeedbackInvalidCount(invalidCount);
+            vo.setFeedbackIgnoredCount(ignoredCount);
+            vo.setFalsePositiveRate(totalFindings > 0
+                    ? Math.round(invalidCount * 1000.0 / totalFindings) / 10.0
+                    : 0.0);
+            vo.setDismissedRulesCount(findingFeedbackService.getDismissedRuleRefs().size());
+            List<AnalysisStatsVO.RuleInvalidStat> topInvalid = new ArrayList<>();
+            for (var item : findingFeedbackService.topInvalid(5)) {
+                AnalysisStatsVO.RuleInvalidStat s = new AnalysisStatsVO.RuleInvalidStat();
+                s.setRuleRef(item.ruleRef());
+                s.setCount(item.count());
+                topInvalid.add(s);
+            }
+            vo.setTopInvalidRules(topInvalid);
+        } catch (Exception e) {
+            log.warn("[Dashboard] Wave 8 反馈指标聚合失败: {}", e.getMessage());
+        }
 
         return vo;
     }

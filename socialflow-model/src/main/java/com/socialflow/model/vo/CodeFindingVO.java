@@ -40,4 +40,7 @@ public class CodeFindingVO implements Serializable {
     private String status;
 
     private String resolutionNote;
+
+    @Schema(description = "关闭原因：INVALID / ALREADY_FIXED / NOT_APPLICABLE / OTHER")
+    private String dismissedReason;
 }

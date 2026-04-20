@@ -5,7 +5,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import type { CodeFinding, FindingStatus } from '@/types/codeAnalysis'
+import type { CodeFinding, FindingStatus, FindingDismissedReason } from '@/types/codeAnalysis'
 import { codeAnalysisApi } from '@/api/codeAnalysis'
 import { highlight, languageFromFile } from '@/composables/useHighlight'
 
@@ -27,6 +27,14 @@ const statusMeta = {
   IGNORED:    { color: '#6b7280', label: '已忽略' },
 } as const
 
+/** Wave 8 关闭原因展示元数据 */
+const reasonMeta: Record<FindingDismissedReason, { label: string; color: string; icon: string }> = {
+  INVALID:        { label: '误判',       color: '#dc2626', icon: '🚫' },
+  ALREADY_FIXED:  { label: '已修复',     color: '#10b981', icon: '✅' },
+  NOT_APPLICABLE: { label: '不适用',     color: '#9ca3af', icon: '🙈' },
+  OTHER:          { label: '其他',       color: '#6b7280', icon: '📌' },
+}
+
 // 代码高亮 HTML
 const highlightedCode = computed(() => {
   if (!props.finding.codeSnippet) return ''
@@ -34,7 +42,7 @@ const highlightedCode = computed(() => {
   return highlight(props.finding.codeSnippet, lang)
 })
 
-async function setStatus(newStatus: FindingStatus, askNote = false) {
+async function setStatus(newStatus: FindingStatus, askNote = false, reason?: FindingDismissedReason) {
   let note = ''
   if (askNote) {
     try {
@@ -50,12 +58,32 @@ async function setStatus(newStatus: FindingStatus, askNote = false) {
     await codeAnalysisApi.updateFindingStatus(props.finding.id, {
       status: newStatus,
       resolutionNote: note,
+      dismissedReason: reason,
     })
-    ElMessage.success('状态已更新')
-    emit('updated', { ...props.finding, status: newStatus, resolutionNote: note })
+    const tip = reason === 'INVALID'
+      ? '已标记误判 · 该规约累计 ≥3 次将自动屏蔽'
+      : '状态已更新'
+    ElMessage.success(tip)
+    emit('updated', {
+      ...props.finding,
+      status: newStatus,
+      resolutionNote: note,
+      dismissedReason: reason,
+    })
   } finally {
     updating.value = false
   }
+}
+
+/** Wave 8 一键标"误判"快捷入口 */
+async function markInvalid() {
+  await setStatus('IGNORED', false, 'INVALID')
+}
+async function markAlreadyFixed() {
+  await setStatus('RESOLVED', false, 'ALREADY_FIXED')
+}
+async function markNotApplicable() {
+  await setStatus('IGNORED', false, 'NOT_APPLICABLE')
 }
 </script>
 
@@ -72,6 +100,11 @@ async function setStatus(newStatus: FindingStatus, askNote = false) {
       <div class="f-right">
         <span class="status-tag" :style="{ color: statusMeta[finding.status].color }">
           {{ statusMeta[finding.status].label }}
+        </span>
+        <span v-if="finding.dismissedReason"
+              class="reason-tag"
+              :style="{ color: reasonMeta[finding.dismissedReason].color, borderColor: reasonMeta[finding.dismissedReason].color + '40' }">
+          {{ reasonMeta[finding.dismissedReason].icon }} {{ reasonMeta[finding.dismissedReason].label }}
         </span>
         <el-icon :class="['expand-icon', { rotated: expanded }]"><ArrowDown /></el-icon>
       </div>
@@ -104,12 +137,18 @@ async function setStatus(newStatus: FindingStatus, askNote = false) {
       </div>
 
       <div class="f-actions">
+        <el-button size="small" :loading="updating" type="success"
+          :plain="finding.dismissedReason !== 'ALREADY_FIXED'"
+          @click="markAlreadyFixed">✅ 已修复</el-button>
+        <el-button size="small" :loading="updating" type="danger"
+          :plain="finding.dismissedReason !== 'INVALID'"
+          @click="markInvalid"
+          title="标记为 AI 误判，该规约累计 3 次后自动屏蔽">🚫 误判</el-button>
         <el-button size="small" :loading="updating"
-          :type="finding.status === 'RESOLVED' ? 'success' : 'default'"
-          @click="setStatus('RESOLVED', true)">✅ 已修复</el-button>
+          :type="finding.dismissedReason === 'NOT_APPLICABLE' ? 'info' : 'default'"
+          @click="markNotApplicable">🙈 不适用</el-button>
         <el-button size="small" :loading="updating"
-          :type="finding.status === 'IGNORED' ? 'info' : 'default'"
-          @click="setStatus('IGNORED', true)">🙈 忽略</el-button>
+          @click="setStatus('IGNORED', true, 'OTHER')">📝 备注关闭</el-button>
         <el-button size="small" :loading="updating"
           :disabled="finding.status === 'UNRESOLVED'"
           @click="setStatus('UNRESOLVED', false)">↺ 恢复未处理</el-button>
@@ -200,5 +239,10 @@ async function setStatus(newStatus: FindingStatus, askNote = false) {
 }
 /* highlight.js atom-one-dark 由 useHighlight 全局引入 */
 .f-code :deep(code) { background: transparent; padding: 0; font-size: inherit; }
-.f-actions { margin-top: 12px; display: flex; gap: 8px; }
+.f-actions { margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap; }
+.reason-tag {
+  font-size: 11px; font-weight: 500;
+  padding: 1px 7px; border-radius: 10px;
+  border: 1px solid;
+}
 </style>

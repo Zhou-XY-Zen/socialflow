@@ -18,6 +18,7 @@ import com.socialflow.service.ai.llm.LlmResponse;
 import com.socialflow.service.ai.llm.LlmRouter;
 import com.socialflow.service.codeanalysis.CodeReviewPrompts;
 import com.socialflow.service.codeanalysis.CredentialService;
+import com.socialflow.service.codeanalysis.FindingFeedbackService;
 import com.socialflow.service.codeanalysis.GitRepoService;
 import com.socialflow.service.codeanalysis.GitRepoService.FileDiff;
 import com.socialflow.service.codeanalysis.GitRepoService.SourceFile;
@@ -33,6 +34,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 代码分析异步执行器（Wave 5.5 全量模式）。
@@ -55,6 +57,7 @@ public class CodeAnalysisAsyncRunner {
     private final LlmRouter llmRouter;
     private final CredentialService credentialService;
     private final RuleLibraryHolder ruleLibrary;
+    private final FindingFeedbackService findingFeedback;
 
     @Value("${socialflow.ai.system-api-key:}")
     private String systemApiKey;
@@ -536,12 +539,19 @@ public class CodeAnalysisAsyncRunner {
                 fe.setRuleRef(truncate(getText(f, "ruleRef"), 250));
                 fe.setStatus("UNRESOLVED");
 
-                // ============ 三层反向校验（A + B + C）============
+                // ============ 三层反向校验（A + B + C）+ Wave 8 屏蔽列表 ============
                 // B：ruleRef 必须是黄山版 321 条里真实存在的编号
                 if (!ruleLibrary.isValidRuleRef(fe.getRuleRef())) {
                     dropRule++;
                     log.debug("[Validate] 丢弃 finding: ruleRef 不在白名单 ref={} title={}",
                             fe.getRuleRef(), fe.getTitle());
+                    continue;
+                }
+                // Wave 8：用户反馈屏蔽列表 — 累计被标 INVALID >= 3 次的 ruleRef 不再入库
+                String code = extractRuleCode(fe.getRuleRef());
+                if (code != null && findingFeedback.getDismissedRuleRefs().contains(code)) {
+                    dropRule++;
+                    log.debug("[Wave8] 丢弃 finding: ruleRef={} 在用户反馈屏蔽列表", code);
                     continue;
                 }
                 // A：codeSnippet 必须能在源文件中 contains 找到
@@ -741,8 +751,11 @@ public class CodeAnalysisAsyncRunner {
             if (picked.size() >= TOTAL_LIMIT) break;
         }
 
+        // Wave 8：从清单里去掉用户已标 INVALID 屏蔽的规约
+        Set<String> dismissed = findingFeedback == null ? java.util.Set.of() : findingFeedback.getDismissedRuleRefs();
         StringBuilder sb = new StringBuilder();
         for (RuleLibraryHolder.RuleEntry r : picked) {
+            if (dismissed.contains(r.code())) continue;
             String tag = "MANDATORY".equals(r.level()) ? "【强制】"
                        : "RECOMMENDED".equals(r.level()) ? "【推荐】"
                        : "【参考】";
@@ -755,6 +768,13 @@ public class CodeAnalysisAsyncRunner {
         if ("MANDATORY".equals(level)) return 1;
         if ("RECOMMENDED".equals(level)) return 2;
         return 3;
+    }
+
+    /** 从 ruleRef 字符串里抽出 X.Y 或 X.Y.Z 编号 */
+    private static String extractRuleCode(String ref) {
+        if (ref == null) return null;
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("(\\d+\\.\\d+(?:\\.\\d+)?)").matcher(ref);
+        return m.find() ? m.group(1) : null;
     }
 
     /** 把 findings 简要描述拼起来给最终 merge LLM 调用用 */
