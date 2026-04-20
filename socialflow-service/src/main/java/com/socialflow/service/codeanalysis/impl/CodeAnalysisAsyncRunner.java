@@ -503,15 +503,16 @@ public class CodeAnalysisAsyncRunner {
                 RepoAnalysisFinding fe = new RepoAnalysisFinding();
                 fe.setAnalysisId(analysisId);
                 fe.setLevel(upperOrDefault(getText(f, "level"), "LOW"));
-                fe.setCategory(getText(f, "category"));
+                fe.setCategory(truncate(getText(f, "category"), 60));
                 fe.setTitle(truncate(getText(f, "title"), 255));
                 String file = getText(f, "file");
-                fe.setFile(file != null && !file.isBlank() ? file : fallbackFile);
-                fe.setLineRange(getText(f, "lineRange"));
+                fe.setFile(truncate(file != null && !file.isBlank() ? file : fallbackFile, 500));
+                fe.setLineRange(truncate(getText(f, "lineRange"), 60));
                 fe.setDescription(getText(f, "description"));
                 fe.setSuggestion(getText(f, "suggestion"));
                 fe.setCodeSnippet(getText(f, "codeSnippet"));
-                fe.setRuleRef(getText(f, "ruleRef"));
+                // V13 已把 rule_ref 放宽到 VARCHAR(255)，这里依旧 truncate(250) 兜底
+                fe.setRuleRef(truncate(getText(f, "ruleRef"), 250));
                 fe.setStatus("UNRESOLVED");
                 list.add(fe);
             }
