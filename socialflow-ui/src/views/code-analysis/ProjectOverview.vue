@@ -18,7 +18,6 @@ const md = new MarkdownIt({ html: false, linkify: true, breaks: true })
 const form = reactive({
   gitUrl: '',
   branch: 'main',
-  cloneDepth: 1,
 })
 
 // 用于 v-model 给 RepoPicker
@@ -159,10 +158,9 @@ onUnmounted(stopPoll)
           <el-form-item label="选择要分析的仓库">
             <RepoPicker :model-value="pickerValue" @update:model-value="onPickerChange" :show-branch="true" />
           </el-form-item>
-          <el-form-item label="克隆深度">
-            <el-input-number v-model="form.cloneDepth" :min="1" :max="10" />
-            <span class="sub-hint">一般概览用 1 层历史即可</span>
-          </el-form-item>
+          <div class="sub-hint" style="margin-bottom: 12px;">
+            Map-Reduce 全量扫描：逐模块读全部源码 → 汇总项目全景（无需配置克隆深度）
+          </div>
           <el-button type="primary" :loading="loading" size="large" class="submit-btn" @click="start">
             🚀 开始分析
           </el-button>

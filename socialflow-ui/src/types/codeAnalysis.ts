@@ -141,15 +141,19 @@ export interface LlmCallLog {
 }
 
 /** 请求 DTO */
+/**
+ * 触发分析的 DTO。
+ *
+ * 注：cloneDepth / maxFiles 已于 Wave 5.5 移除 —
+ * 审查改成 Map-Reduce 全量扫描，不再需要用户配置克隆深度或文件上限。
+ * 后端 shallowClone 用内置合理默认值（概览=1 / 提交=50 / 对比=100）。
+ */
 export interface AnalyzeRepoDTO {
   gitUrl: string
   branch?: string
   commitSha?: string
   baseRef?: string
   headRef?: string
-  cloneDepth?: number
-  excludeDirs?: string[]
-  maxFiles?: number
 }
 
 export interface SaveBookmarkDTO {
