@@ -16,9 +16,11 @@ import type {
   RepoBookmark,
   RepoCommit,
   RepoCredentialProject,
+  RuleLibraryItem,
   SaveBookmarkDTO,
   SaveCredentialDTO,
   SaveCredentialProjectDTO,
+  SaveRuleDTO,
 } from '@/types/codeAnalysis'
 
 export interface PageResult<T> {
@@ -89,4 +91,13 @@ export const codeAnalysisApi = {
       `/code-analysis/credential/${credentialId}/projects`, dto),
   deleteCredentialProject: (projectId: Id) =>
     del<void>(`/code-analysis/credential/project/${projectId}`),
+
+  // 规约库（Wave 7：从 API 加载，支持启停 / 自定义）
+  listRules: (params?: { topCategory?: string; level?: string; keyword?: string; enabledOnly?: boolean }) =>
+    get<RuleLibraryItem[]>('/code-analysis/rules', { params }),
+  toggleRuleEnabled: (id: Id, enabled: number) =>
+    put<void>(`/code-analysis/rules/${id}/enabled?enabled=${enabled}`),
+  saveRule: (dto: SaveRuleDTO) =>
+    post<RuleLibraryItem, SaveRuleDTO>('/code-analysis/rules', dto),
+  deleteRule: (id: Id) => del<void>(`/code-analysis/rules/${id}`),
 }

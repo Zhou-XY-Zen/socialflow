@@ -2,9 +2,13 @@ package com.socialflow.service.codeanalysis;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.socialflow.common.util.JsonUtil;
+import com.socialflow.dao.mapper.RuleLibraryItemMapper;
+import com.socialflow.model.entity.RuleLibraryItem;
 import jakarta.annotation.PostConstruct;
 import lombok.Getter;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
 
@@ -32,14 +36,19 @@ import java.util.Set;
 public class RuleLibraryHolder {
 
     @Getter
-    private Set<String> codeSet = new HashSet<>();
+    private volatile Set<String> codeSet = new HashSet<>();
 
     @Getter
-    private Map<String, List<RuleEntry>> byTopCategory = new HashMap<>();
+    private volatile Map<String, List<RuleEntry>> byTopCategory = new HashMap<>();
 
     @Getter
-    private List<RuleEntry> all = new ArrayList<>();
+    private volatile List<RuleEntry> all = new ArrayList<>();
 
+    /** Mapper 通过 setter 可选注入；DB 不可用时仍走 JSON 兜底 */
+    @Autowired(required = false)
+    private RuleLibraryItemMapper ruleLibraryItemMapper;
+
+    /** 启动时先从 JSON 加载（保证 InitRunner 之前 Holder 已就绪）；InitRunner 之后会触发 reloadFromDb */
     @PostConstruct
     public void load() {
         try (InputStream in = new ClassPathResource("rules/huangshan_rules.json").getInputStream()) {
@@ -62,9 +71,45 @@ public class RuleLibraryHolder {
                 all.add(e);
                 byTopCategory.computeIfAbsent(top, k -> new ArrayList<>()).add(e);
             }
-            log.info("[RuleLibrary] 加载完成: {} 条规约, 大类 {} 个", codeSet.size(), byTopCategory.size());
+            log.info("[RuleLibrary] JSON 兜底加载完成: {} 条规约, 大类 {} 个", codeSet.size(), byTopCategory.size());
         } catch (Exception e) {
             log.error("[RuleLibrary] 加载 rules/huangshan_rules.json 失败", e);
+        }
+    }
+
+    /**
+     * 启动后由 RuleLibraryInitRunner 调用：从 DB 重建内存索引。
+     * 仅加载 enabled=1 的规约（禁用的规约审查时不参与 Prompt 注入也不在白名单）。
+     * 同步重建，使用 volatile 字段一次性替换，对正在跑的审查没有影响。
+     */
+    public void reloadFromDb() {
+        if (ruleLibraryItemMapper == null) {
+            log.warn("[RuleLibrary] mapper 不可用，保持 JSON 兜底数据");
+            return;
+        }
+        try {
+            List<RuleLibraryItem> rows = ruleLibraryItemMapper.selectList(
+                    new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<RuleLibraryItem>()
+                            .eq(RuleLibraryItem::getEnabled, 1));
+            Set<String> nextCodes = new HashSet<>(rows.size() * 2);
+            Map<String, List<RuleEntry>> nextByTop = new HashMap<>();
+            List<RuleEntry> nextAll = new ArrayList<>(rows.size());
+            for (RuleLibraryItem r : rows) {
+                if (r.getCode() == null || r.getCode().isBlank()) continue;
+                nextCodes.add(r.getCode());
+                RuleEntry e = new RuleEntry(r.getCode(), r.getTopCategory(),
+                        r.getSubCategory() == null ? "" : r.getSubCategory(),
+                        r.getLevel(), r.getTitle(), r.getBody() == null ? "" : r.getBody());
+                nextAll.add(e);
+                nextByTop.computeIfAbsent(e.topCategory(), k -> new ArrayList<>()).add(e);
+            }
+            // 一次性替换（volatile 保证可见性）
+            this.codeSet = nextCodes;
+            this.byTopCategory = nextByTop;
+            this.all = nextAll;
+            log.info("[RuleLibrary] DB 重载完成: {} 条 (enabled=1), 大类 {} 个", nextCodes.size(), nextByTop.size());
+        } catch (Exception e) {
+            log.error("[RuleLibrary] DB 重载失败，保留旧索引", e);
         }
     }
 

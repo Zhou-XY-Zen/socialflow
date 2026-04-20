@@ -10,10 +10,14 @@ import com.socialflow.model.dto.FindingStatusDTO;
 import com.socialflow.model.dto.SaveBookmarkDTO;
 import com.socialflow.model.vo.AnalysisStatsVO;
 import com.socialflow.model.vo.CodeAnalysisVO;
+import com.socialflow.model.entity.RuleLibraryItem;
 import com.socialflow.model.vo.LlmCallLogVO;
 import com.socialflow.model.vo.RepoBookmarkVO;
 import com.socialflow.model.vo.RepoCommitVO;
+import com.socialflow.model.vo.RuleLibraryItemVO;
 import com.socialflow.service.codeanalysis.CodeAnalysisService;
+import com.socialflow.service.codeanalysis.RuleLibraryHolder;
+import com.socialflow.service.codeanalysis.RuleLibraryService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -45,6 +49,8 @@ import java.util.Map;
 public class CodeAnalysisController {
 
     private final CodeAnalysisService codeAnalysisService;
+    private final RuleLibraryService ruleLibraryService;
+    private final RuleLibraryHolder ruleLibraryHolder;
 
     // ---------- 仪表盘 ----------
 
@@ -185,6 +191,46 @@ public class CodeAnalysisController {
     @DeleteMapping("/bookmark/{id}")
     public R<Void> deleteBookmark(@PathVariable Long id) {
         codeAnalysisService.deleteBookmark(StpUtil.getLoginIdAsLong(), id);
+        return R.ok();
+    }
+
+    // ---------- 规约库（Wave 7）----------
+
+    @Operation(summary = "列出规约（可按大类/级别/关键词过滤）")
+    @SaCheckLogin
+    @GetMapping("/rules")
+    public R<List<RuleLibraryItemVO>> listRules(
+            @RequestParam(required = false) String topCategory,
+            @RequestParam(required = false) String level,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Boolean enabledOnly) {
+        return R.ok(ruleLibraryService.list(topCategory, level, keyword, enabledOnly));
+    }
+
+    @Operation(summary = "启停某条规约")
+    @SaCheckLogin
+    @PutMapping("/rules/{id}/enabled")
+    public R<Void> toggleRuleEnabled(@PathVariable Long id, @RequestParam Integer enabled) {
+        ruleLibraryService.toggleEnabled(id, enabled);
+        ruleLibraryHolder.reloadFromDb();
+        return R.ok();
+    }
+
+    @Operation(summary = "新增或编辑规约（自定义规约用）")
+    @SaCheckLogin
+    @PostMapping("/rules")
+    public R<RuleLibraryItemVO> saveRule(@Valid @RequestBody RuleLibraryItem item) {
+        RuleLibraryItemVO saved = ruleLibraryService.save(item);
+        ruleLibraryHolder.reloadFromDb();
+        return R.ok(saved);
+    }
+
+    @Operation(summary = "删除自定义规约（黄山版内置规约禁删）")
+    @SaCheckLogin
+    @DeleteMapping("/rules/{id}")
+    public R<Void> deleteRule(@PathVariable Long id) {
+        ruleLibraryService.deleteCustom(id);
+        ruleLibraryHolder.reloadFromDb();
         return R.ok();
     }
 }

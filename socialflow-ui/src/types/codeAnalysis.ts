@@ -202,3 +202,36 @@ export interface SaveCredentialProjectDTO {
   branch?: string
 }
 
+/** 规约库条目（Wave 7：从静态数据迁到 API 驱动）*/
+export interface RuleLibraryItem {
+  id: string                  // 雪花 ID 用 string 防 JS 精度丢失
+  code: string                // 1.1.1 / 5.1.5
+  topCategory: string         // 编程规约/异常日志/...
+  subCategory?: string        // 命名风格/集合处理/...
+  level: 'MANDATORY' | 'RECOMMENDED' | 'REFERENCE'
+  title: string
+  body?: string
+  description?: string
+  exampleGood?: string
+  exampleBad?: string
+  enabled: number             // 1 启用 / 0 禁用
+  isCustom: number            // 1 用户自定义 / 0 黄山版内置
+  source?: string
+  createTime?: string
+  updateTime?: string
+}
+
+export interface SaveRuleDTO {
+  id?: string | number
+  code: string
+  topCategory: string
+  subCategory?: string
+  level: 'MANDATORY' | 'RECOMMENDED' | 'REFERENCE'
+  title: string
+  body?: string
+  description?: string
+  exampleGood?: string
+  exampleBad?: string
+  enabled?: number
+}
+
