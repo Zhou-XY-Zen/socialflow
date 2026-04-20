@@ -208,11 +208,59 @@ onUnmounted(stopPoll)
     <!-- 右栏：进度 + 结果 -->
     <div class="right-panel">
       <div v-if="!current" class="placeholder">
-        <div class="ph-icon-wrap">
-          <el-icon class="ph-icon"><Reading /></el-icon>
+        <!-- 背景装饰 -->
+        <div class="ph-bg-glow ph-bg-glow-1"></div>
+        <div class="ph-bg-glow ph-bg-glow-2"></div>
+        <div class="ph-bg-grid"></div>
+
+        <!-- 核心内容 -->
+        <div class="ph-hero">
+          <div class="ph-icon-wrap">
+            <span class="ph-ring ph-ring-1"></span>
+            <span class="ph-ring ph-ring-2"></span>
+            <span class="ph-ring ph-ring-3"></span>
+            <el-icon class="ph-icon"><Reading /></el-icon>
+          </div>
+          <div class="ph-title">等待 AI 开始分析</div>
+          <div class="ph-desc">选择仓库凭证 → 点击「开始分析」，片刻即得完整项目画像</div>
         </div>
-        <div class="ph-title">等待分析</div>
-        <div class="ph-desc">在左侧填写 Git 地址并点击"开始分析"</div>
+
+        <!-- 功能特性 -->
+        <div class="ph-features">
+          <div class="ph-feature">
+            <div class="ph-feature-icon is-brand"><el-icon><MagicStick /></el-icon></div>
+            <div class="ph-feature-title">AI 智能识别</div>
+            <div class="ph-feature-desc">技术栈 · 模块分层 · 语言占比</div>
+          </div>
+          <div class="ph-feature">
+            <div class="ph-feature-icon is-info"><el-icon><Connection /></el-icon></div>
+            <div class="ph-feature-title">架构可视化</div>
+            <div class="ph-feature-desc">自动生成核心流程图</div>
+          </div>
+          <div class="ph-feature">
+            <div class="ph-feature-icon is-success"><el-icon><Reading /></el-icon></div>
+            <div class="ph-feature-title">深度解读</div>
+            <div class="ph-feature-desc">Map-Reduce 全量扫描</div>
+          </div>
+        </div>
+
+        <!-- 快速开始 3 步 -->
+        <div class="ph-steps">
+          <div class="ph-step">
+            <div class="ph-step-num">1</div>
+            <div class="ph-step-text">选凭证</div>
+          </div>
+          <div class="ph-step-line"></div>
+          <div class="ph-step">
+            <div class="ph-step-num">2</div>
+            <div class="ph-step-text">开始分析</div>
+          </div>
+          <div class="ph-step-line"></div>
+          <div class="ph-step">
+            <div class="ph-step-num">3</div>
+            <div class="ph-step-text">查看结果</div>
+          </div>
+        </div>
       </div>
 
       <!-- 进度卡 -->
@@ -401,43 +449,217 @@ onUnmounted(stopPoll)
   font-family: 'SF Mono', Menlo, monospace;
 }
 
-/* ========== 右栏占位 ========== */
+/* ========== 右栏占位（丰富版 empty state） ========== */
 .placeholder {
-  background: var(--sf-surface-gradient);
-  border: 1px dashed var(--sf-border);
+  position: relative;
+  background: linear-gradient(155deg, #fafbff 0%, #f3f4ff 100%);
+  border: 1px solid var(--sf-border-light);
   border-radius: var(--sf-radius-lg);
   height: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--sf-space-3);
+  gap: var(--sf-space-5);
   box-shadow: var(--sf-shadow-sm);
+  overflow: hidden;
+  padding: var(--sf-space-6);
+}
+
+/* 背景装饰：两个渐变光斑 + 点阵网格 */
+.ph-bg-glow {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  filter: blur(60px);
+  opacity: 0.5;
+}
+.ph-bg-glow-1 {
+  width: 420px; height: 420px;
+  top: -120px; right: -80px;
+  background: radial-gradient(circle, #a5b4fc 0%, transparent 70%);
+  animation: sf-float 8s ease-in-out infinite;
+}
+.ph-bg-glow-2 {
+  width: 340px; height: 340px;
+  bottom: -100px; left: -60px;
+  background: radial-gradient(circle, #f9a8d4 0%, transparent 70%);
+  animation: sf-float 10s ease-in-out infinite reverse;
+}
+.ph-bg-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(circle at 1px 1px, rgba(102, 126, 234, 0.15) 1px, transparent 0);
+  background-size: 20px 20px;
+  mask-image: radial-gradient(ellipse at center, #000 30%, transparent 70%);
+  -webkit-mask-image: radial-gradient(ellipse at center, #000 30%, transparent 70%);
+  pointer-events: none;
+  opacity: 0.4;
+}
+
+/* Hero 区 */
+.ph-hero {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sf-space-3);
 }
 .ph-icon-wrap {
-  width: 96px;
-  height: 96px;
+  position: relative;
+  width: 100px;
+  height: 100px;
   border-radius: 50%;
-  background: var(--sf-gradient-soft);
+  background: var(--sf-gradient-aurora);
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: var(--sf-space-2);
-  animation: sf-float 3s ease-in-out infinite;
+  box-shadow: var(--sf-shadow-glow-brand), 0 0 0 8px rgba(255,255,255,0.8);
+  animation: sf-float 3.5s ease-in-out infinite;
 }
 .ph-icon {
   font-size: 48px;
-  color: var(--sf-primary);
-  opacity: 0.7;
+  color: #fff;
+  z-index: 2;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.15));
 }
+/* 多层脉动光环 */
+.ph-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid rgba(102, 126, 234, 0.35);
+  animation: ph-ring-pulse 2.4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  pointer-events: none;
+}
+.ph-ring-1 { animation-delay: 0s; }
+.ph-ring-2 { animation-delay: 0.8s; }
+.ph-ring-3 { animation-delay: 1.6s; }
+@keyframes ph-ring-pulse {
+  0%   { transform: scale(1);    opacity: 0.7; }
+  100% { transform: scale(1.8);  opacity: 0;   }
+}
+
 .ph-title {
-  font-size: 18px;
-  color: var(--sf-text-secondary);
-  font-weight: 600;
+  font-size: 22px;
+  font-weight: 700;
+  background: var(--sf-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  letter-spacing: -0.02em;
 }
 .ph-desc {
-  color: var(--sf-text-muted);
+  color: var(--sf-text-tertiary);
   font-size: 13px;
+  text-align: center;
+  max-width: 340px;
+  line-height: 1.7;
+}
+
+/* 功能特性三连卡 */
+.ph-features {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--sf-space-3);
+  width: 100%;
+  max-width: 560px;
+}
+.ph-feature {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  border-radius: var(--sf-radius-md);
+  padding: var(--sf-space-4) var(--sf-space-3);
+  text-align: center;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.08);
+  transition: all var(--sf-transition-base);
+}
+.ph-feature:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 24px rgba(102, 126, 234, 0.15);
+  border-color: rgba(102, 126, 234, 0.3);
+}
+.ph-feature-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--sf-radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto var(--sf-space-2);
+  color: #fff;
+  font-size: 20px;
+  box-shadow: var(--sf-shadow-sm);
+}
+.ph-feature-icon.is-brand   { background: var(--sf-gradient-aurora); }
+.ph-feature-icon.is-info    { background: var(--sf-info-gradient); }
+.ph-feature-icon.is-success { background: var(--sf-success-gradient); }
+.ph-feature-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--sf-text-primary);
+  margin-bottom: 4px;
+}
+.ph-feature-desc {
+  font-size: 11px;
+  color: var(--sf-text-tertiary);
+  line-height: 1.5;
+}
+
+/* 快速开始 3 步 */
+.ph-steps {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--sf-space-3);
+}
+.ph-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.ph-step-num {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1.5px solid rgba(102, 126, 234, 0.3);
+  color: var(--sf-primary-dark);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 2px 6px rgba(102, 126, 234, 0.12);
+}
+.ph-step:first-child .ph-step-num {
+  background: var(--sf-gradient);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: var(--sf-shadow-brand);
+  animation: sf-glow-pulse 2s ease-in-out infinite;
+}
+.ph-step-text {
+  font-size: 11px;
+  color: var(--sf-text-tertiary);
+  font-weight: 500;
+}
+.ph-step-line {
+  flex: 0 0 32px;
+  height: 1.5px;
+  background: linear-gradient(90deg, rgba(102, 126, 234, 0.1), rgba(102, 126, 234, 0.3), rgba(102, 126, 234, 0.1));
+  position: relative;
+  align-self: center;
+  margin-bottom: 16px;
 }
 
 /* ========== 进度卡 ========== */
