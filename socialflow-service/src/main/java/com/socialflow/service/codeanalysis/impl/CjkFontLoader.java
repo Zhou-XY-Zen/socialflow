@@ -1,6 +1,8 @@
 package com.socialflow.service.codeanalysis.impl;
 
 import lombok.extern.slf4j.Slf4j;
+import org.apache.fontbox.ttf.OTFParser;
+import org.apache.fontbox.ttf.OpenTypeFont;
 import org.apache.fontbox.ttf.TrueTypeCollection;
 import org.apache.fontbox.ttf.TrueTypeFont;
 import org.apache.pdfbox.pdmodel.PDDocument;
@@ -37,7 +39,7 @@ public class CjkFontLoader {
     @Value("${socialflow.code-analysis.pdf.font-path:}")
     private String configuredPath;
 
-    /** 系统常见 CJK 字体候选路径 */
+    /** 系统常见 CJK 字体候选路径（TTF/TTC/OTF 均支持） */
     private static final List<String> COMMON_PATHS = List.of(
             // Windows
             "C:/Windows/Fonts/simhei.ttf",
@@ -48,9 +50,15 @@ public class CjkFontLoader {
             "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
             "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
             "/usr/share/fonts/opentype/noto/NotoSerifCJK-Regular.ttc",
-            // Linux CentOS/RHEL
-            "/usr/share/fonts/wqy-zenhei/wqy-zenhei.ttc",
+            // Linux CentOS/RHEL/TencentOS —— google-noto-sans-cjk-sc-fonts 只带 OTF，按字重挑
             "/usr/share/fonts/google-noto-cjk/NotoSansCJK-Regular.ttc",
+            "/usr/share/fonts/google-noto-cjk/NotoSansCJKsc-Regular.otf",
+            "/usr/share/fonts/google-noto-cjk/NotoSansCJKsc-Medium.otf",
+            "/usr/share/fonts/google-noto-cjk/NotoSansCJKsc-Light.otf",
+            "/usr/share/fonts/google-noto-cjk/NotoSansCJKsc-DemiLight.otf",
+            "/usr/share/fonts/google-noto-cjk/NotoSansCJKsc-Bold.otf",
+            "/usr/share/fonts/google-noto-cjk/NotoSansCJKsc-Black.otf",
+            "/usr/share/fonts/wqy-zenhei/wqy-zenhei.ttc",
             // macOS
             "/System/Library/Fonts/PingFang.ttc",
             "/Library/Fonts/Microsoft/SimHei.ttf"
@@ -58,19 +66,21 @@ public class CjkFontLoader {
 
     /**
      * 把 CJK 字体加载到当前 PDDocument；失败返回 null。
-     * PDFBox 3.x 的 {@code PDType0Font.load} 签名：
-     *   - TTF：{@code load(doc, file)}
-     *   - TTC：需要用 {@link TrueTypeCollection} 先挑一个子字体
+     * 按扩展名分发：
+     *   - .ttc → {@link TrueTypeCollection} 挑第一个子字体
+     *   - .otf → {@link OTFParser}（CFF outlines；PDType0Font.load(doc,File) 默认 TTFParser 解析会失败）
+     *   - .ttf → {@code PDType0Font.load(doc, file)}
      */
     public PDType0Font load(PDDocument doc) {
         String path = resolvePath();
         if (path == null) {
-            log.warn("[PDF] 未找到可用的中文字体，中文字符会被替换为 '?'。建议配置 socialflow.code-analysis.pdf.font-path 指向 TTF/TTC 文件");
+            log.warn("[PDF] 未找到可用的中文字体，中文字符会被替换为 '?'。建议配置 socialflow.code-analysis.pdf.font-path 指向 TTF/TTC/OTF 文件");
             return null;
         }
         try {
             File f = new File(path);
-            if (path.toLowerCase().endsWith(".ttc")) {
+            String lower = path.toLowerCase();
+            if (lower.endsWith(".ttc")) {
                 try (TrueTypeCollection ttc = new TrueTypeCollection(f)) {
                     AtomicReference<TrueTypeFont> picked = new AtomicReference<>();
                     ttc.processAllFonts(ttf -> {
@@ -84,6 +94,10 @@ public class CjkFontLoader {
                     // embedSubset=true 只嵌入实际用到的字形，控制 PDF 大小
                     return PDType0Font.load(doc, chosen, true);
                 }
+            }
+            if (lower.endsWith(".otf")) {
+                OpenTypeFont otf = new OTFParser().parse(new org.apache.pdfbox.io.RandomAccessReadBufferedFile(f));
+                return PDType0Font.load(doc, otf, true);
             }
             return PDType0Font.load(doc, f);
         } catch (Exception e) {
