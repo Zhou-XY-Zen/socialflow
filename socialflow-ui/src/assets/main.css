@@ -12,18 +12,31 @@
   --sf-primary-dark: #5a67d8;
   --sf-primary-light: #818cf8;
   --sf-accent: #764ba2;
+  --sf-accent-2: #f093fb;
   --sf-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  --sf-gradient-soft: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+  --sf-gradient-soft: linear-gradient(135deg, rgba(102, 126, 234, 0.08) 0%, rgba(118, 75, 162, 0.08) 100%);
+  /* 品牌渐变扩展：极光、海洋、日落、森林、玫瑰 —— 用于 Hero/Metric 变体 */
+  --sf-gradient-aurora: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+  --sf-gradient-ocean:  linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+  --sf-gradient-sunset: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+  --sf-gradient-forest: linear-gradient(135deg, #5ee7df 0%, #b490ca 100%);
+  --sf-gradient-rose:   linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+  --sf-gradient-sky:    linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%);
+  --sf-gradient-amber:  linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
 
   /* ========== 语义色 ========== */
   --sf-success: #10b981;
   --sf-success-bg: #d1fae5;
+  --sf-success-gradient: linear-gradient(135deg, #34d399 0%, #059669 100%);
   --sf-warning: #f59e0b;
   --sf-warning-bg: #fef3c7;
+  --sf-warning-gradient: linear-gradient(135deg, #fbbf24 0%, #d97706 100%);
   --sf-danger: #ef4444;
   --sf-danger-bg: #fee2e2;
+  --sf-danger-gradient: linear-gradient(135deg, #f87171 0%, #dc2626 100%);
   --sf-info: #3b82f6;
   --sf-info-bg: #dbeafe;
+  --sf-info-gradient: linear-gradient(135deg, #60a5fa 0%, #2563eb 100%);
 
   /* ========== 平台色 ========== */
   --sf-xiaohongshu: #ff2442;
@@ -67,6 +80,20 @@
   --sf-shadow-lg: 0 10px 30px rgba(15, 23, 42, 0.10), 0 4px 8px rgba(15, 23, 42, 0.04);
   --sf-shadow-xl: 0 20px 50px rgba(15, 23, 42, 0.15), 0 8px 16px rgba(15, 23, 42, 0.06);
   --sf-shadow-brand: 0 8px 24px rgba(102, 126, 234, 0.25);
+  /* 彩色发光阴影 —— 用于 hover 强调态 */
+  --sf-shadow-glow-brand:   0 12px 40px rgba(102, 126, 234, 0.28);
+  --sf-shadow-glow-success: 0 12px 40px rgba(16, 185, 129, 0.22);
+  --sf-shadow-glow-warning: 0 12px 40px rgba(245, 158, 11, 0.22);
+  --sf-shadow-glow-danger:  0 12px 40px rgba(239, 68, 68, 0.22);
+
+  /* ========== 玻璃拟态 ========== */
+  --sf-glass-bg: rgba(255, 255, 255, 0.72);
+  --sf-glass-bg-strong: rgba(255, 255, 255, 0.88);
+  --sf-glass-border: rgba(255, 255, 255, 0.5);
+  --sf-glass-blur: blur(12px) saturate(140%);
+  /* 卡片表面轻微渐变 —— 取代纯白 */
+  --sf-surface-gradient: linear-gradient(155deg, #ffffff 0%, #fafbfd 100%);
+  --sf-surface-gradient-soft: linear-gradient(145deg, #fbfbff 0%, #f5f6fb 100%);
 
   /* ========== 圆角阶梯 ========== */
   --sf-radius-xs: 4px;
@@ -385,4 +412,222 @@ a:hover {
 
 .sf-section {
   margin-bottom: var(--sf-space-5);
+}
+
+/* ========== 增强动画 ========== */
+@keyframes sf-scale-in {
+  from { opacity: 0; transform: scale(0.92); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes sf-float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-4px); }
+}
+@keyframes sf-glow-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(102, 126, 234, 0.35); }
+  50%      { box-shadow: 0 0 0 8px rgba(102, 126, 234, 0); }
+}
+@keyframes sf-stagger {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.sf-scale-in { animation: sf-scale-in var(--sf-transition-base) both; }
+.sf-stagger  { animation: sf-stagger var(--sf-transition-slow) both; }
+.sf-stagger:nth-child(1) { animation-delay: 0.02s; }
+.sf-stagger:nth-child(2) { animation-delay: 0.06s; }
+.sf-stagger:nth-child(3) { animation-delay: 0.1s; }
+.sf-stagger:nth-child(4) { animation-delay: 0.14s; }
+.sf-stagger:nth-child(5) { animation-delay: 0.18s; }
+.sf-stagger:nth-child(6) { animation-delay: 0.22s; }
+
+/* ========== Hero 卡片（大号强调块） ==========
+ * 用于页面顶部的"主角"区域：分析结果分数总览、Dashboard 欢迎条
+ * 特点：极光渐变背景 + 右上角光晕 + 白字
+ */
+.sf-hero {
+  position: relative;
+  background: var(--sf-gradient-aurora);
+  border-radius: var(--sf-radius-lg);
+  padding: var(--sf-space-6);
+  color: #fff;
+  overflow: hidden;
+  box-shadow: var(--sf-shadow-glow-brand);
+}
+.sf-hero::before {
+  content: '';
+  position: absolute;
+  top: -30%;
+  right: -15%;
+  width: 420px;
+  height: 420px;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.18), transparent 60%);
+  border-radius: 50%;
+  pointer-events: none;
+}
+.sf-hero::after {
+  content: '';
+  position: absolute;
+  bottom: -40%;
+  left: -10%;
+  width: 340px;
+  height: 340px;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.1), transparent 60%);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+/* ========== Metric 指标卡（带 icon bubble 的统计块） ========== */
+.sf-metric {
+  position: relative;
+  background: var(--sf-surface-gradient);
+  border: 1px solid var(--sf-border-light);
+  border-radius: var(--sf-radius-lg);
+  padding: var(--sf-space-5);
+  display: flex;
+  align-items: center;
+  gap: var(--sf-space-4);
+  overflow: hidden;
+  transition: transform var(--sf-transition-base),
+              box-shadow var(--sf-transition-base),
+              border-color var(--sf-transition-base);
+  cursor: default;
+}
+.sf-metric::after {
+  content: '';
+  position: absolute;
+  top: -60%;
+  right: -20%;
+  width: 240px;
+  height: 240px;
+  border-radius: 50%;
+  background: var(--sf-gradient-soft);
+  opacity: 0;
+  transition: opacity var(--sf-transition-base);
+  pointer-events: none;
+}
+.sf-metric:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--sf-shadow-lg);
+  border-color: var(--sf-primary-light);
+}
+.sf-metric:hover::after { opacity: 1; }
+.sf-metric > * { position: relative; z-index: 1; }
+
+/* Icon 气泡（渐变背景 + 大 emoji/icon） */
+.sf-icon-bubble {
+  width: 52px;
+  height: 52px;
+  border-radius: var(--sf-radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 24px;
+  color: #fff;
+  box-shadow: var(--sf-shadow-sm);
+}
+.sf-icon-bubble.is-brand   { background: var(--sf-gradient-aurora); }
+.sf-icon-bubble.is-info    { background: var(--sf-info-gradient); }
+.sf-icon-bubble.is-success { background: var(--sf-success-gradient); }
+.sf-icon-bubble.is-warning { background: var(--sf-warning-gradient); }
+.sf-icon-bubble.is-danger  { background: var(--sf-danger-gradient); }
+.sf-icon-bubble.is-ocean   { background: var(--sf-gradient-ocean); }
+.sf-icon-bubble.is-sunset  { background: var(--sf-gradient-sunset); }
+.sf-icon-bubble.is-rose    { background: var(--sf-gradient-rose); }
+.sf-icon-bubble.is-forest  { background: var(--sf-gradient-forest); }
+
+/* 大号数字样式（Metric 主值） */
+.sf-metric-value {
+  font-size: 30px;
+  font-weight: 700;
+  color: var(--sf-text-primary);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.sf-metric-label {
+  color: var(--sf-text-tertiary);
+  font-size: 13px;
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
+/* ========== 面板卡片（标准内容卡） ========== */
+.sf-panel {
+  background: var(--sf-surface);
+  border: 1px solid var(--sf-border-light);
+  border-radius: var(--sf-radius-lg);
+  padding: var(--sf-space-5);
+  box-shadow: var(--sf-shadow-sm);
+  transition: box-shadow var(--sf-transition-base), border-color var(--sf-transition-base);
+}
+.sf-panel:hover {
+  box-shadow: var(--sf-shadow-md);
+  border-color: var(--sf-border);
+}
+.sf-panel-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--sf-text-primary);
+  margin: 0 0 var(--sf-space-4);
+  display: flex;
+  align-items: center;
+  gap: var(--sf-space-2);
+}
+.sf-panel-title::before {
+  content: '';
+  display: inline-block;
+  width: 4px;
+  height: 16px;
+  background: var(--sf-gradient);
+  border-radius: var(--sf-radius-full);
+}
+
+/* ========== Chip（彩色标签胶囊） ========== */
+.sf-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border-radius: var(--sf-radius-full);
+  font-size: 12px;
+  font-weight: 500;
+  background: var(--sf-bg-subtle);
+  color: var(--sf-text-secondary);
+  border: 1px solid var(--sf-border-light);
+  transition: all var(--sf-transition-fast);
+}
+.sf-chip.is-brand   { background: rgba(102, 126, 234, 0.1); color: var(--sf-primary-dark); border-color: rgba(102, 126, 234, 0.2); }
+.sf-chip.is-success { background: var(--sf-success-bg); color: var(--sf-success); border-color: rgba(16, 185, 129, 0.2); }
+.sf-chip.is-warning { background: var(--sf-warning-bg); color: var(--sf-warning); border-color: rgba(245, 158, 11, 0.2); }
+.sf-chip.is-danger  { background: var(--sf-danger-bg);  color: var(--sf-danger);  border-color: rgba(239, 68, 68, 0.2); }
+.sf-chip.is-info    { background: var(--sf-info-bg);    color: var(--sf-info);    border-color: rgba(59, 130, 246, 0.2); }
+
+/* ========== 玻璃卡片（毛玻璃效果） ========== */
+.sf-glass {
+  background: var(--sf-glass-bg);
+  backdrop-filter: var(--sf-glass-blur);
+  -webkit-backdrop-filter: var(--sf-glass-blur);
+  border: 1px solid var(--sf-glass-border);
+  border-radius: var(--sf-radius-lg);
+}
+
+/* ========== 分割线 ========== */
+.sf-divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--sf-border), transparent);
+  margin: var(--sf-space-4) 0;
+}
+
+/* ========== 打印样式：隐藏动效 / 边框 ========== */
+@media print {
+  .sf-metric, .sf-panel, .sf-hero {
+    box-shadow: none !important;
+    animation: none !important;
+    transform: none !important;
+  }
+  .sf-hero::before, .sf-hero::after, .sf-metric::after {
+    display: none !important;
+  }
 }

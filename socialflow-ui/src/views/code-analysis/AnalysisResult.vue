@@ -153,15 +153,20 @@ async function doExport(format: 'markdown' | 'html' | 'pdf') {
 <template>
   <div class="result-page" v-loading="loading">
     <div v-if="current" class="header-bar">
-      <el-button @click="router.back()">← 返回</el-button>
+      <el-button class="back-btn" @click="router.back()"><el-icon><ArrowLeft /></el-icon>返回</el-button>
       <div class="header-info">
-        <span class="type-chip">{{ current.analysisType === 'PROJECT_OVERVIEW' ? '📖 项目概览' : current.analysisType === 'COMMIT_REVIEW' ? '🔎 提交审查' : '🔀 对比分析' }}</span>
+        <span class="type-chip">
+          <el-icon v-if="current.analysisType === 'PROJECT_OVERVIEW'"><Reading /></el-icon>
+          <el-icon v-else-if="current.analysisType === 'COMMIT_REVIEW'"><Search /></el-icon>
+          <el-icon v-else><Connection /></el-icon>
+          {{ current.analysisType === 'PROJECT_OVERVIEW' ? '项目概览' : current.analysisType === 'COMMIT_REVIEW' ? '提交审查' : '对比分析' }}
+        </span>
         <span class="repo-url">{{ current.gitUrl }}</span>
       </div>
       <div class="header-actions">
-        <el-button size="small" @click="share">🔗 分享</el-button>
+        <el-button size="small" @click="share"><el-icon><Share /></el-icon>分享</el-button>
         <el-dropdown trigger="click" @command="doExport">
-          <el-button size="small" :loading="exporting">📥 导出<el-icon style="margin-left:4px"><ArrowDown /></el-icon></el-button>
+          <el-button size="small" :loading="exporting"><el-icon><Download /></el-icon>导出<el-icon style="margin-left:4px"><ArrowDown /></el-icon></el-button>
           <template #dropdown>
             <el-dropdown-menu>
               <el-dropdown-item command="markdown">Markdown (含 findings)</el-dropdown-item>
@@ -175,30 +180,52 @@ async function doExport(format: 'markdown' | 'html' | 'pdf') {
 
     <div v-if="current?.status === 'RUNNING' || current?.status === 'PENDING'" class="progress-card">
       <el-icon class="spin"><Loading /></el-icon>
-      {{ current.progressMessage || '分析中...' }}
-      <el-progress :percentage="current.progressPercent || 0" style="width: 100%; margin-top: 10px" />
+      <div class="progress-text">{{ current.progressMessage || '分析中...' }}</div>
+      <el-progress :percentage="current.progressPercent || 0" style="width: 100%; margin-top: 10px"
+                   :stroke-width="10"
+                   :color="[{color: '#667eea', percentage: 50}, {color: '#764ba2', percentage: 100}]" />
     </div>
 
     <div v-else-if="current?.status === 'FAILED'" class="error-card">
-      ❌ {{ current.errorMsg }}
+      <div class="error-icon-wrap"><el-icon><CircleCloseFilled /></el-icon></div>
+      <div class="error-title">分析失败</div>
+      <div class="error-detail">{{ current.errorMsg }}</div>
     </div>
 
     <template v-else-if="current">
-      <!-- 审查类：评分 + 计数 -->
-      <div v-if="current.analysisType !== 'PROJECT_OVERVIEW'" class="top-card">
-        <ScoreGauge :score="current.overallScore" :size="180" />
-        <div class="count-col">
+      <!-- 审查类：评分 Hero -->
+      <div v-if="current.analysisType !== 'PROJECT_OVERVIEW'" class="score-hero">
+        <div class="score-hero-left">
+          <ScoreGauge :score="current.overallScore" :size="180" />
+        </div>
+        <div class="score-hero-right">
           <div class="count-row">
-            <div class="c-card c-h" @click="filterLevel = 'HIGH'">高 {{ current.highCount }}</div>
-            <div class="c-card c-m" @click="filterLevel = 'MEDIUM'">中 {{ current.mediumCount }}</div>
-            <div class="c-card c-l" @click="filterLevel = 'LOW'">低 {{ current.lowCount }}</div>
-            <div class="c-card" @click="filterLevel = 'ALL'">全部 {{ (current.findings || []).length }}</div>
+            <div class="count-card is-high" @click="filterLevel = 'HIGH'" :class="{ active: filterLevel === 'HIGH' }">
+              <div class="count-icon"><el-icon><Warning /></el-icon></div>
+              <div class="count-num">{{ current.highCount }}</div>
+              <div class="count-label">高风险</div>
+            </div>
+            <div class="count-card is-medium" @click="filterLevel = 'MEDIUM'" :class="{ active: filterLevel === 'MEDIUM' }">
+              <div class="count-icon"><el-icon><WarningFilled /></el-icon></div>
+              <div class="count-num">{{ current.mediumCount }}</div>
+              <div class="count-label">中风险</div>
+            </div>
+            <div class="count-card is-low" @click="filterLevel = 'LOW'" :class="{ active: filterLevel === 'LOW' }">
+              <div class="count-icon"><el-icon><InfoFilled /></el-icon></div>
+              <div class="count-num">{{ current.lowCount }}</div>
+              <div class="count-label">低风险</div>
+            </div>
+            <div class="count-card is-all" @click="filterLevel = 'ALL'" :class="{ active: filterLevel === 'ALL' }">
+              <div class="count-icon"><el-icon><Document /></el-icon></div>
+              <div class="count-num">{{ (current.findings || []).length }}</div>
+              <div class="count-label">全部</div>
+            </div>
           </div>
           <div class="meta-row">
-            <span v-if="current.commitSha">🔢 {{ current.commitSha.slice(0, 7) }}</span>
-            <span v-if="current.baseRef">Base: {{ current.baseRef }}</span>
-            <span v-if="current.headRef">Head: {{ current.headRef }}</span>
-            <span v-if="current.durationMs">⏱️ {{ (current.durationMs / 1000).toFixed(1) }}s</span>
+            <span v-if="current.commitSha" class="meta-pill"><el-icon><Link /></el-icon>{{ current.commitSha.slice(0, 7) }}</span>
+            <span v-if="current.baseRef" class="meta-pill">Base · {{ current.baseRef }}</span>
+            <span v-if="current.headRef" class="meta-pill">Head · {{ current.headRef }}</span>
+            <span v-if="current.durationMs" class="meta-pill"><el-icon><Timer /></el-icon>{{ (current.durationMs / 1000).toFixed(1) }}s</span>
           </div>
         </div>
       </div>
@@ -314,80 +341,577 @@ async function doExport(format: 'markdown' | 'html' | 'pdf') {
 </template>
 
 <style scoped>
-.result-page { padding: 20px; max-width: 1100px; margin: 0 auto; }
-.header-bar { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
-.header-info { flex: 1; display: flex; align-items: center; gap: 10px; }
-.type-chip { padding: 3px 10px; background: #ede9fe; color: #6d28d9; border-radius: 4px; font-size: 12px; }
-.repo-url { color: #6b7280; font-size: 13px; }
-.header-actions { display: flex; gap: 6px; }
+.result-page {
+  padding: var(--sf-space-5);
+  max-width: 1100px;
+  margin: 0 auto;
+  animation: sf-fade-in var(--sf-transition-base);
+}
 
-.progress-card { text-align: center; padding: 40px; background: #fff; border-radius: 12px; color: #6b7280; }
-.spin { animation: spin 1s linear infinite; color: #3b82f6; margin-right: 8px; }
+/* ========== 顶部操作栏 ========== */
+.header-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--sf-space-3);
+  margin-bottom: var(--sf-space-4);
+}
+.back-btn {
+  background: var(--sf-surface) !important;
+  border: 1px solid var(--sf-border) !important;
+  transition: all var(--sf-transition-fast) !important;
+}
+.back-btn:hover {
+  border-color: var(--sf-primary) !important;
+  color: var(--sf-primary) !important;
+  transform: translateX(-2px);
+}
+.header-info {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--sf-space-3);
+  min-width: 0;
+}
+.type-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 12px;
+  background: var(--sf-gradient-soft);
+  color: var(--sf-primary-dark);
+  border: 1px solid rgba(102, 126, 234, 0.2);
+  border-radius: var(--sf-radius-full);
+  font-size: 12px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.repo-url {
+  color: var(--sf-text-tertiary);
+  font-size: 13px;
+  font-family: 'SF Mono', Menlo, monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.header-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* ========== 进度/错误卡 ========== */
+.progress-card {
+  text-align: center;
+  padding: var(--sf-space-7);
+  background: var(--sf-surface-gradient);
+  border: 1px solid var(--sf-border-light);
+  border-radius: var(--sf-radius-lg);
+  box-shadow: var(--sf-shadow-sm);
+}
+.progress-text {
+  display: inline-block;
+  color: var(--sf-text-secondary);
+  font-weight: 500;
+  margin-bottom: var(--sf-space-2);
+}
+.spin {
+  animation: spin 1s linear infinite;
+  color: var(--sf-primary);
+  margin-right: var(--sf-space-2);
+  font-size: 20px;
+  vertical-align: middle;
+}
 @keyframes spin { to { transform: rotate(360deg); } }
-.error-card { background: #fef2f2; color: #b91c1c; padding: 20px; border-radius: 12px; }
 
-.top-card { background: #fff; border-radius: 12px; padding: 20px; display: flex; gap: 20px; align-items: center; margin-bottom: 14px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06); }
-.count-col { flex: 1; }
-.count-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 10px; }
-.c-card { padding: 12px; background: #f9fafb; border-radius: 8px; text-align: center; cursor: pointer; font-weight: 600; border: 2px solid transparent; }
-.c-card:hover { border-color: #d1d5db; }
-.c-h { color: #ef4444; } .c-m { color: #f59e0b; } .c-l { color: #3b82f6; }
-.meta-row { color: #6b7280; font-size: 12px; display: flex; gap: 14px; }
+.error-card {
+  background: linear-gradient(135deg, #fff1f2 0%, #ffe4e6 100%);
+  border: 1px solid #fca5a5;
+  border-radius: var(--sf-radius-lg);
+  padding: var(--sf-space-6);
+  box-shadow: var(--sf-shadow-glow-danger);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sf-space-3);
+}
+.error-icon-wrap {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--sf-danger-gradient);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  box-shadow: var(--sf-shadow-glow-danger);
+}
+.error-title {
+  color: #b91c1c;
+  font-size: 18px;
+  font-weight: 700;
+}
+.error-detail {
+  color: #991b1b;
+  font-family: 'SF Mono', Menlo, monospace;
+  font-size: 13px;
+  background: rgba(255,255,255,0.6);
+  padding: var(--sf-space-3);
+  border-radius: var(--sf-radius-sm);
+  max-width: 600px;
+  white-space: pre-wrap;
+}
 
-.overview-stats { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-.stats-box { background: #f9fafb; padding: 14px; border-radius: 8px; }
-.stats-title { font-weight: 600; color: #374151; margin-bottom: 10px; }
-.tech-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.tech-chip { padding: 3px 10px; background: #ede9fe; color: #6d28d9; border-radius: 12px; font-size: 12px; }
-.lang-row { display: grid; grid-template-columns: 80px 1fr 50px; gap: 8px; font-size: 12px; align-items: center; margin-bottom: 4px; }
-.lang-track { background: #e5e7eb; height: 6px; border-radius: 3px; overflow: hidden; }
-.lang-fill { height: 100%; background: linear-gradient(90deg, #3b82f6, #8b5cf6); }
-.lang-percent { color: #6b7280; text-align: right; }
+/* ========== 评分 Hero ========== */
+.score-hero {
+  background: var(--sf-surface-gradient);
+  border: 1px solid var(--sf-border-light);
+  border-radius: var(--sf-radius-lg);
+  padding: var(--sf-space-5) var(--sf-space-6);
+  display: flex;
+  gap: var(--sf-space-6);
+  align-items: center;
+  margin-bottom: var(--sf-space-4);
+  box-shadow: var(--sf-shadow-sm);
+  position: relative;
+  overflow: hidden;
+}
+.score-hero::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  right: -10%;
+  width: 320px;
+  height: 320px;
+  background: var(--sf-gradient-soft);
+  border-radius: 50%;
+  pointer-events: none;
+}
+.score-hero-left {
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1;
+}
+.score-hero-right {
+  flex: 1;
+  position: relative;
+  z-index: 1;
+}
 
-.content-card { background: #fff; border-radius: 12px; padding: 20px 24px; margin-bottom: 14px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06); }
-.card-title { font-size: 15px; font-weight: 600; margin-bottom: 12px; color: #111827; }
-.findings-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
-.filter-tags { display: flex; gap: 6px; }
-.ft { padding: 4px 12px; border-radius: 14px; font-size: 12px; cursor: pointer; background: #f3f4f6; color: #6b7280; }
-.ft:hover { background: #e5e7eb; }
-.ft.on { background: #3b82f6; color: #fff; }
-.ft-h.on { background: #ef4444; } .ft-m.on { background: #f59e0b; } .ft-l.on { background: #3b82f6; }
-.markdown-body { line-height: 1.75; color: #1f2937; }
-.markdown-body :deep(h2) { font-size: 16px; margin: 12px 0 6px; }
-.markdown-body :deep(p) { margin: 6px 0; }
-.markdown-body :deep(code) { background: #f3f4f6; padding: 2px 6px; border-radius: 3px; font-size: 0.9em; color: #6d28d9; }
-.markdown-body :deep(pre) { background: #1e293b; color: #e2e8f0; padding: 12px; border-radius: 6px; overflow-x: auto; }
+.count-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--sf-space-3);
+  margin-bottom: var(--sf-space-4);
+}
+.count-card {
+  position: relative;
+  padding: var(--sf-space-4);
+  background: var(--sf-surface);
+  border: 2px solid var(--sf-border-light);
+  border-radius: var(--sf-radius-md);
+  text-align: center;
+  cursor: pointer;
+  transition: all var(--sf-transition-fast);
+  overflow: hidden;
+}
+.count-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--sf-shadow-md);
+}
+.count-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  opacity: 0.8;
+}
+.count-card.is-high::before   { background: var(--sf-danger-gradient); }
+.count-card.is-medium::before { background: var(--sf-warning-gradient); }
+.count-card.is-low::before    { background: var(--sf-info-gradient); }
+.count-card.is-all::before    { background: var(--sf-gradient); }
+.count-card.is-high.active    { border-color: var(--sf-danger); background: var(--sf-danger-bg); }
+.count-card.is-medium.active  { border-color: var(--sf-warning); background: var(--sf-warning-bg); }
+.count-card.is-low.active     { border-color: var(--sf-info); background: var(--sf-info-bg); }
+.count-card.is-all.active     { border-color: var(--sf-primary); background: var(--sf-gradient-soft); }
 
-.mermaid-svg { display: flex; justify-content: center; overflow-x: auto; }
-.mermaid-svg :deep(svg) { max-width: 100%; height: auto; }
-.mermaid-error { background: #fef2f2; color: #b91c1c; padding: 10px; border-radius: 6px; font-size: 13px; }
+.count-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--sf-radius-sm);
+  margin: 0 auto var(--sf-space-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 16px;
+}
+.count-card.is-high .count-icon   { background: var(--sf-danger-gradient); }
+.count-card.is-medium .count-icon { background: var(--sf-warning-gradient); }
+.count-card.is-low .count-icon    { background: var(--sf-info-gradient); }
+.count-card.is-all .count-icon    { background: var(--sf-gradient); }
 
-/* LLM 调用详情 */
-.llm-header { display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; }
-.llm-total-inline { color: #6b7280; font-weight: 400; font-size: 13px; margin-left: 6px; }
-.llm-arrow { color: #9ca3af; transition: transform 0.2s; }
+.count-num {
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--sf-text-primary);
+}
+.count-label {
+  font-size: 12px;
+  color: var(--sf-text-tertiary);
+  margin-top: 4px;
+}
+
+.meta-row {
+  display: flex;
+  gap: var(--sf-space-2);
+  flex-wrap: wrap;
+}
+.meta-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background: var(--sf-bg-subtle);
+  border: 1px solid var(--sf-border-light);
+  border-radius: var(--sf-radius-full);
+  color: var(--sf-text-tertiary);
+  font-size: 12px;
+  font-family: 'SF Mono', Menlo, monospace;
+}
+.meta-pill :deep(.el-icon) { font-size: 12px; }
+
+/* ========== 项目概览：技术栈 / 语言条（复用 ProjectOverview 的风格） ========== */
+.top-card {
+  background: var(--sf-surface);
+  border: 1px solid var(--sf-border-light);
+  border-radius: var(--sf-radius-lg);
+  padding: var(--sf-space-5);
+  display: flex;
+  gap: var(--sf-space-5);
+  align-items: center;
+  margin-bottom: var(--sf-space-4);
+  box-shadow: var(--sf-shadow-sm);
+}
+.overview-stats {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sf-space-4);
+}
+.stats-box {
+  background: var(--sf-surface-gradient-soft);
+  border: 1px solid var(--sf-border-light);
+  padding: var(--sf-space-4);
+  border-radius: var(--sf-radius-md);
+}
+.stats-title {
+  font-weight: 600;
+  color: var(--sf-text-secondary);
+  margin-bottom: var(--sf-space-3);
+  font-size: 13px;
+}
+.tech-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.tech-chip {
+  padding: 4px 12px;
+  background: rgba(102, 126, 234, 0.1);
+  color: var(--sf-primary-dark);
+  border: 1px solid rgba(102, 126, 234, 0.2);
+  border-radius: var(--sf-radius-full);
+  font-size: 12px;
+  font-weight: 500;
+}
+.lang-row {
+  display: grid;
+  grid-template-columns: 80px 1fr 50px;
+  gap: var(--sf-space-2);
+  font-size: 12px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.lang-track {
+  background: var(--sf-border-light);
+  height: 8px;
+  border-radius: var(--sf-radius-full);
+  overflow: hidden;
+}
+.lang-fill {
+  height: 100%;
+  background: var(--sf-gradient);
+  border-radius: var(--sf-radius-full);
+  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.lang-percent {
+  color: var(--sf-text-tertiary);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ========== 内容卡 ========== */
+.content-card {
+  background: var(--sf-surface);
+  border: 1px solid var(--sf-border-light);
+  border-radius: var(--sf-radius-lg);
+  padding: var(--sf-space-5);
+  margin-bottom: var(--sf-space-4);
+  box-shadow: var(--sf-shadow-sm);
+  transition: box-shadow var(--sf-transition-base);
+}
+.content-card:hover { box-shadow: var(--sf-shadow-md); }
+.card-title {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: var(--sf-space-3);
+  color: var(--sf-text-primary);
+  display: flex;
+  align-items: center;
+  gap: var(--sf-space-2);
+}
+.card-title::before {
+  content: '';
+  width: 4px;
+  height: 16px;
+  background: var(--sf-gradient);
+  border-radius: var(--sf-radius-full);
+}
+
+.findings-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--sf-space-4);
+}
+.filter-tags {
+  display: flex;
+  gap: 6px;
+}
+.ft {
+  padding: 5px 14px;
+  border-radius: var(--sf-radius-full);
+  font-size: 12px;
+  cursor: pointer;
+  background: var(--sf-bg-subtle);
+  color: var(--sf-text-tertiary);
+  border: 1px solid var(--sf-border-light);
+  font-weight: 500;
+  transition: all var(--sf-transition-fast);
+}
+.ft:hover {
+  background: var(--sf-surface-hover);
+  color: var(--sf-text-secondary);
+}
+.ft.on {
+  background: var(--sf-gradient);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: var(--sf-shadow-brand);
+}
+.ft-h.on { background: var(--sf-danger-gradient); box-shadow: var(--sf-shadow-glow-danger); }
+.ft-m.on { background: var(--sf-warning-gradient); box-shadow: var(--sf-shadow-glow-warning); }
+.ft-l.on { background: var(--sf-info-gradient); }
+
+/* ========== Markdown（与 ProjectOverview 一致） ========== */
+.markdown-body {
+  line-height: 1.8;
+  color: var(--sf-text-primary);
+}
+.markdown-body :deep(h2) {
+  font-size: 17px;
+  margin: var(--sf-space-4) 0 var(--sf-space-2);
+  font-weight: 600;
+  color: var(--sf-text-primary);
+  padding-bottom: 4px;
+  border-bottom: 2px solid var(--sf-border-light);
+}
+.markdown-body :deep(p) { margin: var(--sf-space-2) 0; }
+.markdown-body :deep(code) {
+  background: rgba(102, 126, 234, 0.08);
+  padding: 2px 8px;
+  border-radius: var(--sf-radius-xs);
+  font-size: 0.9em;
+  color: var(--sf-primary-dark);
+  border: 1px solid rgba(102, 126, 234, 0.12);
+}
+.markdown-body :deep(pre) {
+  background: #1e293b;
+  color: #e2e8f0;
+  padding: var(--sf-space-4);
+  border-radius: var(--sf-radius-md);
+  overflow-x: auto;
+  box-shadow: var(--sf-shadow-md);
+}
+
+/* ========== Mermaid ========== */
+.mermaid-svg {
+  display: flex;
+  justify-content: center;
+  overflow-x: auto;
+}
+.mermaid-svg :deep(svg) {
+  max-width: 100%;
+  height: auto;
+  filter: drop-shadow(0 4px 12px rgba(0,0,0,0.04));
+}
+.mermaid-error {
+  background: var(--sf-danger-bg);
+  color: var(--sf-danger);
+  padding: var(--sf-space-3);
+  border-radius: var(--sf-radius-sm);
+  font-size: 13px;
+}
+
+/* ========== LLM 调用详情 ========== */
+.llm-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+  padding: var(--sf-space-2) 0;
+}
+.llm-total-inline {
+  color: var(--sf-text-tertiary);
+  font-weight: 400;
+  font-size: 13px;
+  margin-left: var(--sf-space-2);
+}
+.llm-arrow {
+  color: var(--sf-text-muted);
+  transition: transform var(--sf-transition-fast);
+  font-size: 16px;
+}
 .llm-arrow.expanded { transform: rotate(180deg); }
-.llm-body { margin-top: 14px; }
-.llm-loading { text-align: center; padding: 20px; color: #9ca3af; }
+.llm-body { margin-top: var(--sf-space-4); }
+.llm-loading {
+  text-align: center;
+  padding: var(--sf-space-5);
+  color: var(--sf-text-muted);
+}
 
-.llm-summary-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
-.llm-sum-card { background: #f9fafb; border-radius: 8px; padding: 12px 14px; }
-.llm-sum-card span { display: block; font-size: 12px; color: #6b7280; margin-bottom: 4px; }
-.llm-sum-card strong { font-size: 18px; color: #111827; font-weight: 700; }
+.llm-summary-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--sf-space-3);
+  margin-bottom: var(--sf-space-4);
+}
+.llm-sum-card {
+  background: var(--sf-surface-gradient-soft);
+  border: 1px solid var(--sf-border-light);
+  border-radius: var(--sf-radius-md);
+  padding: var(--sf-space-3) var(--sf-space-4);
+  transition: all var(--sf-transition-fast);
+}
+.llm-sum-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--sf-shadow-sm);
+  border-color: var(--sf-primary-light);
+}
+.llm-sum-card span {
+  display: block;
+  font-size: 12px;
+  color: var(--sf-text-tertiary);
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.llm-sum-card strong {
+  font-size: 20px;
+  color: var(--sf-text-primary);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
 
-.llm-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
-.llm-table thead th { text-align: left; padding: 8px 10px; background: #f3f4f6; color: #374151; font-weight: 600; border-bottom: 1px solid #e5e7eb; }
-.llm-table tbody td { padding: 8px 10px; border-bottom: 1px solid #f3f4f6; vertical-align: top; }
-.llm-table tbody tr:hover { background: #f9fafb; }
-.llm-table .c-idx { color: #9ca3af; font-family: monospace; width: 32px; }
+.llm-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  border: 1px solid var(--sf-border-light);
+  border-radius: var(--sf-radius-md);
+  overflow: hidden;
+}
+.llm-table thead th {
+  text-align: left;
+  padding: var(--sf-space-3) var(--sf-space-3);
+  background: var(--sf-bg-subtle);
+  color: var(--sf-text-secondary);
+  font-weight: 600;
+  border-bottom: 1px solid var(--sf-border-light);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 11px;
+}
+.llm-table tbody td {
+  padding: var(--sf-space-3) var(--sf-space-3);
+  border-bottom: 1px solid var(--sf-border-light);
+  vertical-align: top;
+}
+.llm-table tbody tr:last-child td { border-bottom: none; }
+.llm-table tbody tr { transition: background var(--sf-transition-fast); }
+.llm-table tbody tr:hover { background: var(--sf-surface-hover); }
+.llm-table .c-idx {
+  color: var(--sf-text-muted);
+  font-family: 'SF Mono', Menlo, monospace;
+  width: 40px;
+}
 .llm-table .c-stage { min-width: 200px; }
-.llm-table .stage-label { color: #111827; font-weight: 500; }
-.llm-table .stage-code { color: #9ca3af; font-size: 11px; font-family: 'SF Mono', Menlo, monospace; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; max-width: 240px; white-space: nowrap; }
-.llm-table .c-model { color: #6b7280; font-family: 'SF Mono', Menlo, monospace; font-size: 11px; }
-.llm-table .c-num { text-align: right; font-variant-numeric: tabular-nums; }
-.llm-table .c-total { font-weight: 600; color: #6d28d9; }
-.llm-table .row-fail { background: #fef2f2; }
-.tag { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
-.tag-ok { background: #d1fae5; color: #059669; }
-.tag-fail { background: #fee2e2; color: #dc2626; cursor: help; }
+.llm-table .stage-label {
+  color: var(--sf-text-primary);
+  font-weight: 500;
+}
+.llm-table .stage-code {
+  color: var(--sf-text-muted);
+  font-size: 11px;
+  font-family: 'SF Mono', Menlo, monospace;
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 240px;
+  white-space: nowrap;
+}
+.llm-table .c-model {
+  color: var(--sf-text-tertiary);
+  font-family: 'SF Mono', Menlo, monospace;
+  font-size: 11px;
+}
+.llm-table .c-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--sf-text-secondary);
+}
+.llm-table .c-total {
+  font-weight: 700;
+  color: var(--sf-primary-dark);
+}
+.llm-table .row-fail { background: rgba(239, 68, 68, 0.04); }
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 700;
+}
+.tag-ok {
+  background: var(--sf-success-gradient);
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.25);
+}
+.tag-fail {
+  background: var(--sf-danger-gradient);
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(239, 68, 68, 0.25);
+  cursor: help;
+}
 </style>

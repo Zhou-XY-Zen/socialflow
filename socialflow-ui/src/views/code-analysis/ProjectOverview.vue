@@ -147,6 +147,17 @@ const topTechs = computed(() => current.value?.techStack?.slice(0, 8) || [])
 const totalLines = computed(() =>
   (current.value?.languageStats || []).reduce((a, b) => a + (b.totalLines || 0), 0))
 
+/** 技术栈 chip 颜色循环：6 种渐变轮换 */
+const CHIP_PALETTE = ['is-brand', 'is-info', 'is-success', 'is-warning', 'is-danger', 'is-ocean']
+function techChipColor(i: number): string {
+  return CHIP_PALETTE[i % CHIP_PALETTE.length]
+}
+/** 语言占比条颜色循环 */
+const LANG_PALETTE = ['is-c-brand', 'is-c-sky', 'is-c-sunset', 'is-c-forest', 'is-c-rose', 'is-c-ocean']
+function langFillColor(i: number): string {
+  return LANG_PALETTE[i % LANG_PALETTE.length]
+}
+
 onMounted(() => {
   loadBookmarks()
   // 从 URL 查询参数预填（来自凭证页的"用此凭证/仓库分析"跳转）
@@ -168,7 +179,7 @@ onUnmounted(stopPoll)
     <!-- 左栏：表单 + 收藏 -->
     <div class="left-panel">
       <div class="panel-card">
-        <div class="panel-title">📖 项目概览分析</div>
+        <div class="panel-title"><el-icon><Reading /></el-icon>项目概览分析</div>
         <div class="hint">输入 Git 仓库地址，AI 自动生成项目介绍、技术栈、模块分层与关键文件导读。</div>
 
         <el-form label-position="top" @submit.prevent>
@@ -176,16 +187,17 @@ onUnmounted(stopPoll)
             <RepoPicker :model-value="pickerValue" @update:model-value="onPickerChange" :show-branch="true" />
           </el-form-item>
           <div class="sub-hint" style="margin-bottom: 12px;">
-            Map-Reduce 全量扫描：逐模块读全部源码 → 汇总项目全景（无需配置克隆深度）
+            Map-Reduce 全量扫描：逐模块读全部源码 → 汇总项目全景
           </div>
           <el-button type="primary" :loading="loading" size="large" class="submit-btn" @click="start">
-            🚀 开始分析
+            <el-icon v-if="!loading" style="margin-right:6px"><MagicStick /></el-icon>
+            开始分析
           </el-button>
         </el-form>
       </div>
 
       <div v-if="bookmarks.length" class="panel-card">
-        <div class="panel-title">⭐ 我的收藏</div>
+        <div class="panel-title"><el-icon><StarFilled /></el-icon>我的收藏</div>
         <div v-for="b in bookmarks" :key="b.id" class="bookmark-item" @click="fillFromBookmark(b)">
           <div class="bm-name">{{ b.nickname }}</div>
           <div class="bm-url">{{ b.gitUrl }}</div>
@@ -196,7 +208,9 @@ onUnmounted(stopPoll)
     <!-- 右栏：进度 + 结果 -->
     <div class="right-panel">
       <div v-if="!current" class="placeholder">
-        <div class="ph-icon">📖</div>
+        <div class="ph-icon-wrap">
+          <el-icon class="ph-icon"><Reading /></el-icon>
+        </div>
         <div class="ph-title">等待分析</div>
         <div class="ph-desc">在左侧填写 Git 地址并点击"开始分析"</div>
       </div>
@@ -208,36 +222,43 @@ onUnmounted(stopPoll)
           {{ STAGE_LABEL[current.stage || 'INIT'] || current.stage }}
         </div>
         <el-progress :percentage="current.progressPercent || 0"
-                     :stroke-width="12" status="primary" />
+                     :stroke-width="10" :show-text="true"
+                     :color="[{color: '#667eea', percentage: 50}, {color: '#764ba2', percentage: 100}]" />
         <div class="progress-msg">{{ current.progressMessage || '正在处理...' }}</div>
       </div>
 
       <!-- 失败 -->
       <div v-else-if="current.status === 'FAILED'" class="error-card">
-        <div class="error-title">❌ 分析失败</div>
+        <div class="error-icon-wrap"><el-icon><CircleCloseFilled /></el-icon></div>
+        <div class="error-title">分析失败</div>
         <div class="error-msg">{{ current.errorMsg }}</div>
-        <el-button @click="current = undefined">重试</el-button>
+        <el-button type="primary" @click="current = undefined">重试</el-button>
       </div>
 
       <!-- 成功 -->
       <div v-else class="result-card">
-        <!-- 顶部摘要 -->
-        <div class="summary-header">
-          <div>
-            <div class="repo-title">{{ current.gitUrl }}</div>
-            <div class="meta-row">
-              <span>分支: {{ current.branch || 'main' }}</span>
-              <span>耗时: {{ ((current.durationMs || 0) / 1000).toFixed(1) }}s</span>
-              <span v-if="current.llmTokensUsed">Token: {{ current.llmTokensUsed }}</span>
+        <!-- Hero 头部：渐变背景 + 仓库信息 + 操作 -->
+        <div class="result-hero">
+          <div class="hero-left">
+            <div class="hero-type-chip"><el-icon><Reading /></el-icon>项目概览</div>
+            <div class="hero-repo">{{ current.gitUrl }}</div>
+            <div class="hero-stats">
+              <span class="hero-stat"><el-icon><Connection /></el-icon>{{ current.branch || 'main' }}</span>
+              <span class="hero-stat"><el-icon><Timer /></el-icon>{{ ((current.durationMs || 0) / 1000).toFixed(1) }}s</span>
+              <span class="hero-stat" v-if="current.llmTokensUsed"><el-icon><Cpu /></el-icon>{{ current.llmTokensUsed.toLocaleString() }} tokens</span>
             </div>
           </div>
           <div class="actions">
-            <el-button size="small" @click="favorite">
-              {{ current.isFavorite ? '★ 已收藏' : '☆ 收藏' }}
+            <el-button size="small" :class="{ 'is-favorite': current.isFavorite }" @click="favorite">
+              <el-icon><StarFilled v-if="current.isFavorite" /><Star v-else /></el-icon>
+              {{ current.isFavorite ? '已收藏' : '收藏' }}
             </el-button>
-            <el-button size="small" @click="share">🔗 分享</el-button>
+            <el-button size="small" @click="share"><el-icon><Share /></el-icon>分享</el-button>
             <el-dropdown trigger="click" @command="doExport">
-              <el-button size="small" :loading="exporting">📥 导出<el-icon style="margin-left:4px"><ArrowDown /></el-icon></el-button>
+              <el-button size="small" :loading="exporting">
+                <el-icon><Download /></el-icon>导出
+                <el-icon style="margin-left:4px"><ArrowDown /></el-icon>
+              </el-button>
               <template #dropdown>
                 <el-dropdown-menu>
                   <el-dropdown-item command="markdown">Markdown (含 findings)</el-dropdown-item>
@@ -252,19 +273,19 @@ onUnmounted(stopPoll)
         <!-- 技术栈 / 语言占比 -->
         <div class="stats-row">
           <div class="stats-box">
-            <div class="stats-title">🛠️ 技术栈</div>
+            <div class="stats-title"><span class="stats-icon is-brand"><el-icon><Tools /></el-icon></span>技术栈</div>
             <div class="tech-chips">
-              <span v-for="t in topTechs" :key="t" class="tech-chip">{{ t }}</span>
+              <span v-for="(t, i) in topTechs" :key="t" class="tech-chip" :class="techChipColor(i)">{{ t }}</span>
               <span v-if="!topTechs.length" class="muted">（无）</span>
             </div>
           </div>
           <div class="stats-box">
-            <div class="stats-title">📊 语言占比 ({{ totalLines.toLocaleString() }} 行)</div>
+            <div class="stats-title"><span class="stats-icon is-info"><el-icon><DataLine /></el-icon></span>语言占比 <small>· {{ totalLines.toLocaleString() }} 行</small></div>
             <div class="lang-bars">
-              <div v-for="l in (current.languageStats || []).slice(0, 6)" :key="l.language" class="lang-row">
+              <div v-for="(l, i) in (current.languageStats || []).slice(0, 6)" :key="l.language" class="lang-row">
                 <span class="lang-name">{{ l.language }}</span>
                 <div class="lang-track">
-                  <div class="lang-fill" :style="{ width: l.percent + '%' }" />
+                  <div class="lang-fill" :class="langFillColor(i)" :style="{ width: l.percent + '%' }" />
                 </div>
                 <span class="lang-percent">{{ l.percent.toFixed(1) }}%</span>
               </div>
@@ -297,116 +318,573 @@ onUnmounted(stopPoll)
 .project-overview {
   display: grid;
   grid-template-columns: 380px 1fr;
-  gap: 16px;
-  padding: 20px;
+  gap: var(--sf-space-4);
+  padding: var(--sf-space-5);
   height: 100%;
+  animation: sf-fade-in var(--sf-transition-base);
 }
-.left-panel { display: flex; flex-direction: column; gap: 16px; }
+.left-panel { display: flex; flex-direction: column; gap: var(--sf-space-4); }
 .right-panel { min-width: 0; }
 
+/* ========== 左栏表单卡 ========== */
 .panel-card {
-  background: #fff;
-  border-radius: 12px;
-  padding: 20px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  background: var(--sf-surface-gradient);
+  border: 1px solid var(--sf-border-light);
+  border-radius: var(--sf-radius-lg);
+  padding: var(--sf-space-5);
+  box-shadow: var(--sf-shadow-sm);
+  transition: box-shadow var(--sf-transition-base);
 }
-.panel-title { font-size: 16px; font-weight: 600; margin-bottom: 6px; color: #111827; }
-.hint { color: #6b7280; font-size: 13px; line-height: 1.6; margin-bottom: 14px; }
-.sub-hint { margin-left: 12px; color: #9ca3af; font-size: 12px; }
-.submit-btn { width: 100%; background: linear-gradient(135deg, #667eea, #764ba2); border: none; }
+.panel-card:hover { box-shadow: var(--sf-shadow-md); }
+.panel-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: var(--sf-space-2);
+  color: var(--sf-text-primary);
+  display: flex;
+  align-items: center;
+  gap: var(--sf-space-2);
+}
+.panel-title :deep(.el-icon) {
+  color: var(--sf-primary);
+  font-size: 18px;
+}
+.hint {
+  color: var(--sf-text-tertiary);
+  font-size: 13px;
+  line-height: 1.6;
+  margin-bottom: var(--sf-space-4);
+}
+.sub-hint {
+  margin-left: var(--sf-space-3);
+  color: var(--sf-text-muted);
+  font-size: 12px;
+}
+.submit-btn {
+  width: 100%;
+  background: var(--sf-gradient-aurora) !important;
+  border: none !important;
+  box-shadow: var(--sf-shadow-brand) !important;
+  font-weight: 600 !important;
+  height: 44px !important;
+  transition: all var(--sf-transition-base) !important;
+}
+.submit-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--sf-shadow-glow-brand) !important;
+}
 
 .bookmark-item {
-  padding: 10px 12px;
-  border-radius: 6px;
+  padding: var(--sf-space-3);
+  border-radius: var(--sf-radius-sm);
   cursor: pointer;
-  transition: background 0.2s;
-  margin-bottom: 4px;
+  transition: all var(--sf-transition-fast);
+  margin-bottom: var(--sf-space-1);
+  border: 1px solid transparent;
 }
-.bookmark-item:hover { background: #f3f4f6; }
-.bm-name { font-weight: 500; color: #111827; font-size: 13px; }
-.bm-url { color: #9ca3af; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bookmark-item:hover {
+  background: var(--sf-surface-hover);
+  border-color: var(--sf-border-light);
+  transform: translateX(2px);
+}
+.bm-name {
+  font-weight: 500;
+  color: var(--sf-text-primary);
+  font-size: 13px;
+}
+.bm-url {
+  color: var(--sf-text-muted);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: 'SF Mono', Menlo, monospace;
+}
 
-/* 占位 */
+/* ========== 右栏占位 ========== */
 .placeholder {
-  background: #fff; border-radius: 12px; height: 100%;
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  background: var(--sf-surface-gradient);
+  border: 1px dashed var(--sf-border);
+  border-radius: var(--sf-radius-lg);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sf-space-3);
+  box-shadow: var(--sf-shadow-sm);
 }
-.ph-icon { font-size: 64px; opacity: 0.3; }
-.ph-title { font-size: 18px; color: #374151; font-weight: 500; }
-.ph-desc { color: #9ca3af; font-size: 13px; }
+.ph-icon-wrap {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  background: var(--sf-gradient-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: var(--sf-space-2);
+  animation: sf-float 3s ease-in-out infinite;
+}
+.ph-icon {
+  font-size: 48px;
+  color: var(--sf-primary);
+  opacity: 0.7;
+}
+.ph-title {
+  font-size: 18px;
+  color: var(--sf-text-secondary);
+  font-weight: 600;
+}
+.ph-desc {
+  color: var(--sf-text-muted);
+  font-size: 13px;
+}
 
-/* 进度卡 */
+/* ========== 进度卡 ========== */
 .progress-card {
-  background: #fff; border-radius: 12px; padding: 40px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
-  display: flex; flex-direction: column; gap: 14px;
+  background: var(--sf-surface-gradient);
+  border: 1px solid var(--sf-border-light);
+  border-radius: var(--sf-radius-lg);
+  padding: var(--sf-space-7);
+  box-shadow: var(--sf-shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sf-space-4);
 }
-.progress-title { font-size: 16px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
-.spin { animation: spin 1s linear infinite; color: #3b82f6; }
+.progress-title {
+  font-size: 16px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: var(--sf-space-2);
+  color: var(--sf-text-primary);
+}
+.spin {
+  animation: spin 1s linear infinite;
+  color: var(--sf-primary);
+  font-size: 20px;
+}
 @keyframes spin { to { transform: rotate(360deg); } }
-.progress-msg { color: #6b7280; font-size: 13px; }
+.progress-msg {
+  color: var(--sf-text-tertiary);
+  font-size: 13px;
+}
 
+/* ========== 错误卡 ========== */
 .error-card {
-  background: #fef2f2; border: 1px solid #fca5a5; border-radius: 12px; padding: 30px;
-  display: flex; flex-direction: column; gap: 12px;
+  background: linear-gradient(135deg, #fff1f2 0%, #ffe4e6 100%);
+  border: 1px solid #fca5a5;
+  border-radius: var(--sf-radius-lg);
+  padding: var(--sf-space-6);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--sf-space-3);
+  box-shadow: var(--sf-shadow-glow-danger);
 }
-.error-title { color: #b91c1c; font-size: 16px; font-weight: 600; }
-.error-msg { color: #7f1d1d; font-family: monospace; font-size: 13px; white-space: pre-wrap; }
+.error-icon-wrap {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--sf-danger-gradient);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 32px;
+  box-shadow: var(--sf-shadow-glow-danger);
+  margin-bottom: var(--sf-space-2);
+}
+.error-title {
+  color: #b91c1c;
+  font-size: 18px;
+  font-weight: 700;
+}
+.error-msg {
+  color: #991b1b;
+  font-family: 'SF Mono', Menlo, monospace;
+  font-size: 13px;
+  white-space: pre-wrap;
+  background: rgba(255,255,255,0.5);
+  padding: var(--sf-space-3);
+  border-radius: var(--sf-radius-sm);
+  width: 100%;
+  max-width: 520px;
+}
 
-/* 结果卡 */
+/* ========== 结果卡 ========== */
 .result-card {
-  background: #fff; border-radius: 12px; padding: 24px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
-  max-height: calc(100vh - 120px); overflow-y: auto;
+  background: var(--sf-surface);
+  border: 1px solid var(--sf-border-light);
+  border-radius: var(--sf-radius-lg);
+  box-shadow: var(--sf-shadow-sm);
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+  overflow-x: hidden;
 }
-.summary-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
-.repo-title { font-size: 15px; font-weight: 600; color: #111827; }
-.meta-row { color: #9ca3af; font-size: 12px; margin-top: 4px; display: flex; gap: 14px; }
-.actions { display: flex; gap: 6px; }
 
-.stats-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 18px; }
-.stats-box { background: #f9fafb; padding: 14px; border-radius: 8px; }
-.stats-title { font-size: 13px; color: #374151; font-weight: 600; margin-bottom: 10px; }
-.tech-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+/* Hero：渐变顶栏 */
+.result-hero {
+  position: relative;
+  background: var(--sf-gradient-aurora);
+  padding: var(--sf-space-5) var(--sf-space-6);
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--sf-space-4);
+  overflow: hidden;
+  color: #fff;
+}
+.result-hero::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  right: -10%;
+  width: 360px;
+  height: 360px;
+  background: radial-gradient(circle, rgba(255,255,255,0.2), transparent 60%);
+  border-radius: 50%;
+  pointer-events: none;
+}
+.hero-left {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  min-width: 0;
+}
+.hero-type-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  background: rgba(255,255,255,0.2);
+  border: 1px solid rgba(255,255,255,0.3);
+  border-radius: var(--sf-radius-full);
+  font-size: 12px;
+  font-weight: 600;
+  backdrop-filter: blur(6px);
+  margin-bottom: var(--sf-space-3);
+}
+.hero-repo {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: var(--sf-space-2);
+  word-break: break-all;
+  font-family: 'SF Mono', Menlo, monospace;
+}
+.hero-stats {
+  display: flex;
+  gap: var(--sf-space-4);
+  font-size: 13px;
+  opacity: 0.95;
+  flex-wrap: wrap;
+}
+.hero-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.hero-stat :deep(.el-icon) {
+  font-size: 14px;
+}
+
+.actions {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  gap: var(--sf-space-2);
+  flex-shrink: 0;
+}
+.actions :deep(.el-button) {
+  background: rgba(255,255,255,0.2) !important;
+  color: #fff !important;
+  border: 1px solid rgba(255,255,255,0.3) !important;
+  backdrop-filter: blur(8px);
+  font-weight: 500 !important;
+}
+.actions :deep(.el-button:hover) {
+  background: rgba(255,255,255,0.3) !important;
+  transform: translateY(-1px);
+}
+.actions :deep(.el-button.is-favorite) {
+  background: rgba(251, 191, 36, 0.3) !important;
+  border-color: rgba(251, 191, 36, 0.5) !important;
+}
+
+/* ========== 统计行（技术栈 / 语言占比） ========== */
+.stats-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sf-space-4);
+  padding: var(--sf-space-5);
+}
+.stats-box {
+  background: var(--sf-surface-gradient-soft);
+  border: 1px solid var(--sf-border-light);
+  padding: var(--sf-space-4);
+  border-radius: var(--sf-radius-md);
+  transition: box-shadow var(--sf-transition-base);
+}
+.stats-box:hover { box-shadow: var(--sf-shadow-sm); }
+.stats-title {
+  font-size: 13px;
+  color: var(--sf-text-secondary);
+  font-weight: 600;
+  margin-bottom: var(--sf-space-3);
+  display: flex;
+  align-items: center;
+  gap: var(--sf-space-2);
+}
+.stats-title small { color: var(--sf-text-muted); font-weight: 400; font-size: 12px; }
+.stats-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--sf-radius-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+.stats-icon.is-brand { background: var(--sf-gradient-aurora); }
+.stats-icon.is-info  { background: var(--sf-info-gradient); }
+
+.tech-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
 .tech-chip {
-  padding: 3px 10px; background: #ede9fe; color: #6d28d9;
-  border-radius: 12px; font-size: 12px; font-weight: 500;
+  padding: 4px 12px;
+  border-radius: var(--sf-radius-full);
+  font-size: 12px;
+  font-weight: 500;
+  transition: all var(--sf-transition-fast);
+  border: 1px solid transparent;
 }
-.muted { color: #9ca3af; font-size: 13px; }
-.lang-bars { display: flex; flex-direction: column; gap: 6px; }
-.lang-row { display: grid; grid-template-columns: 80px 1fr 50px; gap: 8px; align-items: center; font-size: 12px; }
-.lang-name { color: #374151; }
-.lang-track { background: #e5e7eb; height: 6px; border-radius: 3px; overflow: hidden; }
-.lang-fill { height: 100%; background: linear-gradient(90deg, #3b82f6, #8b5cf6); }
-.lang-percent { color: #6b7280; text-align: right; }
+.tech-chip:hover { transform: translateY(-1px); box-shadow: var(--sf-shadow-xs); }
+.tech-chip.is-brand   { background: rgba(102, 126, 234, 0.1); color: var(--sf-primary-dark); border-color: rgba(102, 126, 234, 0.2); }
+.tech-chip.is-info    { background: var(--sf-info-bg); color: var(--sf-info); border-color: rgba(59, 130, 246, 0.2); }
+.tech-chip.is-success { background: var(--sf-success-bg); color: var(--sf-success); border-color: rgba(16, 185, 129, 0.2); }
+.tech-chip.is-warning { background: var(--sf-warning-bg); color: var(--sf-warning); border-color: rgba(245, 158, 11, 0.2); }
+.tech-chip.is-danger  { background: var(--sf-danger-bg); color: var(--sf-danger); border-color: rgba(239, 68, 68, 0.2); }
+.tech-chip.is-ocean   { background: #cffafe; color: #0891b2; border-color: #a5f3fc; }
 
-.mermaid-box { background: #f9fafb; padding: 18px; border-radius: 8px; margin-bottom: 18px; border: 1px solid #e5e7eb; }
-.mermaid-title { font-size: 14px; font-weight: 600; margin-bottom: 14px; color: #374151; }
-.mermaid-svg { display: flex; justify-content: center; overflow-x: auto; }
-.mermaid-svg :deep(svg) { max-width: 100%; height: auto; }
-.mermaid-loading { color: #9ca3af; text-align: center; padding: 20px; font-size: 13px; }
-.mermaid-error { background: #fef2f2; color: #b91c1c; padding: 10px; border-radius: 6px; font-size: 13px; }
-.mermaid-code { background: #1e293b; color: #e2e8f0; padding: 12px; border-radius: 6px; font-size: 12px; overflow-x: auto; margin-top: 6px; max-height: 240px; overflow-y: auto; }
+.muted { color: var(--sf-text-muted); font-size: 13px; }
 
-/* 凭证匹配反馈 */
-.cred-badge { margin-top: 6px; padding: 6px 12px; border-radius: 6px; font-size: 12px; line-height: 1.6; }
-.cred-badge.cred-ok { background: #f0fdf4; border: 1px solid #bbf7d0; color: #059669; }
-.cred-badge.cred-miss { background: #fffbeb; border: 1px solid #fde68a; color: #b45309; }
-.cred-badge code { background: rgba(0,0,0,0.06); padding: 1px 5px; border-radius: 3px; font-size: 11px; color: #6d28d9; }
-.cred-type { margin-left: 6px; padding: 1px 8px; background: #ede9fe; color: #6d28d9; border-radius: 10px; font-size: 11px; }
-.cred-more { color: #6b7280; margin-left: 6px; font-size: 11px; }
+.lang-bars {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sf-space-2);
+}
+.lang-row {
+  display: grid;
+  grid-template-columns: 80px 1fr 50px;
+  gap: var(--sf-space-2);
+  align-items: center;
+  font-size: 12px;
+}
+.lang-name { color: var(--sf-text-secondary); font-weight: 500; }
+.lang-track {
+  background: var(--sf-border-light);
+  height: 8px;
+  border-radius: var(--sf-radius-full);
+  overflow: hidden;
+}
+.lang-fill {
+  height: 100%;
+  border-radius: var(--sf-radius-full);
+  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 0 8px rgba(102, 126, 234, 0.2);
+}
+.lang-fill.is-c-brand  { background: var(--sf-gradient); }
+.lang-fill.is-c-sky    { background: linear-gradient(90deg, #60a5fa, #3b82f6); }
+.lang-fill.is-c-sunset { background: var(--sf-gradient-sunset); }
+.lang-fill.is-c-forest { background: linear-gradient(90deg, #34d399, #059669); }
+.lang-fill.is-c-rose   { background: var(--sf-gradient-rose); }
+.lang-fill.is-c-ocean  { background: var(--sf-gradient-ocean); }
+.lang-percent {
+  color: var(--sf-text-tertiary);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
 
-.markdown-body { line-height: 1.75; color: #1f2937; }
-.markdown-body :deep(h1) { font-size: 22px; margin: 20px 0 10px; color: #111827; border-bottom: 2px solid #e5e7eb; padding-bottom: 6px; }
-.markdown-body :deep(h2) { font-size: 18px; margin: 18px 0 8px; color: #1f2937; }
-.markdown-body :deep(h3) { font-size: 15px; margin: 14px 0 6px; color: #374151; }
-.markdown-body :deep(p) { margin: 8px 0; }
-.markdown-body :deep(code) { background: #f3f4f6; padding: 2px 6px; border-radius: 3px; font-size: 0.9em; color: #6d28d9; }
-.markdown-body :deep(pre) { background: #1e293b; color: #e2e8f0; padding: 12px; border-radius: 6px; overflow-x: auto; }
-.markdown-body :deep(pre code) { background: transparent; color: inherit; padding: 0; }
+/* ========== Mermaid 图表区 ========== */
+.mermaid-box {
+  margin: 0 var(--sf-space-5) var(--sf-space-5);
+  background: var(--sf-surface-gradient-soft);
+  padding: var(--sf-space-5);
+  border-radius: var(--sf-radius-md);
+  border: 1px solid var(--sf-border-light);
+}
+.mermaid-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: var(--sf-space-3);
+  color: var(--sf-text-secondary);
+  display: flex;
+  align-items: center;
+  gap: var(--sf-space-2);
+}
+.mermaid-title::before {
+  content: '';
+  width: 4px;
+  height: 14px;
+  background: var(--sf-gradient);
+  border-radius: var(--sf-radius-full);
+}
+.mermaid-svg {
+  display: flex;
+  justify-content: center;
+  overflow-x: auto;
+}
+.mermaid-svg :deep(svg) {
+  max-width: 100%;
+  height: auto;
+  filter: drop-shadow(0 4px 12px rgba(0,0,0,0.04));
+}
+.mermaid-loading {
+  color: var(--sf-text-muted);
+  text-align: center;
+  padding: var(--sf-space-5);
+  font-size: 13px;
+}
+.mermaid-error {
+  background: var(--sf-danger-bg);
+  color: var(--sf-danger);
+  padding: var(--sf-space-3);
+  border-radius: var(--sf-radius-sm);
+  font-size: 13px;
+}
+.mermaid-code {
+  background: #1e293b;
+  color: #e2e8f0;
+  padding: var(--sf-space-3);
+  border-radius: var(--sf-radius-sm);
+  font-size: 12px;
+  overflow-x: auto;
+  margin-top: 6px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+/* ========== Markdown 长文 ========== */
+.markdown-body {
+  line-height: 1.8;
+  color: var(--sf-text-primary);
+  padding: 0 var(--sf-space-5) var(--sf-space-5);
+}
+.markdown-body :deep(h1) {
+  font-size: 24px;
+  margin: var(--sf-space-5) 0 var(--sf-space-3);
+  color: var(--sf-text-primary);
+  font-weight: 700;
+  background: var(--sf-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  display: inline-block;
+}
+.markdown-body :deep(h2) {
+  font-size: 19px;
+  margin: var(--sf-space-5) 0 var(--sf-space-3);
+  color: var(--sf-text-primary);
+  font-weight: 600;
+  padding-bottom: 6px;
+  border-bottom: 2px solid var(--sf-border-light);
+  display: flex;
+  align-items: center;
+  gap: var(--sf-space-2);
+}
+.markdown-body :deep(h2)::before {
+  content: '';
+  width: 4px;
+  height: 18px;
+  background: var(--sf-gradient);
+  border-radius: var(--sf-radius-full);
+  display: inline-block;
+}
+.markdown-body :deep(h3) {
+  font-size: 16px;
+  margin: var(--sf-space-4) 0 var(--sf-space-2);
+  color: var(--sf-text-secondary);
+  font-weight: 600;
+}
+.markdown-body :deep(p) { margin: var(--sf-space-2) 0; }
+.markdown-body :deep(code) {
+  background: rgba(102, 126, 234, 0.08);
+  padding: 2px 8px;
+  border-radius: var(--sf-radius-xs);
+  font-size: 0.9em;
+  color: var(--sf-primary-dark);
+  font-weight: 500;
+  border: 1px solid rgba(102, 126, 234, 0.12);
+}
+.markdown-body :deep(pre) {
+  background: #1e293b;
+  color: #e2e8f0;
+  padding: var(--sf-space-4);
+  border-radius: var(--sf-radius-md);
+  overflow-x: auto;
+  border: 1px solid #334155;
+  box-shadow: var(--sf-shadow-md);
+}
+.markdown-body :deep(pre code) {
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  border: none;
+}
 .markdown-body :deep(ul), .markdown-body :deep(ol) { padding-left: 24px; }
-.markdown-body :deep(li) { margin: 4px 0; }
-.markdown-body :deep(a) { color: #3b82f6; }
-.markdown-body :deep(blockquote) { border-left: 4px solid #e5e7eb; padding: 4px 12px; color: #6b7280; margin: 10px 0; }
+.markdown-body :deep(li) { margin: var(--sf-space-1) 0; }
+.markdown-body :deep(a) {
+  color: var(--sf-primary);
+  text-decoration: none;
+  border-bottom: 1px solid rgba(102, 126, 234, 0.3);
+  transition: all var(--sf-transition-fast);
+}
+.markdown-body :deep(a:hover) {
+  color: var(--sf-accent);
+  border-bottom-color: var(--sf-accent);
+}
+.markdown-body :deep(blockquote) {
+  border-left: 4px solid var(--sf-primary);
+  background: var(--sf-gradient-soft);
+  padding: var(--sf-space-3) var(--sf-space-4);
+  color: var(--sf-text-secondary);
+  margin: var(--sf-space-3) 0;
+  border-radius: 0 var(--sf-radius-sm) var(--sf-radius-sm) 0;
+}
+.markdown-body :deep(table) {
+  border-collapse: collapse;
+  width: 100%;
+  margin: var(--sf-space-3) 0;
+  font-size: 13px;
+}
+.markdown-body :deep(th),
+.markdown-body :deep(td) {
+  padding: 8px 12px;
+  border: 1px solid var(--sf-border-light);
+  text-align: left;
+}
+.markdown-body :deep(th) {
+  background: var(--sf-bg-subtle);
+  font-weight: 600;
+  color: var(--sf-text-secondary);
+}
+.markdown-body :deep(tr:hover td) {
+  background: var(--sf-surface-hover);
+}
+
+/* ========== 凭证反馈（保留原样式但用变量化） ========== */
+.cred-badge { margin-top: 6px; padding: 6px 12px; border-radius: var(--sf-radius-sm); font-size: 12px; line-height: 1.6; }
+.cred-badge.cred-ok { background: var(--sf-success-bg); border: 1px solid #bbf7d0; color: var(--sf-success); }
+.cred-badge.cred-miss { background: var(--sf-warning-bg); border: 1px solid #fde68a; color: #b45309; }
+.cred-badge code { background: rgba(0,0,0,0.06); padding: 1px 5px; border-radius: 3px; font-size: 11px; color: var(--sf-primary-dark); }
+.cred-type { margin-left: 6px; padding: 1px 8px; background: rgba(102, 126, 234, 0.1); color: var(--sf-primary-dark); border-radius: var(--sf-radius-full); font-size: 11px; }
+.cred-more { color: var(--sf-text-tertiary); margin-left: 6px; font-size: 11px; }
 </style>
