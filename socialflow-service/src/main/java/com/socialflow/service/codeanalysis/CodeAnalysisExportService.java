@@ -16,9 +16,8 @@ public interface CodeAnalysisExportService {
         /** Markdown，带 findings 表格和 mermaid 代码块 */
         MARKDOWN,
         /** 自包含 HTML，直接浏览器打开；含 Mermaid 外部 CDN */
-        HTML,
-        /** PDF，可直接打印/归档；中文依赖服务端 CJK 字体配置 */
-        PDF
+        HTML
+        // PDF 已改为前端 html2pdf.js 生成（WYSIWYG 截图页面），不再由服务端负责
     }
 
     /** 导出后的文件载荷 */

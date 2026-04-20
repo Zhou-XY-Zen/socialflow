@@ -7,6 +7,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import MarkdownIt from 'markdown-it'
 import { codeAnalysisApi } from '@/api/codeAnalysis'
+import { exportPdfFromDom } from '@/utils/pdfExport'
 import { useMermaid } from '@/composables/useMermaid'
 import RepoPicker from '@/components/code-analysis/RepoPicker.vue'
 import type { CodeAnalysis, RepoBookmark } from '@/types/codeAnalysis'
@@ -38,6 +39,8 @@ const loading = ref(false)
 const current = ref<CodeAnalysis>()
 const bookmarks = ref<RepoBookmark[]>([])
 const exporting = ref(false)
+/** 结果卡 DOM 引用，PDF 导出源节点 */
+const resultCardRef = ref<HTMLElement | null>(null)
 let pollerTimer: number | null = null
 // 指数退避：初始 2s，每轮 ×1.25，上限 10s（大仓库分析耗时长，缓解后端压力）
 const POLL_BASE_MS = 2000
@@ -129,7 +132,20 @@ async function doExport(format: 'markdown' | 'html' | 'pdf') {
   if (!current.value) return
   exporting.value = true
   try {
-    await codeAnalysisApi.exportFile(current.value.id, format)
+    if (format === 'pdf') {
+      if (!resultCardRef.value) {
+        ElMessage.warning('页面尚未渲染完成，请稍后再试')
+        return
+      }
+      // 截屏结果卡；隐藏操作按钮（收藏/分享/导出）
+      await exportPdfFromDom(
+        resultCardRef.value,
+        `project-overview-${current.value.id}.pdf`,
+        { excludeSelectors: ['.actions'] },
+      )
+    } else {
+      await codeAnalysisApi.exportFile(current.value.id, format)
+    }
   } catch (e: any) {
     ElMessage.error('导出失败：' + (e?.message || ''))
   } finally {
@@ -214,7 +230,7 @@ onUnmounted(stopPoll)
       </div>
 
       <!-- 成功 -->
-      <div v-else class="result-card">
+      <div v-else class="result-card" ref="resultCardRef">
         <!-- 顶部摘要 -->
         <div class="summary-header">
           <div>

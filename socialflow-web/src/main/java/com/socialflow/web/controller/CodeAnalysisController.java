@@ -221,9 +221,9 @@ public class CodeAnalysisController {
         return switch (f) {
             case "md", "markdown" -> CodeAnalysisExportService.Format.MARKDOWN;
             case "html", "htm" -> CodeAnalysisExportService.Format.HTML;
-            case "pdf" -> CodeAnalysisExportService.Format.PDF;
+            // PDF 已移到前端 html2pdf.js 生成，服务端只支持 md/html
             default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "不支持的导出格式：" + raw + "（支持 markdown / html / pdf）");
+                    "不支持的导出格式：" + raw + "（服务端仅支持 markdown / html；PDF 由前端生成）");
         };
     }
 

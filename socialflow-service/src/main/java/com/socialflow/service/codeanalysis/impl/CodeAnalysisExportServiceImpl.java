@@ -28,7 +28,6 @@ import java.util.List;
 public class CodeAnalysisExportServiceImpl implements CodeAnalysisExportService {
 
     private final CodeAnalysisService codeAnalysisService;
-    private final PdfRenderer pdfRenderer;
 
     private static final DateTimeFormatter TS_FMT = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
 
@@ -55,9 +54,6 @@ public class CodeAnalysisExportServiceImpl implements CodeAnalysisExportService 
             case HTML -> new ExportArtifact(base + ".html",
                     "text/html; charset=utf-8",
                     renderHtml(vo).getBytes(StandardCharsets.UTF_8));
-            case PDF -> new ExportArtifact(base + ".pdf",
-                    "application/pdf",
-                    pdfRenderer.render(vo));
         };
     }
 
