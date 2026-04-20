@@ -54,9 +54,14 @@ public class PdfRenderer {
              ByteArrayOutputStream out = new ByteArrayOutputStream(64 * 1024)) {
 
             PDFont cjk = fontLoader.load(doc);
-            // cjk 可能为 null：此时全文用 Helvetica，非 ASCII 被替换为 '?'（see safeText）
+            // cjk 加载成功 → 正文和代码都用 CJK（牺牲等宽风格换正确显示中文，
+            //   因为 Mermaid 源码、代码片段里大概率含中文，用 Helvetica 会抛
+            //   IllegalArgumentException: U+XXXX not available in Helvetica）
+            // cjk 加载失败 → 全部回退 Helvetica，safeText 把非 ASCII 替换为 '?'
             PDFont fallback = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
-            Fonts fonts = new Fonts(cjk != null ? cjk : fallback, fallback, cjk != null);
+            PDFont body = cjk != null ? cjk : fallback;
+            PDFont code = cjk != null ? cjk : fallback;
+            Fonts fonts = new Fonts(body, code, cjk != null);
 
             RenderCtx ctx = new RenderCtx(doc, fonts);
             ctx.openPage();
