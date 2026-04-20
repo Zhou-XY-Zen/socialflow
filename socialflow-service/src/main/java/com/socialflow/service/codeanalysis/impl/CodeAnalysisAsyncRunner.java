@@ -239,8 +239,10 @@ public class CodeAnalysisAsyncRunner {
                     // 单文件 diff 特别大时加个提示，但仍然全量送
                     diffContent += "\n\n// 提示：此文件 diff 较大 (" + (fd.bytes / 1024) + " KB)，请 AI 关注主要模式";
                 }
+                // Wave 6 C-1：注入按文件类型挑选的相关规约清单，让 LLM 引用真实编号
+                String ruleListMarkdown = renderRuleList(fd.file);
                 String userPrompt = CodeReviewPrompts.fileReviewUser(
-                        repoName, dto.getCommitSha(), fd.file, diffContent);
+                        repoName, dto.getCommitSha(), fd.file, diffContent, ruleListMarkdown);
                 String stage = "FILE_REVIEW_" + safeStageSegment(fd.file);
                 try {
                     LlmResponse resp = callLlm(userId, analysisId, stage,
@@ -337,8 +339,10 @@ public class CodeAnalysisAsyncRunner {
                         String.format("审查文件 %d/%d: %s (%d KB)",
                                 i + 1, total, fd.file, fd.bytes / 1024));
 
+                // Wave 6 C-1：注入相关规约清单
+                String ruleListMarkdown = renderRuleList(fd.file);
                 String userPrompt = CodeReviewPrompts.fileReviewUser(
-                        repoName, dto.getBaseRef() + ".." + dto.getHeadRef(), fd.file, fd.diff);
+                        repoName, dto.getBaseRef() + ".." + dto.getHeadRef(), fd.file, fd.diff, ruleListMarkdown);
                 String stage = "FILE_REVIEW_" + safeStageSegment(fd.file);
                 try {
                     LlmResponse resp = callLlm(userId, analysisId, stage,
@@ -702,6 +706,55 @@ public class CodeAnalysisAsyncRunner {
         if (s == null) return "null";
         return "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"")
                        .replace("\n", "\\n").replace("\r", "\\r") + "\"";
+    }
+
+    /**
+     * Wave 6 C-1：按文件路径挑选相关规约清单，渲染成 Markdown 列表喂给 LLM。
+     *
+     * 控制总长度 ≤ 4KB，避免 prompt 膨胀：
+     *   - 最多 30 条规约（按 level 排序：MANDATORY > RECOMMENDED > REFERENCE）
+     *   - 每条只保留 code + title（不带正反例正文，靠 LLM 自身知识填充）
+     */
+    private String renderRuleList(String filePath) {
+        if (ruleLibrary == null) return "";
+        List<RuleLibraryHolder.RuleEntry> all = ruleLibrary.pickForFile(filePath);
+        if (all.isEmpty()) return "";
+
+        // 按 subCategory 分组，每个小节挑前 3 条 MANDATORY，保证规约清单覆盖多个维度
+        // 而不是一股脑全堆在"命名风格"
+        java.util.LinkedHashMap<String, List<RuleLibraryHolder.RuleEntry>> bySub = new java.util.LinkedHashMap<>();
+        for (RuleLibraryHolder.RuleEntry r : all) {
+            String key = (r.topCategory() == null ? "" : r.topCategory()) + "/" + (r.subCategory() == null ? "" : r.subCategory());
+            bySub.computeIfAbsent(key, k -> new ArrayList<>()).add(r);
+        }
+
+        final int PER_GROUP = 3;
+        final int TOTAL_LIMIT = 40;
+        List<RuleLibraryHolder.RuleEntry> picked = new ArrayList<>();
+        for (List<RuleLibraryHolder.RuleEntry> group : bySub.values()) {
+            // 每组按 level 排序：MANDATORY > RECOMMENDED > REFERENCE
+            group.sort((a, b) -> Integer.compare(levelWeight(a.level()), levelWeight(b.level())));
+            for (int i = 0; i < Math.min(PER_GROUP, group.size()); i++) {
+                picked.add(group.get(i));
+                if (picked.size() >= TOTAL_LIMIT) break;
+            }
+            if (picked.size() >= TOTAL_LIMIT) break;
+        }
+
+        StringBuilder sb = new StringBuilder();
+        for (RuleLibraryHolder.RuleEntry r : picked) {
+            String tag = "MANDATORY".equals(r.level()) ? "【强制】"
+                       : "RECOMMENDED".equals(r.level()) ? "【推荐】"
+                       : "【参考】";
+            sb.append(String.format("- 黄山版 %s %s%s%n", r.code(), tag, r.title()));
+        }
+        return sb.toString();
+    }
+
+    private static int levelWeight(String level) {
+        if ("MANDATORY".equals(level)) return 1;
+        if ("RECOMMENDED".equals(level)) return 2;
+        return 3;
     }
 
     /** 把 findings 简要描述拼起来给最终 merge LLM 调用用 */

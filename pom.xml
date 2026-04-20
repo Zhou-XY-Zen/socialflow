@@ -356,7 +356,9 @@
                             <printFailingErrors>true</printFailingErrors>
                             <failOnViolation>false</failOnViolation>
                             <linkXRef>false</linkXRef>
-                            <targetJdk>${java.version}</targetJdk>
+                            <!-- PMD 6.55 + p3c-pmd 2.1.1 最高支持 JDK 17 解析；
+                                 项目用 21 但语法基本兼容，仅极少数 21 新特性会被跳过 -->
+                            <targetJdk>17</targetJdk>
                             <rulesets>
                                 <ruleset>rulesets/java/ali-comment.xml</ruleset>
                                 <ruleset>rulesets/java/ali-concurrent.xml</ruleset>

@@ -401,6 +401,32 @@ public final class CodeReviewPrompts {
                 """;
     }
 
+    /**
+     * Wave 6 C-1：在 user prompt 头部追加"本文件类型相关的规约清单"。
+     * AsyncRunner 调用前用 RuleLibraryHolder.pickForFile(filePath) 取规约 + 简化为 ruleListMarkdown 传入。
+     * LLM 看到清单后，必须从清单里挑 ruleRef，不再瞎编。
+     */
+    public static String fileReviewUser(String repoName, String commitSha, String filePath, String fileDiff,
+                                        String ruleListMarkdown) {
+        String rulePart = (ruleListMarkdown == null || ruleListMarkdown.isBlank())
+                ? ""
+                : "\n## 本文件类型相关的黄山版规约（findings 的 ruleRef 必须从这里选取真实编号）\n\n"
+                + ruleListMarkdown + "\n\n";
+        return """
+                仓库: %s
+                提交: %s
+                文件: %s
+                %s
+                本文件的完整 diff：
+                ```diff
+                %s
+                ```
+
+                请按 system prompt 返回 findings JSON。
+                """.formatted(repoName, commitSha, filePath, rulePart, fileDiff);
+    }
+
+    /** 旧版 4 参数签名，保留兼容（无规约清单时调用） */
     public static String fileReviewUser(String repoName, String commitSha, String filePath, String fileDiff) {
         return """
                 仓库: %s
