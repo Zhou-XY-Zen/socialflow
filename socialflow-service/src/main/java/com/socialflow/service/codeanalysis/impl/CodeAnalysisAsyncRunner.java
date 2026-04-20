@@ -141,8 +141,8 @@ public class CodeAnalysisAsyncRunner {
             update.setStage("DONE");
             update.setProgressPercent(100);
             update.setProgressMessage("分析完成");
-            update.setSummaryMd(getText(root, "summaryMd"));
-            update.setMermaidCode(getText(root, "mermaidCode"));
+            update.setSummaryMd(sanitizeMarkdown(getText(root, "summaryMd")));
+            update.setMermaidCode(sanitizeMermaid(getText(root, "mermaidCode")));
             update.setTechStackJson(writeJson(root.get("techStack")));
             update.setLanguageStatsJson(writeJson(computeLangStatsVO(langs)));
             update.setDurationMs(System.currentTimeMillis() - start);
@@ -839,6 +839,99 @@ public class CodeAnalysisAsyncRunner {
             return t.substring(start, end + 1);
         }
         return t;
+    }
+
+    /**
+     * 清洗 LLM 生成的 Mermaid 代码：
+     *   1) 去重：如果出现多个 `graph TD` / `sequenceDiagram` / `flowchart` 声明，只保留第一份
+     *   2) 括号/斜杠标签自动加引号：`API[API Client (http.ts)]` → `API["API Client (http.ts)"]`
+     *   3) 保留 `[(...)]`（圆柱形数据库节点）和 `[["..."]]`（子程序）等已合法的形式
+     * 返回 null 如果清洗后为空。
+     */
+    static String sanitizeMermaid(String raw) {
+        if (raw == null || raw.isBlank()) return null;
+        String s = raw.trim();
+
+        // 1) 去重：找第二份 `graph TD` / `sequenceDiagram` / `flowchart` 声明
+        java.util.regex.Matcher dup = java.util.regex.Pattern.compile(
+                "(?m)^\\s*(graph\\s+(?:TD|LR|BT|RL|TB)|sequenceDiagram|flowchart\\s+\\w+|classDiagram|stateDiagram(?:-v2)?)\\b"
+        ).matcher(s);
+        int firstStart = -1, secondStart = -1;
+        while (dup.find()) {
+            if (firstStart < 0) firstStart = dup.start();
+            else { secondStart = dup.start(); break; }
+        }
+        if (secondStart > 0) {
+            s = s.substring(0, secondStart).trim();
+        }
+
+        // 2) 节点标签加引号 —— 逐行处理，避免跨行误伤
+        StringBuilder sb = new StringBuilder(s.length() + 256);
+        String[] lines = s.split("\\r?\\n");
+        for (String line : lines) {
+            sb.append(fixNodeLabels(line)).append('\n');
+        }
+        return sb.toString().trim();
+    }
+
+    /**
+     * 单行处理：对形如  `NodeId[label]` / `NodeId(label)` 的节点定义，如果 label 里含 `( ) / . ,` 或空格，
+     * 且没用双引号包，则自动加引号。
+     *
+     * 已经是 `["..."]` / `("...")` / `[("...")]` / `[[...]]` 等合法形式则跳过。
+     */
+    private static String fixNodeLabels(String line) {
+        // 节点定义模式：id[xxx]  id(xxx)  id[(xxx)]  id{{xxx}}  等
+        // 这里只处理最常见两种：`[...]` 和 `(...)`（不带方括号圆柱）
+        java.util.regex.Pattern p = java.util.regex.Pattern.compile(
+                "(\\b[A-Za-z_][\\w]*)([\\[\\(])([^\\]\\)\\\"]*)([\\]\\)])"
+        );
+        java.util.regex.Matcher m = p.matcher(line);
+        StringBuilder out = new StringBuilder();
+        int last = 0;
+        while (m.find()) {
+            out.append(line, last, m.start());
+            String id = m.group(1);
+            String open = m.group(2);
+            String label = m.group(3);
+            String close = m.group(4);
+            // 特殊字符检测：() / . , 空格，或者中文字符
+            boolean needQuote = label.indexOf('(') >= 0 || label.indexOf(')') >= 0
+                    || label.indexOf('/') >= 0 || label.indexOf(',') >= 0
+                    || label.indexOf(' ') >= 0 || label.contains("..")
+                    || label.matches(".*[\\u4e00-\\u9fa5].*");
+            // 已经以引号开头就跳过
+            boolean alreadyQuoted = label.startsWith("\"") && label.endsWith("\"");
+            if (needQuote && !alreadyQuoted && !label.isEmpty()) {
+                // 转义内部双引号
+                String safe = label.replace("\"", "\\\"");
+                out.append(id).append(open).append('"').append(safe).append('"').append(close);
+            } else {
+                out.append(m.group());
+            }
+            last = m.end();
+        }
+        out.append(line, last, line.length());
+        return out.toString();
+    }
+
+    /**
+     * 清洗 summaryMd：如果 `## 项目定位` 出现多次，说明 LLM 把全文重复输出了，截到第二次出现前。
+     */
+    static String sanitizeMarkdown(String raw) {
+        if (raw == null || raw.isBlank()) return raw;
+        String s = raw;
+        // 选一个稳定的"头部锚点" ——  `## 项目定位`
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("(?m)^##\\s*项目定位").matcher(s);
+        int first = -1, second = -1;
+        while (m.find()) {
+            if (first < 0) first = m.start();
+            else { second = m.start(); break; }
+        }
+        if (second > 0) {
+            return s.substring(0, second).trim();
+        }
+        return s;
     }
 
     private String writeJson(Object obj) {
