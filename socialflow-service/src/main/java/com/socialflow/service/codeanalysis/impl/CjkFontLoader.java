@@ -96,8 +96,13 @@ public class CjkFontLoader {
                 }
             }
             if (lower.endsWith(".otf")) {
+                // CFF-based OTF（Noto CJK 即如此）不能做 subsetting：
+                //   PDFBox 3.x TTFSubsetter.addCompoundReferences → getGlyph 调用 glyf 表，
+                //   OpenTypeFont 的 glyf 是空 → UnsupportedOperationException。
+                // embedSubset=false 让它整字体嵌入；PDF 会多 10-15MB，但能正确导出。
+                // 详见 PDFBox issue PDFBOX-5842（CFF subset 支持未实现）。
                 OpenTypeFont otf = new OTFParser().parse(new org.apache.pdfbox.io.RandomAccessReadBufferedFile(f));
-                return PDType0Font.load(doc, otf, true);
+                return PDType0Font.load(doc, otf, false);
             }
             return PDType0Font.load(doc, f);
         } catch (Exception e) {
