@@ -203,6 +203,53 @@ onUnmounted(stopPoll)
           <div class="bm-url">{{ b.gitUrl }}</div>
         </div>
       </div>
+
+      <!-- 能力概览（固定展示，填充左栏空间） -->
+      <div class="capability-card">
+        <div class="capability-title">
+          <span class="cap-title-icon"><el-icon><MagicStick /></el-icon></span>
+          平台能力
+        </div>
+        <div class="capability-list">
+          <div class="cap-item">
+            <span class="cap-dot is-brand"></span>
+            <div class="cap-item-main">
+              <div class="cap-item-name">项目概览</div>
+              <div class="cap-item-desc">全量扫描 → 技术栈与架构图</div>
+            </div>
+          </div>
+          <div class="cap-item">
+            <span class="cap-dot is-info"></span>
+            <div class="cap-item-main">
+              <div class="cap-item-name">提交审查</div>
+              <div class="cap-item-desc">单次 commit 深度审查</div>
+            </div>
+          </div>
+          <div class="cap-item">
+            <span class="cap-dot is-sunset"></span>
+            <div class="cap-item-main">
+              <div class="cap-item-name">对比分析</div>
+              <div class="cap-item-desc">任意两 ref 之间 Diff 审查</div>
+            </div>
+          </div>
+          <div class="cap-item">
+            <span class="cap-dot is-success"></span>
+            <div class="cap-item-main">
+              <div class="cap-item-name">规约库</div>
+              <div class="cap-item-desc">321 条阿里黄山版可启停</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 小贴士 -->
+      <div class="tip-card">
+        <el-icon class="tip-icon"><InfoFilled /></el-icon>
+        <div class="tip-text">
+          <strong>首次使用？</strong>
+          先去<el-link type="primary" @click="router.push('/code-analysis/credentials')">管理凭证</el-link>添加 Git 访问令牌，即可分析私有仓库。
+        </div>
+      </div>
     </div>
 
     <!-- 右栏：进度 + 结果 -->
@@ -447,6 +494,124 @@ onUnmounted(stopPoll)
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: 'SF Mono', Menlo, monospace;
+}
+
+/* ========== 能力概览卡（左栏填充） ========== */
+.capability-card {
+  position: relative;
+  background: var(--sf-surface-gradient);
+  border: 1px solid var(--sf-border-light);
+  border-radius: var(--sf-radius-lg);
+  padding: var(--sf-space-4) var(--sf-space-5);
+  box-shadow: var(--sf-shadow-sm);
+  overflow: hidden;
+}
+.capability-card::before {
+  content: '';
+  position: absolute;
+  top: -40%;
+  right: -20%;
+  width: 200px;
+  height: 200px;
+  background: radial-gradient(circle, rgba(102,126,234,0.08), transparent 70%);
+  border-radius: 50%;
+  pointer-events: none;
+}
+.capability-title {
+  position: relative;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--sf-text-primary);
+  margin-bottom: var(--sf-space-3);
+  display: flex;
+  align-items: center;
+  gap: var(--sf-space-2);
+}
+.cap-title-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--sf-radius-sm);
+  background: var(--sf-gradient-aurora);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 12px;
+  box-shadow: var(--sf-shadow-brand);
+}
+.capability-list {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sf-space-2);
+}
+.cap-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sf-space-3);
+  padding: var(--sf-space-2);
+  border-radius: var(--sf-radius-sm);
+  transition: all var(--sf-transition-fast);
+}
+.cap-item:hover {
+  background: var(--sf-surface-hover);
+  transform: translateX(2px);
+}
+.cap-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 3px rgba(255,255,255,0.8);
+}
+.cap-dot.is-brand   { background: var(--sf-primary);   box-shadow: 0 0 0 3px rgba(102,126,234,0.15); }
+.cap-dot.is-info    { background: var(--sf-info);      box-shadow: 0 0 0 3px rgba(59,130,246,0.15); }
+.cap-dot.is-sunset  { background: #f59e0b;             box-shadow: 0 0 0 3px rgba(245,158,11,0.15); }
+.cap-dot.is-success { background: var(--sf-success);   box-shadow: 0 0 0 3px rgba(16,185,129,0.15); }
+.cap-item-main { min-width: 0; flex: 1; }
+.cap-item-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--sf-text-primary);
+  line-height: 1.3;
+}
+.cap-item-desc {
+  font-size: 11px;
+  color: var(--sf-text-tertiary);
+  line-height: 1.4;
+  margin-top: 2px;
+}
+
+/* ========== 小贴士条 ========== */
+.tip-card {
+  background: linear-gradient(135deg, rgba(102,126,234,0.05) 0%, rgba(118,75,162,0.05) 100%);
+  border: 1px solid rgba(102,126,234,0.18);
+  border-radius: var(--sf-radius-md);
+  padding: var(--sf-space-3) var(--sf-space-4);
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sf-space-3);
+}
+.tip-icon {
+  color: var(--sf-primary);
+  font-size: 18px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.tip-text {
+  color: var(--sf-text-secondary);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+.tip-text strong {
+  color: var(--sf-text-primary);
+  font-weight: 600;
+  margin-right: 2px;
+}
+.tip-text :deep(.el-link) {
+  font-size: 12.5px !important;
+  margin: 0 2px;
+  vertical-align: baseline;
 }
 
 /* ========== 右栏占位（丰富版 empty state） ========== */
