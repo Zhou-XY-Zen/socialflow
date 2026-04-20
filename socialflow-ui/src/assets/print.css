@@ -1,0 +1,104 @@
+/**
+ * 打印样式 —— 专供 window.print() 触发的"导出 PDF"用。
+ *
+ * 用户点击"📥 导出 → PDF" → 调用 window.print() → 浏览器打开打印对话框 →
+ * 用户在目标里选"另存为 PDF"。此时浏览器的 @media print 生效：
+ *   - 隐藏侧栏/顶栏/操作按钮/LLM 折叠区等"非报告"元素
+ *   - 结果容器铺满宽度、移除 max-height 和 overflow 限制
+ *   - 卡片 page-break-inside: avoid，尽量不把单个卡片切成两半
+ *
+ * 为什么不走 html2canvas/html2pdf.js：
+ *   尝试过但屡遇 createPattern 0×0 canvas 崩溃（html2canvas 内部 bug
+ *   #2981/#2697/#2807）。浏览器原生打印引擎对 SVG/Element Plus 样式
+ *   支持最好，且 PDF 里文字可选可搜，体积小。
+ */
+
+@media print {
+  /* ---------- 隐藏主框架的"非报告"元素 ---------- */
+  .sidebar,
+  .header,
+  .collapse-btn,
+  /* 结果页顶部的 返回/分享/导出 按钮 */
+  .header-bar,
+  .header-actions,
+  /* 项目概览结果卡右上角的 收藏/分享/导出 按钮组 */
+  .actions,
+  /* Finding 级别过滤条 + LLM 调用详情折叠面板 */
+  .filter-tags,
+  .llm-header,
+  .llm-body,
+  /* 项目概览左栏（输入表单 + 收藏），打印时不需要 */
+  .left-panel,
+  /* Element Plus loading 遮罩等辅助元素 */
+  .el-loading-mask {
+    display: none !important;
+  }
+
+  /* ---------- 主容器铺满 + 去掉滚动/高度限制 ---------- */
+  .layout-root,
+  .el-container,
+  .el-main {
+    display: block !important;
+    width: 100% !important;
+    max-width: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    height: auto !important;
+    min-height: 0 !important;
+  }
+
+  .project-overview {
+    display: block !important;  /* 原来是 grid 380px+1fr，打印时变单栏 */
+    grid-template-columns: none !important;
+    padding: 0 !important;
+    height: auto !important;
+  }
+
+  .right-panel,
+  .result-card,
+  .result-page {
+    width: 100% !important;
+    max-width: none !important;
+    max-height: none !important;
+    overflow: visible !important;
+    padding: 16px !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+    background: #fff !important;
+  }
+
+  /* ---------- 全局白底，去掉可能的背景色 ---------- */
+  html, body, #app {
+    background: #fff !important;
+    color: #000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    height: auto !important;
+    min-height: 0 !important;
+  }
+
+  /* ---------- 卡片尽量不被切页 ---------- */
+  .content-card,
+  .panel-card,
+  .top-card,
+  .stats-box,
+  .mermaid-box {
+    box-shadow: none !important;
+    page-break-inside: avoid;
+    break-inside: avoid;  /* modern 标准 */
+  }
+
+  /* ---------- Mermaid 图居中可能过宽：限制到 100% ---------- */
+  .mermaid-svg,
+  .mermaid-svg svg {
+    max-width: 100% !important;
+    height: auto !important;
+  }
+
+  /* ---------- 链接用纯文本颜色，避免彩色油墨浪费 ---------- */
+  a {
+    color: inherit !important;
+    text-decoration: underline;
+  }
+}

@@ -49,6 +49,9 @@ import router from './router'
 /** 全局 CSS 变量和基础样式 */
 import './assets/main.css'
 
+/** 打印样式（window.print() 导出 PDF 时生效） */
+import './assets/print.css'
+
 /*
  * ---- 第 1 步：创建 Vue 应用实例 ----
  * createApp(App) 接收根组件 App，返回一个可配置的应用实例 `app`。

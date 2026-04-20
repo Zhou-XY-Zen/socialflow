@@ -8,7 +8,6 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import MarkdownIt from 'markdown-it'
 import { codeAnalysisApi } from '@/api/codeAnalysis'
-import { exportPdfFromDom } from '@/utils/pdfExport'
 import { useMermaid } from '@/composables/useMermaid'
 import type { CodeAnalysis, FindingLevel, LlmCallLog } from '@/types/codeAnalysis'
 import ScoreGauge from '@/components/code-analysis/ScoreGauge.vue'
@@ -21,8 +20,6 @@ const md = new MarkdownIt({ html: false, linkify: true, breaks: true })
 const current = ref<CodeAnalysis>()
 const loading = ref(true)
 const filterLevel = ref<FindingLevel | 'ALL'>('ALL')
-/** 结果容器 DOM 引用，PDF 导出时以此为源节点做离屏截图 */
-const resultRef = ref<HTMLElement | null>(null)
 let pollerTimer: number | null = null
 // 指数退避：初始 2s，每轮 ×1.25，上限 10s —— 分析耗时长时降低后端压力
 const POLL_BASE_MS = 2000
@@ -139,16 +136,9 @@ async function doExport(format: 'markdown' | 'html' | 'pdf') {
   exporting.value = true
   try {
     if (format === 'pdf') {
-      if (!resultRef.value) {
-        ElMessage.warning('页面尚未渲染完成，请稍后再试')
-        return
-      }
-      // 截屏整个结果容器；隐藏操作栏、LLM 折叠区等"非报告"元素
-      await exportPdfFromDom(
-        resultRef.value,
-        `code-analysis-${current.value.id}.pdf`,
-        { excludeSelectors: ['.header-actions', '.llm-header', '.llm-body'] },
-      )
+      // 调用浏览器原生打印 —— print.css 会自动隐藏侧栏/按钮/LLM 面板；
+      // 用户在打印对话框里选"另存为 PDF"即可，视觉 100% 保真
+      window.print()
     } else {
       await codeAnalysisApi.exportFile(current.value.id, format)
     }
@@ -161,7 +151,7 @@ async function doExport(format: 'markdown' | 'html' | 'pdf') {
 </script>
 
 <template>
-  <div class="result-page" ref="resultRef" v-loading="loading">
+  <div class="result-page" v-loading="loading">
     <div v-if="current" class="header-bar">
       <el-button @click="router.back()">← 返回</el-button>
       <div class="header-info">
