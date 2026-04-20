@@ -44,6 +44,12 @@ public class RuleLibraryHolder {
     @Getter
     private volatile List<RuleEntry> all = new ArrayList<>();
 
+    /**
+     * 预构建的"文件类型 → 规约清单"倒排索引。键形如 {@code "ext:.java"} / {@code "path:/mapper/"}。
+     * 随 {@link #load()} 和 {@link #reloadFromDb()} 同步重建。
+     */
+    private volatile Map<String, List<RuleEntry>> byFileType = new HashMap<>();
+
     /** Mapper 通过 setter 可选注入；DB 不可用时仍走 JSON 兜底 */
     @Autowired(required = false)
     private RuleLibraryItemMapper ruleLibraryItemMapper;
@@ -71,10 +77,40 @@ public class RuleLibraryHolder {
                 all.add(e);
                 byTopCategory.computeIfAbsent(top, k -> new ArrayList<>()).add(e);
             }
+            this.byFileType = buildFileTypeIndex(byTopCategory);
             log.info("[RuleLibrary] JSON 兜底加载完成: {} 条规约, 大类 {} 个", codeSet.size(), byTopCategory.size());
         } catch (Exception e) {
             log.error("[RuleLibrary] 加载 rules/huangshan_rules.json 失败", e);
         }
+    }
+
+    /**
+     * 基于大类分组构建"文件类型 → 规约清单"倒排索引。
+     * 规约条目数固定、加载/重载不频繁，提前一次性预计算，热点查询 O(1) 命中。
+     */
+    private static Map<String, List<RuleEntry>> buildFileTypeIndex(Map<String, List<RuleEntry>> byTop) {
+        Map<String, List<RuleEntry>> idx = new HashMap<>();
+        idx.put("ext:.java", concat(
+                byTop.getOrDefault("编程规约", List.of()),
+                byTop.getOrDefault("异常日志", List.of()),
+                byTop.getOrDefault("安全规约", List.of())));
+        List<RuleEntry> sql = byTop.getOrDefault("MySQL数据库", List.of());
+        idx.put("ext:.sql", sql);
+        idx.put("path:/mapper/", sql);
+        List<RuleEntry> sec = byTop.getOrDefault("安全规约", List.of());
+        idx.put("ext:.yml", sec);
+        idx.put("ext:.yaml", sec);
+        idx.put("ext:.properties", sec);
+        return idx;
+    }
+
+    @SafeVarargs
+    private static List<RuleEntry> concat(List<RuleEntry>... lists) {
+        int total = 0;
+        for (List<RuleEntry> l : lists) total += l.size();
+        List<RuleEntry> out = new ArrayList<>(total);
+        for (List<RuleEntry> l : lists) out.addAll(l);
+        return out;
     }
 
     /**
@@ -107,6 +143,7 @@ public class RuleLibraryHolder {
             this.codeSet = nextCodes;
             this.byTopCategory = nextByTop;
             this.all = nextAll;
+            this.byFileType = buildFileTypeIndex(nextByTop);
             log.info("[RuleLibrary] DB 重载完成: {} 条 (enabled=1), 大类 {} 个", nextCodes.size(), nextByTop.size());
         } catch (Exception e) {
             log.error("[RuleLibrary] DB 重载失败，保留旧索引", e);
@@ -122,21 +159,17 @@ public class RuleLibraryHolder {
         return codeSet.contains(m.group(1));
     }
 
-    /** 按文件类型挑选可能相关的规约清单（小列表，给 LLM Prompt 当参考）。 */
+    /** 按文件类型挑选可能相关的规约清单（小列表，给 LLM Prompt 当参考）。走预建倒排索引，O(1) 命中。 */
     public List<RuleEntry> pickForFile(String filePath) {
         if (filePath == null) return List.of();
-        List<RuleEntry> result = new ArrayList<>();
-        if (filePath.endsWith(".java")) {
-            // Java 文件：编程规约 + 异常日志 + 安全规约 + 单元测试
-            result.addAll(byTopCategory.getOrDefault("编程规约", List.of()));
-            result.addAll(byTopCategory.getOrDefault("异常日志", List.of()));
-            result.addAll(byTopCategory.getOrDefault("安全规约", List.of()));
-        } else if (filePath.endsWith(".sql") || filePath.contains("/mapper/")) {
-            result.addAll(byTopCategory.getOrDefault("MySQL数据库", List.of()));
-        } else if (filePath.endsWith(".yml") || filePath.endsWith(".yaml") || filePath.endsWith(".properties")) {
-            result.addAll(byTopCategory.getOrDefault("安全规约", List.of()));
-        }
-        return result;
+        Map<String, List<RuleEntry>> idx = this.byFileType;
+        if (filePath.endsWith(".java")) return idx.getOrDefault("ext:.java", List.of());
+        if (filePath.endsWith(".sql")) return idx.getOrDefault("ext:.sql", List.of());
+        if (filePath.contains("/mapper/")) return idx.getOrDefault("path:/mapper/", List.of());
+        if (filePath.endsWith(".yml")) return idx.getOrDefault("ext:.yml", List.of());
+        if (filePath.endsWith(".yaml")) return idx.getOrDefault("ext:.yaml", List.of());
+        if (filePath.endsWith(".properties")) return idx.getOrDefault("ext:.properties", List.of());
+        return List.of();
     }
 
     public record RuleEntry(String code, String topCategory, String subCategory,

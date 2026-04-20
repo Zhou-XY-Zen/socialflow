@@ -15,16 +15,27 @@ import com.socialflow.model.vo.LlmCallLogVO;
 import com.socialflow.model.vo.RepoBookmarkVO;
 import com.socialflow.model.vo.RepoCommitVO;
 import com.socialflow.model.vo.RuleLibraryItemVO;
+import com.socialflow.service.codeanalysis.CodeAnalysisExportService;
 import com.socialflow.service.codeanalysis.CodeAnalysisService;
 import com.socialflow.service.codeanalysis.RuleLibraryHolder;
 import com.socialflow.service.codeanalysis.RuleLibraryService;
+import com.socialflow.service.codeanalysis.ShareTokenRateLimiter;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -49,8 +60,10 @@ import java.util.Map;
 public class CodeAnalysisController {
 
     private final CodeAnalysisService codeAnalysisService;
+    private final CodeAnalysisExportService exportService;
     private final RuleLibraryService ruleLibraryService;
     private final RuleLibraryHolder ruleLibraryHolder;
+    private final ShareTokenRateLimiter shareRateLimiter;
 
     // ---------- 仪表盘 ----------
 
@@ -155,8 +168,73 @@ public class CodeAnalysisController {
 
     @Operation(summary = "公开访问分享链接（无需登录）")
     @GetMapping("/shared/{token}")
-    public R<CodeAnalysisVO> shared(@PathVariable String token) {
+    public R<CodeAnalysisVO> shared(@PathVariable String token, HttpServletRequest request) {
+        // 防爬虫/暴力枚举：按 IP+UA 维度做分钟级滑动窗口限流
+        String clientKey = clientFingerprint(request);
+        if (!shareRateLimiter.allow(clientKey)) {
+            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "访问过于频繁，请稍后再试");
+        }
         return R.ok(codeAnalysisService.getByShareToken(token));
+    }
+
+    /** 生成限流维度的客户端指纹；尊重反向代理头，失败回退 remoteAddr。 */
+    private static String clientFingerprint(HttpServletRequest req) {
+        String ip = req.getHeader("X-Forwarded-For");
+        if (ip != null && !ip.isBlank()) {
+            int comma = ip.indexOf(',');
+            ip = (comma > 0 ? ip.substring(0, comma) : ip).trim();
+        } else {
+            ip = req.getHeader("X-Real-IP");
+            if (ip == null || ip.isBlank()) ip = req.getRemoteAddr();
+        }
+        String ua = req.getHeader("User-Agent");
+        return ip + "|" + (ua == null ? "-" : Integer.toHexString(ua.hashCode()));
+    }
+
+    // ---------- 导出 ----------
+
+    @Operation(summary = "导出分析结果（支持 markdown / html / json）")
+    @SaCheckLogin
+    @GetMapping("/{id}/export")
+    public ResponseEntity<byte[]> export(@PathVariable Long id,
+                                         @RequestParam(defaultValue = "markdown") String format) {
+        CodeAnalysisExportService.ExportArtifact art = exportService.export(
+                StpUtil.getLoginIdAsLong(), id, parseFormat(format));
+        return downloadResponse(art);
+    }
+
+    @Operation(summary = "导出分享链接对应的分析（无需登录，沿用分享限流）")
+    @GetMapping("/shared/{token}/export")
+    public ResponseEntity<byte[]> exportShared(@PathVariable String token,
+                                               @RequestParam(defaultValue = "markdown") String format,
+                                               HttpServletRequest request) {
+        String clientKey = clientFingerprint(request);
+        if (!shareRateLimiter.allow(clientKey)) {
+            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "访问过于频繁，请稍后再试");
+        }
+        CodeAnalysisExportService.ExportArtifact art = exportService.exportByShareToken(token, parseFormat(format));
+        return downloadResponse(art);
+    }
+
+    private static CodeAnalysisExportService.Format parseFormat(String raw) {
+        String f = raw == null ? "markdown" : raw.trim().toLowerCase(Locale.ROOT);
+        return switch (f) {
+            case "md", "markdown" -> CodeAnalysisExportService.Format.MARKDOWN;
+            case "html", "htm" -> CodeAnalysisExportService.Format.HTML;
+            case "pdf" -> CodeAnalysisExportService.Format.PDF;
+            default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "不支持的导出格式：" + raw + "（支持 markdown / html / pdf）");
+        };
+    }
+
+    private static ResponseEntity<byte[]> downloadResponse(CodeAnalysisExportService.ExportArtifact art) {
+        // 文件名走 RFC 5987 编码以支持中文；同时提供 ASCII 备份名
+        String encoded = URLEncoder.encode(art.filename(), StandardCharsets.UTF_8).replace("+", "%20");
+        String disposition = "attachment; filename=\"" + art.filename() + "\"; filename*=UTF-8''" + encoded;
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, disposition)
+                .contentType(MediaType.parseMediaType(art.contentType()))
+                .body(art.content());
     }
 
     // ---------- Finding 单条状态 ----------

@@ -2,6 +2,7 @@ package com.socialflow.service.codeanalysis.impl;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.socialflow.common.enums.LlmProvider;
+import com.socialflow.common.exception.LlmErrorKind;
 import com.socialflow.common.util.JsonUtil;
 import com.socialflow.dao.mapper.LlmCallLogMapper;
 import com.socialflow.dao.mapper.RepoAnalysisFindingMapper;
@@ -78,6 +79,33 @@ public class CodeAnalysisAsyncRunner {
     /** 单个文件 diff 送 LLM 时的字节软上限，超过提示 AI 关注头部 */
     private static final int PER_FILE_DIFF_HINT_BYTES = 60 * 1024;
     private static final int TREE_DEPTH = 3;
+
+    /** 文件行数大于此阈值时，放宽行号容忍度（LLM 处理大文件更易偏移） */
+    private static final int LARGE_FILE_LINE_THRESHOLD = 3000;
+    /** 正常文件的行号偏移容忍 */
+    private static final int LINE_TOLERANCE_NORMAL = 2;
+    /** 大文件的行号偏移容忍 */
+    private static final int LINE_TOLERANCE_LARGE = 5;
+
+    /** fixNodeLabels 用的节点定义正则，static 避免每次重新编译 */
+    private static final java.util.regex.Pattern NODE_DEF_PATTERN =
+            java.util.regex.Pattern.compile("(\\b[A-Za-z_][\\w]*)([\\[\\(])([^\\]\\)\\\"]*)([\\]\\)])");
+    /** sanitizeMermaid 用的声明去重正则 */
+    private static final java.util.regex.Pattern MERMAID_HEADER_PATTERN =
+            java.util.regex.Pattern.compile(
+                    "(?m)^\\s*(graph\\s+(?:TD|LR|BT|RL|TB)|sequenceDiagram|flowchart\\s+\\w+|classDiagram|stateDiagram(?:-v2)?)\\b");
+    /** lineRange 解析正则 */
+    private static final java.util.regex.Pattern LINE_RANGE_PATTERN =
+            java.util.regex.Pattern.compile("(\\d+)");
+    /** ruleRef 编号解析正则 */
+    private static final java.util.regex.Pattern RULE_CODE_PATTERN =
+            java.util.regex.Pattern.compile("(\\d+\\.\\d+(?:\\.\\d+)?)");
+    /** sanitizeMarkdown 的重复检测锚点 */
+    private static final java.util.regex.Pattern MARKDOWN_ANCHOR_PATTERN =
+            java.util.regex.Pattern.compile("(?m)^##\\s*项目定位");
+    /** 用于 fixNodeLabels 判断中文字符的正则 */
+    private static final java.util.regex.Pattern CJK_PATTERN =
+            java.util.regex.Pattern.compile(".*[\\u4e00-\\u9fa5].*");
 
     // ============================================================
     //   项目概览：分层递进全量分析
@@ -436,7 +464,11 @@ public class CodeAnalysisAsyncRunner {
             success = true;
             return resp;
         } catch (Exception e) {
-            errorMsg = e.getMessage();
+            // 对异常分类，前缀写入 errorMsg 便于仪表盘按前缀聚合
+            LlmErrorKind kind = LlmErrorKind.classify(e);
+            errorMsg = kind.tag() + " " + e.getMessage();
+            log.warn("[LLM] stage={} kind={} latency={}ms err={}",
+                    stage, kind, System.currentTimeMillis() - t0, e.getMessage());
             throw e;
         } finally {
             // 无论成功失败都记一条 log
@@ -554,15 +586,20 @@ public class CodeAnalysisAsyncRunner {
                     log.debug("[Wave8] 丢弃 finding: ruleRef={} 在用户反馈屏蔽列表", code);
                     continue;
                 }
-                // A：codeSnippet 必须能在源文件中 contains 找到
-                if (!validateCodeSnippet(repoRoot, fe.getFile(), fe.getCodeSnippet())) {
+                // A：codeSnippet 必须能在源文件中 contains 找到；
+                //    LOW 级别且 snippet 为空时跳过此校验（LLM 常在低优先级建议里省略片段）
+                SnippetResult snipRes = validateCodeSnippet(
+                        repoRoot, fe.getFile(), fe.getCodeSnippet(), fe.getLevel());
+                if (!snipRes.passed) {
                     dropSnippet++;
                     log.debug("[Validate] 丢弃 finding: codeSnippet 在原文中找不到 file={} title={}",
                             fe.getFile(), fe.getTitle());
                     continue;
                 }
-                // C：lineRange 对应行必须是真实代码（非注释/空行/纯花括号）
-                if (!validateLineRange(repoRoot, fe.getFile(), fe.getLineRange())) {
+                // C：lineRange 对应行必须是真实代码（非注释/空行/纯花括号）；
+                //    snippet 已命中时视为行号可信，跳过此校验（避免大文件偏移误杀）
+                if (!snipRes.snippetMatched
+                        && !validateLineRange(repoRoot, fe.getFile(), fe.getLineRange())) {
                     dropLine++;
                     log.debug("[Validate] 丢弃 finding: lineRange 指向注释/空行/纯括号 file={} line={} title={}",
                             fe.getFile(), fe.getLineRange(), fe.getTitle());
@@ -587,52 +624,71 @@ public class CodeAnalysisAsyncRunner {
     //   方案 A/B/C：三层 finding 反向校验
     // ============================================================
 
-    /** A：codeSnippet 必须能在原文中找到（去除空白后比较）。snippet 为空也算 fail，强制 LLM 给。 */
-    private boolean validateCodeSnippet(File repoRoot, String filePath, String snippet) {
-        if (snippet == null || snippet.isBlank()) return false;
-        if (repoRoot == null) return true; // 无法校验时不丢
+    /** snippet 校验结果：是否通过 + 是否真的在源文件中 contains 命中（已命中时 lineRange 可跳过校验）。 */
+    private record SnippetResult(boolean passed, boolean snippetMatched) {
+        static final SnippetResult PASS_MATCHED = new SnippetResult(true, true);
+        static final SnippetResult PASS_UNCHECKED = new SnippetResult(true, false);
+        static final SnippetResult FAIL = new SnippetResult(false, false);
+    }
+
+    /**
+     * A：codeSnippet 必须能在原文中找到（去除空白后比较）。
+     *
+     * 边界处理：
+     *   - snippet 为空：LOW 级别放过（LLM 常在低优先级建议里省略片段），HIGH/MEDIUM 强制要求
+     *   - repo 读不到：放过（避免环境误杀）
+     *   - 命中时返回 {@link SnippetResult#PASS_MATCHED}，调用方可据此跳过 lineRange 校验
+     */
+    private SnippetResult validateCodeSnippet(File repoRoot, String filePath, String snippet, String level) {
+        if (snippet == null || snippet.isBlank()) {
+            // LOW 级别允许 snippet 为空，HIGH/MEDIUM 必须给
+            return "LOW".equalsIgnoreCase(level) ? SnippetResult.PASS_UNCHECKED : SnippetResult.FAIL;
+        }
+        if (repoRoot == null) return SnippetResult.PASS_UNCHECKED;
         try {
             File f = new File(repoRoot, filePath);
-            if (!f.isFile() || !f.canRead()) return true; // 读不到时不丢
+            if (!f.isFile() || !f.canRead()) return SnippetResult.PASS_UNCHECKED;
             String src = java.nio.file.Files.readString(f.toPath(), java.nio.charset.StandardCharsets.UTF_8);
-            // 标准化：去掉所有空白后比较，容忍 LLM 改空格/换行
             String snipNorm = snippet.replaceAll("\\s+", "");
             String srcNorm = src.replaceAll("\\s+", "");
-            // 至少前 30 个字符要在源文件里
             String key = snipNorm.length() > 30 ? snipNorm.substring(0, 30) : snipNorm;
-            return srcNorm.contains(key);
+            return srcNorm.contains(key) ? SnippetResult.PASS_MATCHED : SnippetResult.FAIL;
         } catch (Exception e) {
-            return true; // 读文件出错时不丢，避免误杀
+            log.debug("[Validate] snippet 校验读文件失败 file={}: {}", filePath, e.getMessage());
+            return SnippetResult.PASS_UNCHECKED;
         }
     }
 
-    /** C：lineRange 对应行必须是有内容的代码行（不是单纯注释/空行/单括号）。 */
+    /**
+     * C：lineRange 对应行必须是有内容的代码行（不是单纯注释/空行/单括号）。
+     * 文件行数 > {@link #LARGE_FILE_LINE_THRESHOLD} 时放宽容忍度到 ±5。
+     */
     private boolean validateLineRange(File repoRoot, String filePath, String lineRange) {
-        if (lineRange == null || lineRange.isBlank()) return true; // 没给行号不强校
+        if (lineRange == null || lineRange.isBlank()) return true;
         if (repoRoot == null) return true;
         try {
             File f = new File(repoRoot, filePath);
             if (!f.isFile() || !f.canRead()) return true;
-            // 解析 lineRange 头部第一个数字
-            java.util.regex.Matcher m = java.util.regex.Pattern.compile("(\\d+)").matcher(lineRange);
+            java.util.regex.Matcher m = LINE_RANGE_PATTERN.matcher(lineRange);
             if (!m.find()) return true;
             int line = Integer.parseInt(m.group(1));
             if (line <= 0) return true;
-            // 读到对应行
             List<String> lines = java.nio.file.Files.readAllLines(f.toPath(), java.nio.charset.StandardCharsets.UTF_8);
-            // 容忍 ±2 行偏移：在 [line-2, line+2] 范围内只要有"实际代码行"就算过
-            int from = Math.max(1, line - 2);
-            int to = Math.min(lines.size(), line + 2);
+            int tol = lines.size() > LARGE_FILE_LINE_THRESHOLD
+                    ? LINE_TOLERANCE_LARGE : LINE_TOLERANCE_NORMAL;
+            int from = Math.max(1, line - tol);
+            int to = Math.min(lines.size(), line + tol);
             for (int i = from; i <= to; i++) {
                 String s = lines.get(i - 1).trim();
                 if (s.isEmpty()) continue;
                 if (s.startsWith("//") || s.startsWith("*") || s.startsWith("/*")) continue;
                 if (s.equals("{") || s.equals("}") || s.equals("};") || s.equals("})") || s.equals("});")) continue;
-                return true; // 找到一行真实代码
+                return true;
             }
             return false;
         } catch (Exception e) {
-            return true; // 出错时不丢
+            log.debug("[Validate] lineRange 校验读文件失败 file={}: {}", filePath, e.getMessage());
+            return true;
         }
     }
 
@@ -773,7 +829,7 @@ public class CodeAnalysisAsyncRunner {
     /** 从 ruleRef 字符串里抽出 X.Y 或 X.Y.Z 编号 */
     private static String extractRuleCode(String ref) {
         if (ref == null) return null;
-        java.util.regex.Matcher m = java.util.regex.Pattern.compile("(\\d+\\.\\d+(?:\\.\\d+)?)").matcher(ref);
+        java.util.regex.Matcher m = RULE_CODE_PATTERN.matcher(ref);
         return m.find() ? m.group(1) : null;
     }
 
@@ -853,9 +909,7 @@ public class CodeAnalysisAsyncRunner {
         String s = raw.trim();
 
         // 1) 去重：找第二份 `graph TD` / `sequenceDiagram` / `flowchart` 声明
-        java.util.regex.Matcher dup = java.util.regex.Pattern.compile(
-                "(?m)^\\s*(graph\\s+(?:TD|LR|BT|RL|TB)|sequenceDiagram|flowchart\\s+\\w+|classDiagram|stateDiagram(?:-v2)?)\\b"
-        ).matcher(s);
+        java.util.regex.Matcher dup = MERMAID_HEADER_PATTERN.matcher(s);
         int firstStart = -1, secondStart = -1;
         while (dup.find()) {
             if (firstStart < 0) firstStart = dup.start();
@@ -897,10 +951,7 @@ public class CodeAnalysisAsyncRunner {
     private static String fixNodeLabels(String line) {
         // 节点定义模式：id[xxx]  id(xxx)  id[(xxx)]  id{{xxx}}  等
         // 这里只处理最常见两种：`[...]` 和 `(...)`（不带方括号圆柱）
-        java.util.regex.Pattern p = java.util.regex.Pattern.compile(
-                "(\\b[A-Za-z_][\\w]*)([\\[\\(])([^\\]\\)\\\"]*)([\\]\\)])"
-        );
-        java.util.regex.Matcher m = p.matcher(line);
+        java.util.regex.Matcher m = NODE_DEF_PATTERN.matcher(line);
         StringBuilder out = new StringBuilder();
         int last = 0;
         while (m.find()) {
@@ -913,7 +964,7 @@ public class CodeAnalysisAsyncRunner {
             boolean needQuote = label.indexOf('(') >= 0 || label.indexOf(')') >= 0
                     || label.indexOf('/') >= 0 || label.indexOf(',') >= 0
                     || label.indexOf(' ') >= 0 || label.contains("..")
-                    || label.matches(".*[\\u4e00-\\u9fa5].*");
+                    || CJK_PATTERN.matcher(label).matches();
             // 已经以引号开头就跳过
             boolean alreadyQuoted = label.startsWith("\"") && label.endsWith("\"");
             if (needQuote && !alreadyQuoted && !label.isEmpty()) {
@@ -936,7 +987,7 @@ public class CodeAnalysisAsyncRunner {
         if (raw == null || raw.isBlank()) return raw;
         String s = raw;
         // 选一个稳定的"头部锚点" ——  `## 项目定位`
-        java.util.regex.Matcher m = java.util.regex.Pattern.compile("(?m)^##\\s*项目定位").matcher(s);
+        java.util.regex.Matcher m = MARKDOWN_ANCHOR_PATTERN.matcher(s);
         int first = -1, second = -1;
         while (m.find()) {
             if (first < 0) first = m.start();

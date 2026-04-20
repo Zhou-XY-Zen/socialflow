@@ -37,7 +37,12 @@ function onPickerChange(v: { gitUrl: string; branch?: string; credentialId?: str
 const loading = ref(false)
 const current = ref<CodeAnalysis>()
 const bookmarks = ref<RepoBookmark[]>([])
-let poller: number | null = null
+const exporting = ref(false)
+let pollerTimer: number | null = null
+// 指数退避：初始 2s，每轮 ×1.25，上限 10s（大仓库分析耗时长，缓解后端压力）
+const POLL_BASE_MS = 2000
+const POLL_MAX_MS = 10000
+let pollDelayMs = POLL_BASE_MS
 
 const STAGE_LABEL: Record<string, string> = {
   INIT: '初始化', CLONING: '克隆仓库', SCANNING: '扫描结构',
@@ -79,6 +84,7 @@ async function start() {
 
 async function poll(id: string) {
   stopPoll()
+  pollDelayMs = POLL_BASE_MS
   const tick = async () => {
     try {
       const r = await codeAnalysisApi.get(id)
@@ -86,18 +92,20 @@ async function poll(id: string) {
       if (r.status === 'SUCCESS' || r.status === 'FAILED') {
         stopPoll()
         loading.value = false
+        return
       }
+      pollDelayMs = Math.min(Math.ceil(pollDelayMs * 1.25), POLL_MAX_MS)
+      pollerTimer = window.setTimeout(tick, pollDelayMs)
     } catch {
       stopPoll()
       loading.value = false
     }
   }
   await tick()
-  poller = window.setInterval(tick, 2500)
 }
 
 function stopPoll() {
-  if (poller != null) { window.clearInterval(poller); poller = null }
+  if (pollerTimer != null) { window.clearTimeout(pollerTimer); pollerTimer = null }
 }
 
 async function share() {
@@ -117,13 +125,16 @@ async function favorite() {
   ElMessage.success(current.value.isFavorite ? '已收藏' : '已取消收藏')
 }
 
-function exportMd() {
-  if (!current.value?.summaryMd) return
-  const blob = new Blob([current.value.summaryMd], { type: 'text/markdown' })
-  const a = document.createElement('a')
-  a.href = URL.createObjectURL(blob)
-  a.download = `project-overview-${current.value.id}.md`
-  a.click()
+async function doExport(format: 'markdown' | 'html' | 'pdf') {
+  if (!current.value) return
+  exporting.value = true
+  try {
+    await codeAnalysisApi.exportFile(current.value.id, format)
+  } catch (e: any) {
+    ElMessage.error('导出失败：' + (e?.message || ''))
+  } finally {
+    exporting.value = false
+  }
 }
 
 const topTechs = computed(() => current.value?.techStack?.slice(0, 8) || [])
@@ -219,7 +230,16 @@ onUnmounted(stopPoll)
               {{ current.isFavorite ? '★ 已收藏' : '☆ 收藏' }}
             </el-button>
             <el-button size="small" @click="share">🔗 分享</el-button>
-            <el-button size="small" @click="exportMd">📥 导出 MD</el-button>
+            <el-dropdown trigger="click" @command="doExport">
+              <el-button size="small" :loading="exporting">📥 导出<el-icon style="margin-left:4px"><ArrowDown /></el-icon></el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="markdown">Markdown (含 findings)</el-dropdown-item>
+                  <el-dropdown-item command="html">HTML (可离线浏览)</el-dropdown-item>
+                  <el-dropdown-item command="pdf">PDF (可打印归档)</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
           </div>
         </div>
 

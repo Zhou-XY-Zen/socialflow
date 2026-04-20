@@ -1,8 +1,11 @@
 package com.socialflow.model.entity;
 
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
+import lombok.ToString;
 
 import java.time.LocalDateTime;
 
@@ -12,7 +15,11 @@ import java.time.LocalDateTime;
  * 每条凭证绑定一个 {userId + gitHost}，克隆仓库时按 URL 的 host 匹配，
  * 同 host 下可以有多条，优先用 isDefault=1 的那条；没 default 则让用户选。
  *
- * token 字段持久化的是 AES-256-GCM 加密密文，运行时临时解密使用。
+ * 【敏感字段处理】
+ *   - tokenEncrypted：持久化的是 AES-256-GCM 密文；加 @JsonIgnore + @ToString.Exclude
+ *     避免经 Spring 序列化回前端或被日志框架打印。
+ *   - plainToken：运行时解密后的明文，仅在内存中流转，带 @TableField(exist=false)
+ *     确保 MyBatis-Plus 不把它写库；同样 @JsonIgnore + @ToString.Exclude。
  */
 @Data
 @EqualsAndHashCode(callSuper = true)
@@ -32,8 +39,19 @@ public class RepoAuthCredential extends BaseEntity {
 
     private String username;
 
-    /** AES-256-GCM 加密后的 Base64 串 */
+    /** AES-256-GCM 加密后的 Base64 串；永不输出到 JSON/日志 */
+    @JsonIgnore
+    @ToString.Exclude
     private String tokenEncrypted;
+
+    /**
+     * 运行时解密后的明文 token，仅内存使用、不落库、不序列化。
+     * 被 {@code CredentialService#resolveForUrl} 填充，供 GitRepoService 克隆瞬间读取后应尽快丢弃。
+     */
+    @TableField(exist = false)
+    @JsonIgnore
+    @ToString.Exclude
+    private transient String plainToken;
 
     /** 展示用的掩码，如 ghp_****f8a */
     private String tokenHint;

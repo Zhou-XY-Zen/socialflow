@@ -173,10 +173,10 @@ public class GitRepoServiceImpl implements GitRepoService {
                 cloneCmd.setBranch(branch);
                 cloneCmd.setBranchesToClone(List.of("refs/heads/" + branch));
             }
-            if (credential != null && credential.getTokenEncrypted() != null) {
-                // credential.getTokenEncrypted() 此时已是解密后的明文 token（约定由 CredentialService.resolveForUrl 保证）
+            if (credential != null && credential.getPlainToken() != null) {
+                // plainToken 是 transient + JsonIgnore + ToString.Exclude，确保异常栈/日志不会泄漏
                 cloneCmd.setCredentialsProvider(new UsernamePasswordCredentialsProvider(
-                        credential.getUsername(), credential.getTokenEncrypted()));
+                        credential.getUsername(), credential.getPlainToken()));
             }
             try (Git git = cloneCmd.call()) {
                 log.info("[Git] cloned OK, head={}", git.getRepository().resolve("HEAD"));

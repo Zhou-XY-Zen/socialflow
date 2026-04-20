@@ -17,6 +17,15 @@ import lombok.EqualsAndHashCode;
 @TableName("repo_analysis_finding")
 public class RepoAnalysisFinding extends BaseEntity {
 
+    public static final String STATUS_UNRESOLVED = "UNRESOLVED";
+    public static final String STATUS_RESOLVED = "RESOLVED";
+    public static final String STATUS_IGNORED = "IGNORED";
+
+    public static final String REASON_INVALID = "INVALID";
+    public static final String REASON_ALREADY_FIXED = "ALREADY_FIXED";
+    public static final String REASON_NOT_APPLICABLE = "NOT_APPLICABLE";
+    public static final String REASON_OTHER = "OTHER";
+
     private Long analysisId;
 
     /** HIGH / MEDIUM / LOW */

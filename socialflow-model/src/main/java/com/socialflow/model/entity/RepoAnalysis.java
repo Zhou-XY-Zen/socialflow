@@ -4,6 +4,8 @@ import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
+import java.time.LocalDateTime;
+
 /**
  * 代码分析主记录 —— 对应 `repo_analysis` 表
  *
@@ -52,6 +54,10 @@ public class RepoAnalysis extends BaseEntity {
 
     private Integer isFavorite;
     private String shareToken;
+    /** 分享 token 过期时刻；null 表示未生成过分享。过期后 getByShareToken 返回失效。 */
+    private LocalDateTime shareExpireAt;
+    /** 分享 token 累计访问次数，超过阈值自动禁用，防止被暴力枚举/爬虫拉取。 */
+    private Integer shareAccessCount;
     private String tags;
 
     private String errorMsg;

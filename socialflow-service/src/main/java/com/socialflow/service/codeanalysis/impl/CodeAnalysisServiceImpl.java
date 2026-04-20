@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.socialflow.common.util.JsonUtil;
 import com.socialflow.common.exception.BusinessException;
 import com.socialflow.dao.mapper.LlmCallLogMapper;
+import com.socialflow.dao.mapper.RepoAnalysisDashboardMapper;
 import com.socialflow.dao.mapper.RepoAnalysisFindingMapper;
 import com.socialflow.dao.mapper.RepoAnalysisMapper;
 import com.socialflow.dao.mapper.RepoBookmarkMapper;
@@ -34,10 +35,8 @@ import java.io.File;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.TreeMap;
 import java.util.UUID;
 
 /**
@@ -62,6 +61,7 @@ public class CodeAnalysisServiceImpl implements CodeAnalysisService {
     private final RepoAnalysisFindingMapper findingMapper;
     private final RepoBookmarkMapper bookmarkMapper;
     private final LlmCallLogMapper llmCallLogMapper;
+    private final RepoAnalysisDashboardMapper dashboardMapper;
     private final GitRepoService gitRepoService;
     private final FindingFeedbackService findingFeedbackService;
     /** 异步执行器（独立 bean，让 @Async 代理生效） */
@@ -138,12 +138,31 @@ public class CodeAnalysisServiceImpl implements CodeAnalysisService {
         return toVo(a, true);
     }
 
+    /** 分享 token 默认有效期（天）；业务上一周足够大部分协作场景。可在 application.yml 覆盖。 */
+    private static final int SHARE_TOKEN_TTL_DAYS = 7;
+    /** 分享链接累计访问次数上限，超过后 token 失效（防爬虫/暴力枚举） */
+    private static final int SHARE_TOKEN_MAX_ACCESS = 10_000;
+
     @Override
     public CodeAnalysisVO getByShareToken(String shareToken) {
         RepoAnalysis a = analysisMapper.selectOne(new LambdaQueryWrapper<RepoAnalysis>()
                 .eq(RepoAnalysis::getShareToken, shareToken)
                 .last("limit 1"));
         if (a == null) throw new BusinessException("分享链接无效");
+        // 过期校验
+        if (a.getShareExpireAt() != null && a.getShareExpireAt().isBefore(LocalDateTime.now())) {
+            throw new BusinessException("分享链接已过期，请联系作者重新生成");
+        }
+        // 访问次数上限
+        int count = a.getShareAccessCount() == null ? 0 : a.getShareAccessCount();
+        if (count >= SHARE_TOKEN_MAX_ACCESS) {
+            throw new BusinessException("分享链接访问次数已达上限，请联系作者重新生成");
+        }
+        // 递增计数（弱一致，无需强同步）
+        RepoAnalysis upd = new RepoAnalysis();
+        upd.setId(a.getId());
+        upd.setShareAccessCount(count + 1);
+        analysisMapper.updateById(upd);
         return toVo(a, true);
     }
 
@@ -153,11 +172,19 @@ public class CodeAnalysisServiceImpl implements CodeAnalysisService {
         if (a == null || !a.getUserId().equals(userId)) {
             throw new BusinessException("分析记录不存在");
         }
-        if (a.getShareToken() != null) return a.getShareToken();
-        String token = UUID.randomUUID().toString().replace("-", "");
+        // 若已存在且未过期，复用旧 token 并延长有效期；否则生成新 token 并重置计数
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime newExpire = now.plusDays(SHARE_TOKEN_TTL_DAYS);
+        String token = a.getShareToken();
+        boolean expired = a.getShareExpireAt() == null || a.getShareExpireAt().isBefore(now);
+        if (token == null || expired) {
+            token = UUID.randomUUID().toString().replace("-", "");
+        }
         RepoAnalysis upd = new RepoAnalysis();
         upd.setId(analysisId);
         upd.setShareToken(token);
+        upd.setShareExpireAt(newExpire);
+        if (expired) upd.setShareAccessCount(0);
         analysisMapper.updateById(upd);
         return token;
     }
@@ -200,6 +227,19 @@ public class CodeAnalysisServiceImpl implements CodeAnalysisService {
         analysisMapper.updateById(upd);
     }
 
+    /** 合法的目标状态 */
+    private static final java.util.Set<String> FINDING_STATUSES = java.util.Set.of(
+            RepoAnalysisFinding.STATUS_UNRESOLVED,
+            RepoAnalysisFinding.STATUS_RESOLVED,
+            RepoAnalysisFinding.STATUS_IGNORED);
+
+    /** 合法的关闭原因（status != UNRESOLVED 时必填） */
+    private static final java.util.Set<String> FINDING_DISMISS_REASONS = java.util.Set.of(
+            RepoAnalysisFinding.REASON_INVALID,
+            RepoAnalysisFinding.REASON_ALREADY_FIXED,
+            RepoAnalysisFinding.REASON_NOT_APPLICABLE,
+            RepoAnalysisFinding.REASON_OTHER);
+
     @Override
     public void updateFindingStatus(Long userId, Long findingId, FindingStatusDTO dto) {
         RepoAnalysisFinding f = findingMapper.selectById(findingId);
@@ -208,15 +248,45 @@ public class CodeAnalysisServiceImpl implements CodeAnalysisService {
         if (a == null || !a.getUserId().equals(userId)) {
             throw new BusinessException("无权修改该 finding");
         }
-        RepoAnalysisFinding upd = new RepoAnalysisFinding();
-        upd.setId(findingId);
-        upd.setStatus(dto.getStatus());
-        upd.setResolutionNote(dto.getResolutionNote());
-        // Wave 8 反馈闭环：UNRESOLVED 状态清空 reason，其他状态写入用户指定的 reason
-        upd.setDismissedReason("UNRESOLVED".equals(dto.getStatus()) ? null : dto.getDismissedReason());
-        findingMapper.updateById(upd);
+
+        // === 状态机校验 ===
+        // 1) 目标状态必须合法
+        String target = dto.getStatus();
+        if (target == null || !FINDING_STATUSES.contains(target)) {
+            throw new BusinessException("finding 状态不合法，只允许 UNRESOLVED/RESOLVED/IGNORED");
+        }
+        // 2) dismissedReason 与 status 的一致性
+        String reason = dto.getDismissedReason();
+        if (RepoAnalysisFinding.STATUS_UNRESOLVED.equals(target)) {
+            // 回退为未解决 → 必须清空关闭原因，避免脏数据
+            reason = null;
+        } else {
+            // 关闭/忽略 → 必须给出合法关闭原因
+            if (reason == null || !FINDING_DISMISS_REASONS.contains(reason)) {
+                throw new BusinessException(
+                        "关闭原因必填且必须是 INVALID/ALREADY_FIXED/NOT_APPLICABLE/OTHER");
+            }
+        }
+
+        // MyBatis-Plus 默认不把 null 字段写库；dismissed_reason 需要清空时，
+        // 必须用 UpdateWrapper.set(field, null) 强制写 null。
+        if (reason == null) {
+            findingMapper.update(null,
+                    new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<RepoAnalysisFinding>()
+                            .eq(RepoAnalysisFinding::getId, findingId)
+                            .set(RepoAnalysisFinding::getStatus, target)
+                            .set(RepoAnalysisFinding::getResolutionNote, dto.getResolutionNote())
+                            .set(RepoAnalysisFinding::getDismissedReason, null));
+        } else {
+            RepoAnalysisFinding upd = new RepoAnalysisFinding();
+            upd.setId(findingId);
+            upd.setStatus(target);
+            upd.setResolutionNote(dto.getResolutionNote());
+            upd.setDismissedReason(reason);
+            findingMapper.updateById(upd);
+        }
         // INVALID 反馈触发屏蔽列表刷新（异步刷新避免阻塞 UI）
-        if ("INVALID".equals(dto.getDismissedReason())) {
+        if (RepoAnalysisFinding.REASON_INVALID.equals(reason)) {
             try {
                 findingFeedbackService.refresh();
             } catch (Exception e) {
@@ -241,51 +311,39 @@ public class CodeAnalysisServiceImpl implements CodeAnalysisService {
 
     @Override
     public AnalysisStatsVO dashboardStats(Long userId) {
-        List<RepoAnalysis> all = analysisMapper.selectList(new LambdaQueryWrapper<RepoAnalysis>()
-                .eq(RepoAnalysis::getUserId, userId)
-                .orderByDesc(RepoAnalysis::getCreateTime)
-                .last("limit 500"));
+        LocalDateTime monthStart = LocalDateTime.now()
+                .withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
+        java.time.LocalDate today = java.time.LocalDate.now();
+        LocalDateTime trendStart = today.minusDays(29).atStartOfDay();
 
         AnalysisStatsVO vo = new AnalysisStatsVO();
-        vo.setTotalCount(all.size());
 
-        LocalDateTime monthStart = LocalDateTime.now().withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0);
-        int monthly = 0;
-        int highTotal = 0, medTotal = 0, lowTotal = 0;
-        long scoreSum = 0;
-        int scoreCount = 0;
-        Map<String, Integer> repoHit = new LinkedHashMap<>();
-        Map<String, Integer> repoLastScore = new HashMap<>();
-        Map<java.time.LocalDate, Integer> dayHit = new TreeMap<>();
-
-        for (RepoAnalysis a : all) {
-            if (a.getCreateTime() != null && a.getCreateTime().isAfter(monthStart)) monthly++;
-            if (a.getHighCount() != null) highTotal += a.getHighCount();
-            if (a.getMediumCount() != null) medTotal += a.getMediumCount();
-            if (a.getLowCount() != null) lowTotal += a.getLowCount();
-            if (a.getOverallScore() != null) {
-                scoreSum += a.getOverallScore();
-                scoreCount++;
-            }
-            if (a.getGitUrl() != null) {
-                repoHit.merge(a.getGitUrl(), 1, Integer::sum);
-                repoLastScore.putIfAbsent(a.getGitUrl(), a.getOverallScore());
-            }
-            if (a.getCreateTime() != null) {
-                dayHit.merge(a.getCreateTime().toLocalDate(), 1, Integer::sum);
-            }
-        }
-
-        vo.setMonthlyCount(monthly);
+        // 1) 一次 SQL 汇总：总数/月度数/月度成功数/平均分/高中低累计
+        Map<String, Object> s = dashboardMapper.summary(userId, monthStart);
+        vo.setTotalCount(asInt(s.get("total_count")));
+        vo.setMonthlyCount(asInt(s.get("monthly_count")));
+        long monthlySuccess = asLong(s.get("monthly_success"));
+        int highTotal = asInt(s.get("high_total"));
+        int medTotal  = asInt(s.get("medium_total"));
+        int lowTotal  = asInt(s.get("low_total"));
+        Object avg = s.get("avg_score");
+        vo.setAverageScore(avg == null ? null : ((Number) avg).doubleValue());
         vo.setHighTotal(highTotal);
         vo.setMediumTotal(medTotal);
         vo.setLowTotal(lowTotal);
         vo.setTotalHighRisk(highTotal);
-        vo.setAverageScore(scoreCount > 0 ? (double) scoreSum / scoreCount : null);
 
-        // 近 30 天趋势
-        java.time.LocalDate today = java.time.LocalDate.now();
-        List<AnalysisStatsVO.DailyPoint> trend = new ArrayList<>();
+        // 2) 近 30 天趋势：SQL group by day，内存侧补齐没数据的日期
+        List<Map<String, Object>> rows = dashboardMapper.dailyTrend(userId, trendStart);
+        Map<java.time.LocalDate, Integer> dayHit = new HashMap<>();
+        for (Map<String, Object> r : rows) {
+            Object d = r.get("day");
+            java.time.LocalDate ld = (d instanceof java.sql.Date sd) ? sd.toLocalDate()
+                    : (d instanceof java.time.LocalDate l) ? l
+                    : java.time.LocalDate.parse(String.valueOf(d));
+            dayHit.put(ld, asInt(r.get("cnt")));
+        }
+        List<AnalysisStatsVO.DailyPoint> trend = new ArrayList<>(30);
         for (int i = 29; i >= 0; i--) {
             java.time.LocalDate d = today.minusDays(i);
             AnalysisStatsVO.DailyPoint p = new AnalysisStatsVO.DailyPoint();
@@ -295,69 +353,41 @@ public class CodeAnalysisServiceImpl implements CodeAnalysisService {
         }
         vo.setDailyTrend(trend);
 
-        // 已解决 finding 数量
-        Long resolved = findingMapper.selectCount(new LambdaQueryWrapper<RepoAnalysisFinding>()
-                .eq(RepoAnalysisFinding::getStatus, "RESOLVED"));
-        vo.setResolvedCount(resolved == null ? 0 : resolved.intValue());
+        // 3) 已解决 finding：SQL 直接 COUNT
+        vo.setResolvedCount((int) dashboardMapper.resolvedFindingCount(userId));
 
-        // Top 5 仓库
+        // 4) Top 5 仓库：SQL 聚合 + 子查询取最新评分
         List<AnalysisStatsVO.RepoHot> tops = new ArrayList<>();
-        repoHit.entrySet().stream()
-                .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
-                .limit(5)
-                .forEach(e -> {
-                    AnalysisStatsVO.RepoHot h = new AnalysisStatsVO.RepoHot();
-                    h.setGitUrl(e.getKey());
-                    h.setAnalyzeCount(e.getValue());
-                    h.setLastScore(repoLastScore.get(e.getKey()));
-                    tops.add(h);
-                });
+        for (Map<String, Object> r : dashboardMapper.topRepos(userId, 5)) {
+            AnalysisStatsVO.RepoHot h = new AnalysisStatsVO.RepoHot();
+            h.setGitUrl(String.valueOf(r.get("gitUrl")));
+            h.setAnalyzeCount(asInt(r.get("analyzeCount")));
+            Object ls = r.get("lastScore");
+            h.setLastScore(ls == null ? null : ((Number) ls).intValue());
+            tops.add(h);
+        }
         vo.setTopRepos(tops);
 
-        // 分类分布：按 finding category 聚合
-        List<RepoAnalysisFinding> allFindings = all.isEmpty() ? List.of() :
-                findingMapper.selectList(new LambdaQueryWrapper<RepoAnalysisFinding>()
-                        .in(RepoAnalysisFinding::getAnalysisId,
-                            all.stream().map(RepoAnalysis::getId).toList()));
-        Map<String, Integer> catHit = new HashMap<>();
-        for (RepoAnalysisFinding f : allFindings) {
-            if (f.getCategory() != null) catHit.merge(f.getCategory(), 1, Integer::sum);
-        }
+        // 5) Finding 分类分布：SQL GROUP BY category
         List<AnalysisStatsVO.CategoryStat> cats = new ArrayList<>();
-        catHit.entrySet().stream()
-                .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
-                .forEach(e -> {
-                    AnalysisStatsVO.CategoryStat c = new AnalysisStatsVO.CategoryStat();
-                    c.setCategory(e.getKey());
-                    c.setCount(e.getValue());
-                    cats.add(c);
-                });
+        for (Map<String, Object> r : dashboardMapper.categoryStats(userId)) {
+            AnalysisStatsVO.CategoryStat c = new AnalysisStatsVO.CategoryStat();
+            c.setCategory(String.valueOf(r.get("category")));
+            c.setCount(asInt(r.get("cnt")));
+            cats.add(c);
+        }
         vo.setCategoryStats(cats);
 
-        // ========== LLM Token 消耗聚合 ==========
-        LocalDateTime monthStart0 = LocalDateTime.now().withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0);
-        List<LlmCallLog> monthLogs = llmCallLogMapper.selectList(
-                new LambdaQueryWrapper<LlmCallLog>()
-                        .eq(LlmCallLog::getUserId, userId)
-                        .ge(LlmCallLog::getCreateTime, monthStart0));
-        long tokensMonthly = 0L, tokensPrompt = 0L, tokensCompletion = 0L;
-        for (LlmCallLog l : monthLogs) {
-            if (l.getTotalTokens() != null) tokensMonthly += l.getTotalTokens();
-            if (l.getPromptTokens() != null) tokensPrompt += l.getPromptTokens();
-            if (l.getCompletionTokens() != null) tokensCompletion += l.getCompletionTokens();
-        }
+        // 6) LLM Token 本月聚合：SQL SUM 避免拉回 N 条日志在内存算
+        Map<String, Object> tok = dashboardMapper.monthlyTokenSummary(userId, monthStart);
+        long tokensMonthly = asLong(tok.get("total_tokens"));
         vo.setTokensMonthly(tokensMonthly);
-        vo.setTokensMonthlyPrompt(tokensPrompt);
-        vo.setTokensMonthlyCompletion(tokensCompletion);
-        vo.setLlmCallsMonthly(monthLogs.size());
-        // 本月成功 SUCCESS 的分析数（用来算平均每次 token）
-        long monthlySuccess = all.stream()
-                .filter(a -> RepoAnalysis.STATUS_SUCCESS.equals(a.getStatus())
-                        && a.getCreateTime() != null && a.getCreateTime().isAfter(monthStart0))
-                .count();
+        vo.setTokensMonthlyPrompt(asLong(tok.get("prompt_tokens")));
+        vo.setTokensMonthlyCompletion(asLong(tok.get("completion_tokens")));
+        vo.setLlmCallsMonthly(asInt(tok.get("call_count")));
         vo.setTokensPerAnalysisAvg(monthlySuccess > 0 ? (int) (tokensMonthly / monthlySuccess) : 0);
 
-        // ========= Wave 8 反馈闭环指标 =========
+        // 7) Wave 8 反馈闭环指标
         try {
             long invalidCount = findingFeedbackService.countInvalid();
             long ignoredCount = findingFeedbackService.countIgnored();
@@ -370,17 +400,25 @@ public class CodeAnalysisServiceImpl implements CodeAnalysisService {
             vo.setDismissedRulesCount(findingFeedbackService.getDismissedRuleRefs().size());
             List<AnalysisStatsVO.RuleInvalidStat> topInvalid = new ArrayList<>();
             for (var item : findingFeedbackService.topInvalid(5)) {
-                AnalysisStatsVO.RuleInvalidStat s = new AnalysisStatsVO.RuleInvalidStat();
-                s.setRuleRef(item.ruleRef());
-                s.setCount(item.count());
-                topInvalid.add(s);
+                AnalysisStatsVO.RuleInvalidStat si = new AnalysisStatsVO.RuleInvalidStat();
+                si.setRuleRef(item.ruleRef());
+                si.setCount(item.count());
+                topInvalid.add(si);
             }
             vo.setTopInvalidRules(topInvalid);
         } catch (Exception e) {
-            log.warn("[Dashboard] Wave 8 反馈指标聚合失败: {}", e.getMessage());
+            log.warn("[Dashboard] Wave 8 反馈指标聚合失败", e);
         }
-
         return vo;
+    }
+
+    /** MyBatis Map 结果取整型，兼容 BigDecimal / Long / Integer */
+    private static int asInt(Object v) {
+        return v == null ? 0 : ((Number) v).intValue();
+    }
+
+    private static long asLong(Object v) {
+        return v == null ? 0L : ((Number) v).longValue();
     }
 
     @Override

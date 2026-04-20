@@ -20,7 +20,12 @@ const md = new MarkdownIt({ html: false, linkify: true, breaks: true })
 const current = ref<CodeAnalysis>()
 const loading = ref(true)
 const filterLevel = ref<FindingLevel | 'ALL'>('ALL')
-let poller: number | null = null
+let pollerTimer: number | null = null
+// 指数退避：初始 2s，每轮 ×1.25，上限 10s —— 分析耗时长时降低后端压力
+const POLL_BASE_MS = 2000
+const POLL_MAX_MS = 10000
+let pollDelayMs = POLL_BASE_MS
+const exporting = ref(false)
 
 // LLM 调用链路
 const llmCalls = ref<LlmCallLog[]>([])
@@ -81,15 +86,25 @@ async function load() {
 
 function startPoll(id: string) {
   stopPoll()
-  poller = window.setInterval(async () => {
+  pollDelayMs = POLL_BASE_MS
+  const tick = async () => {
     try {
       const r = await codeAnalysisApi.get(id)
       current.value = r
-      if (r.status === 'SUCCESS' || r.status === 'FAILED') stopPoll()
-    } catch { stopPoll() }
-  }, 2500)
+      if (r.status === 'SUCCESS' || r.status === 'FAILED') {
+        stopPoll()
+        return
+      }
+      // 每轮增加间隔，缓慢逼近上限
+      pollDelayMs = Math.min(Math.ceil(pollDelayMs * 1.25), POLL_MAX_MS)
+      pollerTimer = window.setTimeout(tick, pollDelayMs)
+    } catch {
+      stopPoll()
+    }
+  }
+  pollerTimer = window.setTimeout(tick, pollDelayMs)
 }
-function stopPoll() { if (poller != null) { window.clearInterval(poller); poller = null } }
+function stopPoll() { if (pollerTimer != null) { window.clearTimeout(pollerTimer); pollerTimer = null } }
 
 onMounted(load)
 onUnmounted(stopPoll)
@@ -116,13 +131,16 @@ async function share() {
   ElMessage.success('分享链接已复制')
 }
 
-function exportMd() {
-  if (!current.value?.summaryMd) return
-  const blob = new Blob([current.value.summaryMd], { type: 'text/markdown' })
-  const a = document.createElement('a')
-  a.href = URL.createObjectURL(blob)
-  a.download = `analysis-${current.value.id}.md`
-  a.click()
+async function doExport(format: 'markdown' | 'html' | 'pdf') {
+  if (!current.value) return
+  exporting.value = true
+  try {
+    await codeAnalysisApi.exportFile(current.value.id, format)
+  } catch (e: any) {
+    ElMessage.error('导出失败：' + (e?.message || ''))
+  } finally {
+    exporting.value = false
+  }
 }
 </script>
 
@@ -136,7 +154,16 @@ function exportMd() {
       </div>
       <div class="header-actions">
         <el-button size="small" @click="share">🔗 分享</el-button>
-        <el-button size="small" @click="exportMd">📥 导出</el-button>
+        <el-dropdown trigger="click" @command="doExport">
+          <el-button size="small" :loading="exporting">📥 导出<el-icon style="margin-left:4px"><ArrowDown /></el-icon></el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="markdown">Markdown (含 findings)</el-dropdown-item>
+              <el-dropdown-item command="html">HTML (可离线浏览)</el-dropdown-item>
+              <el-dropdown-item command="pdf">PDF (可打印归档)</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
       </div>
     </div>
 

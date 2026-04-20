@@ -135,7 +135,7 @@ public class CredentialServiceImpl implements CredentialService {
     @Override
     public RepoAuthCredentialVO test(Long userId, Long id) {
         RepoAuthCredential e = getDecrypted(userId, id);
-        String token = e.getTokenEncrypted();  // getDecrypted 已把 tokenEncrypted 替换成了明文
+        String token = e.getPlainToken();  // 明文只在 transient 字段上，不会被日志/JSON 泄漏
         // 优先用户填的"默认仓库 URL"（精准验证），否则退回 host root
         boolean usingRealRepo = e.getDefaultRepoUrl() != null && !e.getDefaultRepoUrl().isBlank();
         String testUrl = usingRealRepo ? e.getDefaultRepoUrl() : ("https://" + e.getGitHost() + "/");
@@ -192,7 +192,9 @@ public class CredentialServiceImpl implements CredentialService {
         if (rows.isEmpty()) return Optional.empty();
         RepoAuthCredential picked = rows.get(0);
         try {
-            picked.setTokenEncrypted(AesGcmUtil.decrypt(picked.getTokenEncrypted(), encryptionKey));
+            // 解密后的明文只放 plainToken（transient/JsonIgnore），不回写 tokenEncrypted 字段。
+            // 这样即使 picked 被误打印/序列化，密文仍是密文，明文不泄漏。
+            picked.setPlainToken(AesGcmUtil.decrypt(picked.getTokenEncrypted(), encryptionKey));
         } catch (Exception ex) {
             log.error("[Credential] decrypt failed for id={}", picked.getId(), ex);
             return Optional.empty();
@@ -212,7 +214,8 @@ public class CredentialServiceImpl implements CredentialService {
             throw new BusinessException("凭证不存在");
         }
         try {
-            e.setTokenEncrypted(AesGcmUtil.decrypt(e.getTokenEncrypted(), encryptionKey));
+            // 明文只放 transient 字段；调用方通过 getPlainToken() 读取，用完应立即让局部变量离开作用域。
+            e.setPlainToken(AesGcmUtil.decrypt(e.getTokenEncrypted(), encryptionKey));
         } catch (Exception ex) {
             throw new BusinessException("凭证解密失败，请检查 encryption-key 是否变更");
         }

@@ -34,7 +34,8 @@ public interface GitRepoService {
 
     /**
      * 带凭证的浅克隆。credential 为 null 时等价于 {@link #shallowClone(String, String, Integer)}。
-     * credential 的 tokenEncrypted 字段**必须是已解密的明文 token**（调用方负责）。
+     * credential 的 {@code plainToken}（transient 字段）必须由调用方解密填充，
+     * 持久化密文字段 {@code tokenEncrypted} 不会被使用。
      */
     File shallowClone(String gitUrl, String branch, Integer depth, RepoAuthCredential credential);
 

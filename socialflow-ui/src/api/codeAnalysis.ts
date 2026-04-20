@@ -6,6 +6,7 @@
  * 避免 `Number("2045867682091651074")` 精度丢失导致"记录不存在"。
  */
 import { get, post, put, del } from './http'
+import http from './http'
 import type {
   AnalysisStats,
   AnalyzeRepoDTO,
@@ -54,6 +55,22 @@ export const codeAnalysisApi = {
   // 通用：查结果
   get: (id: Id) => get<CodeAnalysis>(`/code-analysis/${id}`),
 
+  /**
+   * 导出分析结果为文件（MD / HTML / PDF）。
+   * 后端返回 byte[] + Content-Disposition，用 Blob 触发浏览器下载；
+   * 文件名优先从响应头的 `filename*=UTF-8''xxx` 解析，失败回退到默认名。
+   */
+  exportFile: async (id: Id, format: 'markdown' | 'html' | 'pdf') => {
+    const res = await http.get(`/code-analysis/${id}/export`, {
+      params: { format },
+      responseType: 'blob',
+    })
+    const filename = parseFilenameFromDisposition(
+      res.headers['content-disposition'] as string | undefined,
+    ) || `code-analysis-${id}.${format === 'markdown' ? 'md' : format}`
+    triggerDownload(res.data as Blob, filename)
+  },
+
   // 查某次分析的 LLM 调用链路
   llmCalls: (id: Id) => get<LlmCallLog[]>(`/code-analysis/${id}/llm-calls`),
 
@@ -100,4 +117,25 @@ export const codeAnalysisApi = {
   saveRule: (dto: SaveRuleDTO) =>
     post<RuleLibraryItem, SaveRuleDTO>('/code-analysis/rules', dto),
   deleteRule: (id: Id) => del<void>(`/code-analysis/rules/${id}`),
+}
+
+/** 从 Content-Disposition 头解析文件名，优先 RFC 5987 的 filename*=UTF-8'' */
+function parseFilenameFromDisposition(disp?: string): string | undefined {
+  if (!disp) return undefined
+  const star = /filename\*=UTF-8''([^;]+)/i.exec(disp)
+  if (star) {
+    try { return decodeURIComponent(star[1]) } catch { /* ignore */ }
+  }
+  const plain = /filename="?([^";]+)"?/i.exec(disp)
+  return plain ? plain[1] : undefined
+}
+
+/** 触发浏览器下载 Blob */
+function triggerDownload(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
