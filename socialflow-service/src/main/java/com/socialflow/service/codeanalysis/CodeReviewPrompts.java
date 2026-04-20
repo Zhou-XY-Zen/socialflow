@@ -279,10 +279,18 @@ public final class CodeReviewPrompts {
                    也不要在 JSON 对象外面拼第二份 JSON。
 
                 2. **Mermaid 语法规范**（graph TD 节点标签里有特殊字符必须用双引号包）：
-                   ✅ 正确：`API["API Client (http.ts)"]`  `S_LLM["LlmRouter/Guardrail"]`  `DB[(MySQL 8.0)]`
-                   ❌ 错误：`API[API Client (http.ts)]`   `S_LLM[LlmRouter/Guardrail]`
-                   凡是节点 label 里含 `( ) / . ,` 空格 中文标点 的，一律 `["..."]` 包。
-                   arrow label 里含特殊字符也要用 `|"..."|`，例如 `A -->|"调用 LLM API"| B`。
+                   - 矩形节点（默认）：label 有特殊字符时 → `id["..."]`
+                     ✅ `API["API Client (http.ts)"]`   `S_LLM["LlmRouter/Guardrail"]`
+                     ❌ `API[API Client (http.ts)]`    `S_LLM[LlmRouter/Guardrail]`
+                   - 圆柱形节点（数据库/存储）：外层 `[(...)]` + 内部用引号 → `id[("...")]`
+                     ✅ `DB[("MySQL 8.0")]`   `CACHE[("Redis")]`   `VEC_DB[("PostgreSQL w/ pgvector")]`
+                     ❌ `DB[(MySQL 8.0)]`（label 含点/空格却没用引号）
+                     ❌ `DB["(MySQL 8.0")]`（引号位置在括号内侧是错的）
+                   - 菱形（判断节点）：`id{"..."}`
+                   - arrow label 含特殊字符：`A -->|"调用 LLM API"| B`
+
+                   **判定标准**：label 里有 `( ) / . , :` 空格 中文标点 冒号 的，一律加引号；
+                   引号必须紧贴着外层括号的**内侧**，不能跨越括号。
 
                 3. **对项目中的深度子系统必须展开细讲**。如果项目里有以下任何一项，请在
                    "核心功能"或"模块分层"的对应位置单独成段，详述 3-5 句，不能一句话带过：

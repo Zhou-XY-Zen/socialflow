@@ -865,7 +865,21 @@ public class CodeAnalysisAsyncRunner {
             s = s.substring(0, secondStart).trim();
         }
 
-        // 2) 节点标签加引号 —— 逐行处理，避免跨行误伤
+        // 2) 修正 LLM 常见畸形：圆柱形节点引号位置错位
+        //    ❌ `DB["(MySQL 8.0")]` → ✅ `DB[("MySQL 8.0")]`
+        //    ❌ `CACHE["(Redis")]`  → ✅ `CACHE[("Redis")]`
+        //    正则解释：id[" + ( + 任意内容 + " + )]
+        s = s.replaceAll(
+                "(\\b[A-Za-z_]\\w*)\\[\"\\(([^\"\\r\\n]+?)\"\\)\\]",
+                "$1[(\"$2\")]"
+        );
+        //   另一种畸形：`id[("xxx)"]`（引号跑到了外侧括号里面）
+        s = s.replaceAll(
+                "(\\b[A-Za-z_]\\w*)\\[\\(\"([^\"\\r\\n]+?)\\)\"\\]",
+                "$1[(\"$2\")]"
+        );
+
+        // 3) 节点标签加引号 —— 逐行处理，避免跨行误伤
         StringBuilder sb = new StringBuilder(s.length() + 256);
         String[] lines = s.split("\\r?\\n");
         for (String line : lines) {
