@@ -553,12 +553,15 @@ public class GitRepoServiceImpl implements GitRepoService {
                 entries = scanner.scan(base.getTree(), head.getTree());
             }
         }
-        // 对每个 DiffEntry 单独格式化
+        // 对每个 DiffEntry 单独格式化（带 ±5 行上下文 —— 方案 D）
         for (DiffEntry e : entries) {
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             try (DiffFormatter df = new DiffFormatter(out)) {
                 df.setRepository(repo);
                 df.setDetectRenames(true);
+                // 黄山版审查方案 D：上下文行从默认的 3 调到 5，让 LLM 看清违规所在的更大上下文
+                // 既能避免"只看几行不知道整体"的误判，又不会膨胀 prompt 太多
+                df.setContext(5);
                 df.format(e);
             }
             byte[] bytes = out.toByteArray();

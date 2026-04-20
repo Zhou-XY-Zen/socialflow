@@ -305,16 +305,81 @@ public final class CodeReviewPrompts {
                 """.formatted(repoName, treeView, languageStats, moduleSummariesJoined);
     }
 
+    /**
+     * 方案 E：自检 prompt —— 对一组 finding 做"质疑者视角"的二次复核，输出 confidence 评分。
+     * 把 0-100 分 < 60 的过滤掉，能干掉一半"我猜的"型 finding。
+     */
+    public static String findingSelfCheckSystem() {
+        return """
+                你扮演一个挑剔的资深代码评审者。下面是另一位 AI 评审给出的 findings 列表，
+                你的任务是逐条用质疑者视角复核：
+
+                **判断维度**：
+                  - codeSnippet 是否真的违反了 ruleRef 引用的规约？
+                  - codeSnippet 是不是已经合规的写法（如已带初始容量、已带线程池 bean 名）？
+                  - 是不是把"注释/常量定义/已修复代码"误报为违规？
+                  - description 描述的问题在 codeSnippet 中真实存在吗？
+
+                **输出**（必须直接 JSON，不要 markdown 围栏）：
+                {
+                  "checks": [
+                    { "index": 0, "confidence": 85, "verdict": "valid|false_positive|uncertain", "reason": "简短理由" },
+                    ...
+                  ]
+                }
+                index 是 finding 在输入数组里的下标（从 0 开始）。
+                confidence: 0-100，对"违规判定正确"的把握度。
+                  - >= 70：明显是真问题
+                  - 50-69：可能是真问题，但表达模糊
+                  - < 50：很可能是误判
+                verdict: valid（真问题）/ false_positive（误报）/ uncertain（不确定）
+                """;
+    }
+
+    public static String findingSelfCheckUser(String findingsJson) {
+        return """
+                以下是待复核的 findings JSON 数组：
+
+                ```json
+                %s
+                ```
+
+                请按 system prompt 输出 checks JSON。
+                """.formatted(findingsJson);
+    }
+
     /** 单文件 diff 审查 system prompt */
     public static String fileReviewSystem() {
         return ALIBABA_RULES + """
 
                 ---
 
-                你正在审查**一个文件**的改动。严格按《阿里巴巴 Java 开发手册》识别：
+                你正在审查**一个文件**的改动。严格按《阿里巴巴 Java 开发手册（黄山版）》321 条规约识别：
                 违反条款 + 安全隐患 + 代码坏味道。
 
-                ⚠️ 重要格式要求：直接返回纯 JSON 对象，不要 markdown 围栏（不要 ```json 开头也不要 ``` 结尾），不要任何前后缀文字（包括"以下是..."这类话）：
+                ⚠️ 严格输出要求（不满足的 finding 会被后端校验丢弃）：
+
+                1. **codeSnippet 必须是从原文逐字复制的 3-8 行真实代码**
+                   - 不要改写、不要总结、不要省略
+                   - 必须能在 diff/源文件中用 String.contains 找到
+                   - 错误示范：codeSnippet: "缺少 toString 方法"  → 这是描述，不是代码
+                   - 正确示范：codeSnippet: "private Integer isDefault;"
+
+                2. **ruleRef 必须是真实存在的黄山版规约编号 X.Y.Z**
+                   - 格式必须含数字编号，如 "黄山版 1.6.1"、"黄山版 5.1.5"
+                   - 后端会去 321 条规约白名单校验，不存在就丢
+                   - 错误示范：ruleRef: "【强制】【并发】"  → 没编号会被丢弃
+                   - 正确示范：ruleRef: "黄山版 1.6.1 - @Async 必须自定义线程池"
+
+                3. **lineRange 必须指向真实代码行（不能是注释/空行/纯括号）**
+                   - 必须看清行号对应的实际内容
+                   - 错误示范：报"行 24 类名违规"但行 24 是 `*/` 注释结束符
+
+                4. **不要重复报已修复的问题**
+                   - 如果代码里已经有合规写法（如 `@Async("xxxExecutor")` 已带 bean 名），就不要再报
+                   - 如果代码里已经有 `// 黄山版 X.Y.Z` 注释说明已知合规，跳过
+
+                ⚠️ 重要格式要求：直接返回纯 JSON 对象，不要 markdown 围栏（不要 ```json 开头也不要 ``` 结尾），不要任何前后缀文字：
                 {
                   "findings": [
                     {
@@ -323,15 +388,15 @@ public final class CodeReviewPrompts {
                       "title": "一句话概括",
                       "file": "<就用我给你的文件路径>",
                       "lineRange": "42-46",
-                      "description": "问题详细描述",
+                      "description": "问题详细描述（必须解释为什么违规）",
                       "suggestion": "修复建议",
-                      "codeSnippet": "<原代码片段>",
-                      "ruleRef": "【强制】【安全规约】"
+                      "codeSnippet": "<必须从原文复制的真实代码片段>",
+                      "ruleRef": "黄山版 X.Y.Z - 规约标题"
                     }
                   ]
                 }
 
-                findings 数量上限 15 条/文件，优先 HIGH/MEDIUM。
+                findings 数量上限 15 条/文件，优先 HIGH/MEDIUM，宁可少报也不要错报。
                 如该文件没有发现问题，返回 { "findings": [] }。
                 """;
     }

@@ -21,6 +21,7 @@ import com.socialflow.service.codeanalysis.CredentialService;
 import com.socialflow.service.codeanalysis.GitRepoService;
 import com.socialflow.service.codeanalysis.GitRepoService.FileDiff;
 import com.socialflow.service.codeanalysis.GitRepoService.SourceFile;
+import com.socialflow.service.codeanalysis.RuleLibraryHolder;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -53,6 +54,7 @@ public class CodeAnalysisAsyncRunner {
     private final GitRepoService gitRepoService;
     private final LlmRouter llmRouter;
     private final CredentialService credentialService;
+    private final RuleLibraryHolder ruleLibrary;
 
     @Value("${socialflow.ai.system-api-key:}")
     private String systemApiKey;
@@ -244,7 +246,7 @@ public class CodeAnalysisAsyncRunner {
                     LlmResponse resp = callLlm(userId, analysisId, stage,
                             "审查文件 " + fd.file,
                             CodeReviewPrompts.fileReviewSystem(), userPrompt);
-                    List<RepoAnalysisFinding> parsed = parseFindings(analysisId, resp.getContent(), fd.file);
+                    List<RepoAnalysisFinding> parsed = parseFindings(analysisId, resp.getContent(), fd.file, repo);
                     allFindings.addAll(parsed);
                 } catch (Exception e) {
                     log.warn("[CodeAnalysis] 审查文件 {} 失败: {}", fd.file, e.getMessage());
@@ -253,6 +255,11 @@ public class CodeAnalysisAsyncRunner {
 
             // 去重（同文件+同 title）
             List<RepoAnalysisFinding> dedupFindings = dedupFindings(allFindings);
+
+            // ============ 方案 E：self-check 二次复核 ============
+            updateProgress(analysisId, "SELF_CHECK", 80, "AI 自检 findings 置信度...");
+            dedupFindings = selfCheckFindings(userId, analysisId, dedupFindings);
+
             int high = (int) dedupFindings.stream().filter(f -> "HIGH".equals(f.getLevel())).count();
             int med = (int) dedupFindings.stream().filter(f -> "MEDIUM".equals(f.getLevel())).count();
             int low = dedupFindings.size() - high - med;
@@ -334,13 +341,18 @@ public class CodeAnalysisAsyncRunner {
                     LlmResponse resp = callLlm(userId, analysisId, stage,
                             "审查文件 " + fd.file,
                             CodeReviewPrompts.fileReviewSystem(), userPrompt);
-                    allFindings.addAll(parseFindings(analysisId, resp.getContent(), fd.file));
+                    allFindings.addAll(parseFindings(analysisId, resp.getContent(), fd.file, repo));
                 } catch (Exception e) {
                     log.warn("[CodeAnalysis] 审查文件 {} 失败: {}", fd.file, e.getMessage());
                 }
             }
 
             List<RepoAnalysisFinding> dedupFindings = dedupFindings(allFindings);
+
+            // 方案 E：self-check 二次复核
+            updateProgress(analysisId, "SELF_CHECK", 80, "AI 自检 findings 置信度...");
+            dedupFindings = selfCheckFindings(userId, analysisId, dedupFindings);
+
             int high = (int) dedupFindings.stream().filter(f -> "HIGH".equals(f.getLevel())).count();
             int med = (int) dedupFindings.stream().filter(f -> "MEDIUM".equals(f.getLevel())).count();
             int low = dedupFindings.size() - high - med;
@@ -493,12 +505,14 @@ public class CodeAnalysisAsyncRunner {
         }
     }
 
-    private List<RepoAnalysisFinding> parseFindings(Long analysisId, String content, String fallbackFile) {
+    private List<RepoAnalysisFinding> parseFindings(Long analysisId, String content, String fallbackFile,
+                                                    File repoRoot) {
         try {
             JsonNode root = parseJson(content);
             JsonNode findingsNode = root.get("findings");
             if (findingsNode == null || !findingsNode.isArray()) return List.of();
             List<RepoAnalysisFinding> list = new ArrayList<>();
+            int dropRule = 0, dropSnippet = 0, dropLine = 0;
             for (JsonNode f : findingsNode) {
                 RepoAnalysisFinding fe = new RepoAnalysisFinding();
                 fe.setAnalysisId(analysisId);
@@ -511,15 +525,96 @@ public class CodeAnalysisAsyncRunner {
                 fe.setDescription(getText(f, "description"));
                 fe.setSuggestion(getText(f, "suggestion"));
                 fe.setCodeSnippet(getText(f, "codeSnippet"));
-                // V13 已把 rule_ref 放宽到 VARCHAR(255)，这里依旧 truncate(250) 兜底
                 fe.setRuleRef(truncate(getText(f, "ruleRef"), 250));
                 fe.setStatus("UNRESOLVED");
+
+                // ============ 三层反向校验（A + B + C）============
+                // B：ruleRef 必须是黄山版 321 条里真实存在的编号
+                if (!ruleLibrary.isValidRuleRef(fe.getRuleRef())) {
+                    dropRule++;
+                    log.debug("[Validate] 丢弃 finding: ruleRef 不在白名单 ref={} title={}",
+                            fe.getRuleRef(), fe.getTitle());
+                    continue;
+                }
+                // A：codeSnippet 必须能在源文件中 contains 找到
+                if (!validateCodeSnippet(repoRoot, fe.getFile(), fe.getCodeSnippet())) {
+                    dropSnippet++;
+                    log.debug("[Validate] 丢弃 finding: codeSnippet 在原文中找不到 file={} title={}",
+                            fe.getFile(), fe.getTitle());
+                    continue;
+                }
+                // C：lineRange 对应行必须是真实代码（非注释/空行/纯花括号）
+                if (!validateLineRange(repoRoot, fe.getFile(), fe.getLineRange())) {
+                    dropLine++;
+                    log.debug("[Validate] 丢弃 finding: lineRange 指向注释/空行/纯括号 file={} line={} title={}",
+                            fe.getFile(), fe.getLineRange(), fe.getTitle());
+                    continue;
+                }
                 list.add(fe);
+            }
+            int total = findingsNode.size();
+            int kept = list.size();
+            if (dropRule + dropSnippet + dropLine > 0) {
+                log.info("[Validate] {} → {} 条 (丢: ruleRef={}, codeSnippet={}, lineRange={})",
+                        total, kept, dropRule, dropSnippet, dropLine);
             }
             return list;
         } catch (Exception e) {
             log.warn("[CodeAnalysis] 解析 findings 失败: {}", e.getMessage());
             return List.of();
+        }
+    }
+
+    // ============================================================
+    //   方案 A/B/C：三层 finding 反向校验
+    // ============================================================
+
+    /** A：codeSnippet 必须能在原文中找到（去除空白后比较）。snippet 为空也算 fail，强制 LLM 给。 */
+    private boolean validateCodeSnippet(File repoRoot, String filePath, String snippet) {
+        if (snippet == null || snippet.isBlank()) return false;
+        if (repoRoot == null) return true; // 无法校验时不丢
+        try {
+            File f = new File(repoRoot, filePath);
+            if (!f.isFile() || !f.canRead()) return true; // 读不到时不丢
+            String src = java.nio.file.Files.readString(f.toPath(), java.nio.charset.StandardCharsets.UTF_8);
+            // 标准化：去掉所有空白后比较，容忍 LLM 改空格/换行
+            String snipNorm = snippet.replaceAll("\\s+", "");
+            String srcNorm = src.replaceAll("\\s+", "");
+            // 至少前 30 个字符要在源文件里
+            String key = snipNorm.length() > 30 ? snipNorm.substring(0, 30) : snipNorm;
+            return srcNorm.contains(key);
+        } catch (Exception e) {
+            return true; // 读文件出错时不丢，避免误杀
+        }
+    }
+
+    /** C：lineRange 对应行必须是有内容的代码行（不是单纯注释/空行/单括号）。 */
+    private boolean validateLineRange(File repoRoot, String filePath, String lineRange) {
+        if (lineRange == null || lineRange.isBlank()) return true; // 没给行号不强校
+        if (repoRoot == null) return true;
+        try {
+            File f = new File(repoRoot, filePath);
+            if (!f.isFile() || !f.canRead()) return true;
+            // 解析 lineRange 头部第一个数字
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("(\\d+)").matcher(lineRange);
+            if (!m.find()) return true;
+            int line = Integer.parseInt(m.group(1));
+            if (line <= 0) return true;
+            // 读到对应行
+            List<String> lines = java.nio.file.Files.readAllLines(f.toPath(), java.nio.charset.StandardCharsets.UTF_8);
+            // 容忍 ±2 行偏移：在 [line-2, line+2] 范围内只要有"实际代码行"就算过
+            int from = Math.max(1, line - 2);
+            int to = Math.min(lines.size(), line + 2);
+            for (int i = from; i <= to; i++) {
+                String s = lines.get(i - 1).trim();
+                if (s.isEmpty()) continue;
+                if (s.startsWith("//") || s.startsWith("*") || s.startsWith("/*")) continue;
+                if (s.equals("{") || s.equals("}") || s.equals("};") || s.equals("})") || s.equals("});")) continue;
+                return true; // 找到一行真实代码
+            }
+            return false;
+        } catch (Exception e) {
+            return true; // 出错时不丢
         }
     }
 
@@ -532,6 +627,77 @@ public class CodeAnalysisAsyncRunner {
             dedup.putIfAbsent(key, f);
         }
         return new ArrayList<>(dedup.values());
+    }
+
+    /**
+     * 方案 E：Self-check —— 把当前 findings 整体喂给 LLM 让它以"质疑者"身份打分，
+     * confidence < 60 的 finding 丢弃。
+     *
+     * 失败时（LLM 错误/超时）原样返回，不影响主流程。
+     */
+    private List<RepoAnalysisFinding> selfCheckFindings(Long userId, Long analysisId,
+                                                        List<RepoAnalysisFinding> findings) {
+        if (findings == null || findings.isEmpty()) return findings;
+        // 大于 100 条不自检（成本太高），直接返回
+        if (findings.size() > 100) {
+            log.info("[SelfCheck] findings 数量 {} > 100，跳过自检", findings.size());
+            return findings;
+        }
+        try {
+            // 把 findings 简化为 LLM 看得懂的 JSON 数组
+            StringBuilder json = new StringBuilder("[\n");
+            for (int i = 0; i < findings.size(); i++) {
+                RepoAnalysisFinding f = findings.get(i);
+                if (i > 0) json.append(",\n");
+                json.append(String.format(
+                        "  {\"index\":%d,\"file\":%s,\"line\":%s,\"title\":%s,\"ruleRef\":%s,\"codeSnippet\":%s}",
+                        i,
+                        jsonStr(f.getFile()), jsonStr(f.getLineRange()),
+                        jsonStr(f.getTitle()), jsonStr(f.getRuleRef()),
+                        jsonStr(truncate(f.getCodeSnippet(), 300))));
+            }
+            json.append("\n]");
+
+            LlmResponse resp = callLlm(userId, analysisId, "SELF_CHECK", "二次复核 findings 置信度",
+                    CodeReviewPrompts.findingSelfCheckSystem(),
+                    CodeReviewPrompts.findingSelfCheckUser(json.toString()));
+
+            JsonNode root = parseJson(resp.getContent());
+            JsonNode checks = root.get("checks");
+            if (checks == null || !checks.isArray()) return findings;
+
+            // 默认全保留，被标记 false_positive 或 confidence<60 的丢弃
+            boolean[] keep = new boolean[findings.size()];
+            for (int i = 0; i < keep.length; i++) keep[i] = true;
+            int dropped = 0;
+            for (JsonNode c : checks) {
+                int idx = c.path("index").asInt(-1);
+                if (idx < 0 || idx >= findings.size()) continue;
+                int conf = c.path("confidence").asInt(100);
+                String verdict = c.path("verdict").asText("valid");
+                if ("false_positive".equalsIgnoreCase(verdict) || conf < 60) {
+                    keep[idx] = false;
+                    dropped++;
+                }
+            }
+            List<RepoAnalysisFinding> survivors = new ArrayList<>();
+            for (int i = 0; i < findings.size(); i++) {
+                if (keep[i]) survivors.add(findings.get(i));
+            }
+            log.info("[SelfCheck] {} → {} 条（丢弃 {} 条置信度低/误判）",
+                    findings.size(), survivors.size(), dropped);
+            return survivors;
+        } catch (Exception e) {
+            log.warn("[SelfCheck] 自检失败，跳过过滤: {}", e.getMessage());
+            return findings;
+        }
+    }
+
+    /** JSON 字符串转义辅助（双引号包裹 + 转义内部双引号 + 换行） */
+    private static String jsonStr(String s) {
+        if (s == null) return "null";
+        return "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"")
+                       .replace("\n", "\\n").replace("\r", "\\r") + "\"";
     }
 
     /** 把 findings 简要描述拼起来给最终 merge LLM 调用用 */
