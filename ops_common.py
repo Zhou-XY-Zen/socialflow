@@ -132,8 +132,13 @@ def start_backend(ssh, profile="prod"):
 
     这样主 ssh 会话完全不受影响，后续的 wait_health / smoke_test 都能正常走。
     """
+    # 黄山版 4.10：源码不放明文密码 → 启动时通过环境变量注入。
+    # /opt/socialflow/.env 是服务器本地维护的密钥文件，权限 600，不进 git。
+    # set -a 让后续变量定义自动 export；source 后 set +a 关闭。
+    env_load = f"set -a; [ -f {REMOTE_DIR}/.env ] && . {REMOTE_DIR}/.env; set +a; "
     start_cmd = (
         f"cd {REMOTE_DIR} && "
+        f"{env_load}"
         f"SPRING_PROFILES_ACTIVE={profile} "
         f"nohup java -Xms512m -Xmx1536m "
         f"-jar socialflow.jar > {REMOTE_DIR}/logs/app.log 2>&1 < /dev/null & "
