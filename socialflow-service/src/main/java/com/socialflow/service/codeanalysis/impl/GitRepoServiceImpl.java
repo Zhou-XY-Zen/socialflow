@@ -481,7 +481,12 @@ public class GitRepoServiceImpl implements GitRepoService {
                         byte[] bytes;
                         try {
                             bytes = Files.readAllBytes(p);
-                        } catch (IOException e) { return; }
+                        } catch (IOException e) {
+                            // 黄山版 2.2.2：catch 必须记日志。
+                            // 单文件读失败不影响整体扫描（其他文件继续），所以仅 warn 后跳过。
+                            log.warn("[Git] 读取文件失败，跳过: path={}, err={}", p, e.getMessage());
+                            return;
+                        }
                         // 按字节截断保留头部，保留完整行结尾
                         String content;
                         if (bytes.length <= perFileMaxBytes) {

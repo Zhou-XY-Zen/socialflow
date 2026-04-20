@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.annotation.FieldFill;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableLogic;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
@@ -17,7 +18,8 @@ import java.time.LocalDateTime;
  * 一次分析可能涉及多次 LLM 调用（分模块审阅 + 分文件审查 + 最终汇总），
  * 每次调用都落一条 log，便于分析详情页展开链路 + 仪表盘聚合统计。
  *
- * 本表不走 BaseEntity 的软删除（日志类表不删），只有 createTime。
+ * 黄山版 5.1.5：表必备 id / create_time / update_time / is_deleted 四字段，本类已对齐。
+ * 软删除（is_deleted=1）一般用于人工误录或回收期清理；正常日志不删。
  */
 @Data
 @TableName("llm_call_log")
@@ -51,4 +53,12 @@ public class LlmCallLog implements Serializable {
 
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createTime;
+
+    /** 黄山版 5.1.5：表必备 update_time */
+    @TableField(fill = FieldFill.INSERT_UPDATE)
+    private LocalDateTime updateTime;
+
+    /** 黄山版 5.1.5：表必备 is_deleted（逻辑删除：0 未删 / 1 已删） */
+    @TableLogic
+    private Integer isDeleted;
 }

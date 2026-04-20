@@ -6,6 +6,10 @@ import com.socialflow.model.vo.RepoCommitVO;
 import java.io.File;
 import java.util.List;
 
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
 /**
  * Git 仓库操作门面 —— 屏蔽 JGit 底层细节，提供代码分析所需的高层操作：
  *   - 克隆仓库到临时目录
@@ -80,14 +84,19 @@ public interface GitRepoService {
 
     // ==================== 全量分析支持 ====================
 
-    /** 单个源文件（扫描时带原文） */
+    /**
+     * 单个源文件（扫描时带原文）。
+     * 黄山版 1.4.1：POJO 类必须重写 toString → 用 Lombok @Data 自动生成。
+     */
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
     class SourceFile {
-        public String path;      // 相对仓库根的路径
-        public String content;   // 文件内容（可能已截断）
+        /** 相对仓库根的路径 */
+        public String path;
+        /** 文件内容（可能已截断） */
+        public String content;
         public int lines;
-        public SourceFile(String path, String content, int lines) {
-            this.path = path; this.content = content; this.lines = lines;
-        }
     }
 
     /**
@@ -100,13 +109,14 @@ public interface GitRepoService {
             File repoDir, java.util.List<String> excludeDirs, int perFileMaxBytes);
 
     /** 一个文件的 diff（不截断） */
+    /** 单文件 diff。黄山版 1.4.1：用 @Data 自动生成 toString/equals/hashCode。 */
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
     class FileDiff {
         public String file;
         public String diff;
         public int bytes;
-        public FileDiff(String file, String diff, int bytes) {
-            this.file = file; this.diff = diff; this.bytes = bytes;
-        }
     }
 
     /** 读取某次 commit 的 diff，按文件切分；每个文件单独一条，不截断 */

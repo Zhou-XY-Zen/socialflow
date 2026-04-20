@@ -134,7 +134,7 @@ public class CodeAnalysisAsyncRunner {
 
             RepoAnalysis update = new RepoAnalysis();
             update.setId(analysisId);
-            update.setStatus("SUCCESS");
+            update.setStatus(RepoAnalysis.STATUS_SUCCESS);
             update.setStage("DONE");
             update.setProgressPercent(100);
             update.setProgressMessage("分析完成");
@@ -249,7 +249,10 @@ public class CodeAnalysisAsyncRunner {
                     List<RepoAnalysisFinding> parsed = parseFindings(analysisId, resp.getContent(), fd.file, repo);
                     allFindings.addAll(parsed);
                 } catch (Exception e) {
-                    log.warn("[CodeAnalysis] 审查文件 {} 失败: {}", fd.file, e.getMessage());
+                    // 黄山版 2.2.2：catch 必须含异常对象到日志。
+                    // 单文件审查失败属于业务可降级故障：跳过此文件继续审查其他文件，
+                    // 整体结果中会少一份子审查 → 在 progress 里也累加失败数让用户感知。
+                    log.error("[CodeAnalysis] 审查文件 {} 失败，跳过此文件继续审查其他文件", fd.file, e);
                 }
             }
 
@@ -281,7 +284,7 @@ public class CodeAnalysisAsyncRunner {
             updateProgress(analysisId, "RENDERING", 95, "写入结果...");
             RepoAnalysis upd = new RepoAnalysis();
             upd.setId(analysisId);
-            upd.setStatus("SUCCESS");
+            upd.setStatus(RepoAnalysis.STATUS_SUCCESS);
             upd.setStage("DONE");
             upd.setProgressPercent(100);
             upd.setProgressMessage("分析完成");
@@ -343,7 +346,8 @@ public class CodeAnalysisAsyncRunner {
                             CodeReviewPrompts.fileReviewSystem(), userPrompt);
                     allFindings.addAll(parseFindings(analysisId, resp.getContent(), fd.file, repo));
                 } catch (Exception e) {
-                    log.warn("[CodeAnalysis] 审查文件 {} 失败: {}", fd.file, e.getMessage());
+                    // 黄山版 2.2.2：catch 必须含异常对象到日志（diff 审查同 commit 审查的容错策略）
+                    log.error("[CodeAnalysis] 审查 diff 文件 {} 失败，跳过此文件继续审查其他文件", fd.file, e);
                 }
             }
 
@@ -374,7 +378,7 @@ public class CodeAnalysisAsyncRunner {
             updateProgress(analysisId, "RENDERING", 95, "写入结果...");
             RepoAnalysis upd = new RepoAnalysis();
             upd.setId(analysisId);
-            upd.setStatus("SUCCESS");
+            upd.setStatus(RepoAnalysis.STATUS_SUCCESS);
             upd.setStage("DONE");
             upd.setProgressPercent(100);
             upd.setProgressMessage("分析完成");
@@ -472,7 +476,7 @@ public class CodeAnalysisAsyncRunner {
     private void updateProgress(Long id, String stage, int percent, String msg) {
         RepoAnalysis u = new RepoAnalysis();
         u.setId(id);
-        u.setStatus("RUNNING");
+        u.setStatus(RepoAnalysis.STATUS_RUNNING);
         u.setStage(stage);
         u.setProgressPercent(percent);
         u.setProgressMessage(msg);
@@ -482,7 +486,7 @@ public class CodeAnalysisAsyncRunner {
     private void markFailed(Long id, String err) {
         RepoAnalysis u = new RepoAnalysis();
         u.setId(id);
-        u.setStatus("FAILED");
+        u.setStatus(RepoAnalysis.STATUS_FAILED);
         u.setProgressPercent(100);
         u.setErrorMsg(truncate(err, 1000));
         u.setLlmTokensUsed(sumTokens(id));

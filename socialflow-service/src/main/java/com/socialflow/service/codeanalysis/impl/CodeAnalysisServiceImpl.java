@@ -111,7 +111,7 @@ public class CodeAnalysisServiceImpl implements CodeAnalysisService {
         a.setUserId(userId);
         a.setGitUrl(dto.getGitUrl());
         a.setAnalysisType(type);
-        a.setStatus("PENDING");
+        a.setStatus(RepoAnalysis.STATUS_PENDING);
         a.setStage("INIT");
         a.setProgressPercent(0);
         a.setProgressMessage("已提交，等待调度");
@@ -340,7 +340,7 @@ public class CodeAnalysisServiceImpl implements CodeAnalysisService {
         vo.setLlmCallsMonthly(monthLogs.size());
         // 本月成功 SUCCESS 的分析数（用来算平均每次 token）
         long monthlySuccess = all.stream()
-                .filter(a -> "SUCCESS".equals(a.getStatus())
+                .filter(a -> RepoAnalysis.STATUS_SUCCESS.equals(a.getStatus())
                         && a.getCreateTime() != null && a.getCreateTime().isAfter(monthStart0))
                 .count();
         vo.setTokensPerAnalysisAvg(monthlySuccess > 0 ? (int) (tokensMonthly / monthlySuccess) : 0);

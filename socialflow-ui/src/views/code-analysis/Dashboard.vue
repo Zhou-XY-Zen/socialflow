@@ -78,12 +78,16 @@ function extractRepoName(url: string) {
   return i >= 0 ? u.slice(i + 1) : u
 }
 
+// 黄山版 1.2.1：避免魔法值。Token 量级阈值集中常量化。
+const TOKEN_K = 1000
+const TOKEN_M = 1_000_000
+
 /** 把 Token 数字格式化为 K / M 展示 */
 function fmtTokens(n?: number) {
   if (n == null || n === 0) return '0'
-  if (n < 1000) return String(n)
-  if (n < 1_000_000) return (n / 1000).toFixed(1) + 'K'
-  return (n / 1_000_000).toFixed(2) + 'M'
+  if (n < TOKEN_K) return String(n)
+  if (n < TOKEN_M) return (n / TOKEN_K).toFixed(1) + 'K'
+  return (n / TOKEN_M).toFixed(2) + 'M'
 }
 </script>
 

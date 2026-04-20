@@ -17,6 +17,12 @@ import lombok.EqualsAndHashCode;
 @TableName("repo_analysis")
 public class RepoAnalysis extends BaseEntity {
 
+    // 黄山版 1.2.1：避免魔法值。状态字符串集中常量化，全项目复用。
+    public static final String STATUS_PENDING = "PENDING";
+    public static final String STATUS_RUNNING = "RUNNING";
+    public static final String STATUS_SUCCESS = "SUCCESS";
+    public static final String STATUS_FAILED  = "FAILED";
+
     private Long userId;
     private String gitUrl;
     private String branch;
