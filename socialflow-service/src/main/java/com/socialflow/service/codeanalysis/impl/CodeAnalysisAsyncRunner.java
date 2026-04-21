@@ -131,6 +131,15 @@ public class CodeAnalysisAsyncRunner {
     private static final java.util.regex.Pattern MERMAID_HEADER_PATTERN =
             java.util.regex.Pattern.compile(
                     "(?m)^\\s*(graph\\s+(?:TD|LR|BT|RL|TB)|sequenceDiagram|flowchart\\s+\\w+|classDiagram|stateDiagram(?:-v2)?)\\b");
+    /** FINAL PART1 的 techStack 分隔符块（DOTALL 让 . 匹配换行）*/
+    private static final java.util.regex.Pattern TECH_STACK_PATTERN =
+            java.util.regex.Pattern.compile(
+                    "<<<TECH_STACK>>>\\s*(\\[[\\s\\S]*?\\])\\s*<<<END_TECH_STACK>>>",
+                    java.util.regex.Pattern.DOTALL);
+    /** 整份响应外层 ``` / ```md / ```markdown 围栏（偶尔 LLM 不听话多包一层）*/
+    private static final java.util.regex.Pattern OUTER_FENCE_PATTERN =
+            java.util.regex.Pattern.compile(
+                    "(?s)^\\s*```(?:md|markdown)?\\s*\\n(.*?)\\n```\\s*$");
     /** lineRange 解析正则 */
     private static final java.util.regex.Pattern LINE_RANGE_PATTERN =
             java.util.regex.Pattern.compile("(\\d+)");
@@ -240,57 +249,58 @@ public class CodeAnalysisAsyncRunner {
             final String finalUserReq = userReq;
             final String finalModuleSummaries = moduleSummariesJoined;
 
-            CompletableFuture<JsonNode> p1Future = CompletableFuture.supplyAsync(() -> {
+            // 改造：FINAL 不再用 JSON 外壳 —— DeepSeek max_tokens=8192 装不下 JSON+7000 字中文，
+            // 截断后 JSON 无法解析导致 summary 降级（历史事件：2046619961/2046631917）。
+            // 新协议：PART1 用 <<<TECH_STACK>>>...<<<END_TECH_STACK>>> 分隔符 + Markdown 正文；
+            //        PART2/MERMAID 直接纯文本输出。
+            CompletableFuture<String> p1Future = CompletableFuture.supplyAsync(() -> {
                 try {
                     LlmResponse r = callLlm(userId, analysisId, "FINAL_PART1", "汇总 Part 1（上半）",
                             CodeReviewPrompts.finalSummaryPart1System(),
                             CodeReviewPrompts.finalSummaryPart1User(repoName, tree, langStatsText,
                                     finalModuleSummaries, finalUserReq));
-                    return parseJsonSafe(r.getContent());
+                    return r.getContent();
                 } catch (Exception e) {
                     log.warn("[CodeAnalysis] FINAL Part1 失败: {}", e.getMessage());
-                    return parseJsonSafe("{}");
+                    return "";
                 }
             }, moduleSummaryExecutor);
 
-            CompletableFuture<JsonNode> p2Future = CompletableFuture.supplyAsync(() -> {
+            CompletableFuture<String> p2Future = CompletableFuture.supplyAsync(() -> {
                 try {
                     // PART2 不等 PART1，传空字符串 —— system prompt 已约束职责分工
                     LlmResponse r = callLlm(userId, analysisId, "FINAL_PART2", "汇总 Part 2（下半）",
                             CodeReviewPrompts.finalSummaryPart2System(),
                             CodeReviewPrompts.finalSummaryPart2User(repoName, "", finalModuleSummaries, finalUserReq));
-                    return parseJsonSafe(r.getContent());
+                    return r.getContent();
                 } catch (Exception e) {
                     log.warn("[CodeAnalysis] FINAL Part2 失败: {}", e.getMessage());
-                    return parseJsonSafe("{}");
+                    return "";
                 }
             }, moduleSummaryExecutor);
 
             CompletableFuture.allOf(p1Future, p2Future).join();
 
-            String part1Md = "";
-            JsonNode techStack = null;
-            JsonNode n1 = p1Future.join();
-            if (!n1.isMissingNode()) {
-                part1Md = getText(n1, "summaryMd");
-                techStack = n1.get("techStack");
-            }
-            String part2Md = "";
-            JsonNode n2 = p2Future.join();
-            if (!n2.isMissingNode()) part2Md = getText(n2, "summaryMd");
+            // PART1：提取 <<<TECH_STACK>>>...<<<END_TECH_STACK>>> 段（若存在），剩余就是 Markdown 正文
+            String p1Raw = p1Future.join();
+            TechStackExtract extract = extractTechStack(p1Raw);
+            String part1Md = stripOuterFence(extract.markdown);
+            JsonNode techStack = extract.techStack;
+
+            // PART2：整个响应就是 Markdown 正文，只需 strip 最外层围栏（LLM 偶尔会套 ```markdown）
+            String part2Md = stripOuterFence(p2Future.join());
 
             // 合成完整 summaryMd
             String summaryMd = assembleFinalSummary(part1Md, part2Md, moduleSummariesJoined);
 
-            // Step 3: Mermaid 独立生成（基于完整 summary 画图，质量更好）
+            // Step 3: Mermaid 独立生成 —— 输出直接是 mermaid 源码（可能带 ```mermaid 围栏），sanitizeMermaid 内部处理围栏
             updateProgress(analysisId, "FINAL", 93, "生成核心架构 Mermaid 流程图...");
             String mermaid = null;
             try {
                 LlmResponse p3 = callLlm(userId, analysisId, "FINAL_MERMAID", "生成 Mermaid 架构图",
                         CodeReviewPrompts.finalMermaidSystem(),
                         CodeReviewPrompts.finalMermaidUser(repoName, summaryMd));
-                JsonNode n3 = parseJsonSafe(p3.getContent());
-                if (!n3.isMissingNode()) mermaid = sanitizeMermaid(getText(n3, "mermaidCode"));
+                mermaid = sanitizeMermaid(p3.getContent());
             } catch (Exception e) {
                 log.warn("[CodeAnalysis] FINAL Mermaid 失败: {}", e.getMessage());
             }
@@ -470,6 +480,37 @@ public class CodeAnalysisAsyncRunner {
         }
         log.info("[CodeAnalysis] 源文件过滤：{} 个 → {} 个（{} 个模块）", totalBefore, totalAfter, out.size());
         return out;
+    }
+
+    /** PART1 响应解析结果：抽出 techStack JSON 数组 + 剩余 Markdown 正文 */
+    private record TechStackExtract(JsonNode techStack, String markdown) {}
+
+    /**
+     * 从 PART1 响应里提取 <<<TECH_STACK>>>...<<<END_TECH_STACK>>> 段。
+     *   - 命中：返回 (techStack JsonNode, 去掉分隔符段后的剩余 Markdown)
+     *   - 未命中：techStack=null，markdown=原文（向后兼容 —— 即使 LLM 漏了分隔符，正文仍可用）
+     * 分隔符段位置不限，通常在开头；正则全局扫一次即可。
+     */
+    private TechStackExtract extractTechStack(String raw) {
+        if (raw == null || raw.isBlank()) return new TechStackExtract(null, "");
+        java.util.regex.Matcher m = TECH_STACK_PATTERN.matcher(raw);
+        if (!m.find()) return new TechStackExtract(null, raw.trim());
+        String jsonArr = m.group(1).trim();
+        JsonNode parsed = parseJsonSafe(jsonArr);
+        // 把整个分隔符段从正文里剥掉（含前后换行），保留干净 Markdown
+        String md = new StringBuilder(raw.length())
+                .append(raw, 0, m.start())
+                .append(raw, m.end(), raw.length())
+                .toString()
+                .trim();
+        return new TechStackExtract(parsed.isMissingNode() ? null : parsed, md);
+    }
+
+    /** 如果整份文本被 ``` / ```md / ```markdown 围栏包裹，剥掉外层围栏；否则返回原文 */
+    private static String stripOuterFence(String s) {
+        if (s == null || s.isBlank()) return s == null ? "" : s;
+        java.util.regex.Matcher m = OUTER_FENCE_PATTERN.matcher(s.trim());
+        return m.matches() ? m.group(1).trim() : s.trim();
     }
 
     /**
@@ -1315,6 +1356,20 @@ public class CodeAnalysisAsyncRunner {
     static String sanitizeMermaid(String raw) {
         if (raw == null || raw.isBlank()) return null;
         String s = raw.trim();
+
+        // 0) 剥离 ```mermaid ... ``` 围栏（新协议：LLM 直接返回源码，但常带围栏）。
+        //    支持 ```mermaid / ``` 开头；匹配到第一段围栏内部即可。
+        java.util.regex.Matcher fence = java.util.regex.Pattern.compile(
+                "(?s)```(?:mermaid)?\\s*\\n(.*?)\\n```").matcher(s);
+        if (fence.find()) {
+            s = fence.group(1).trim();
+        }
+        // 兼容：整段就是围栏但没匹配上（例如结尾 ``` 缺失），按行剥离前缀
+        if (s.startsWith("```")) {
+            int firstNl = s.indexOf('\n');
+            if (firstNl > 0) s = s.substring(firstNl + 1).trim();
+            if (s.endsWith("```")) s = s.substring(0, s.length() - 3).trim();
+        }
 
         // 1) 去重：找第二份 `graph TD` / `sequenceDiagram` / `flowchart` 声明
         java.util.regex.Matcher dup = MERMAID_HEADER_PATTERN.matcher(s);

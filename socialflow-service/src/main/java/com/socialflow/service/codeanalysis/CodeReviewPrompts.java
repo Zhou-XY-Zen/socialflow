@@ -348,18 +348,24 @@ public final class CodeReviewPrompts {
                 至少画出 1-2 条端到端流程。比如"用户触发 AI 生成 → 内容落库 → 推送队列"
                 （每条流程 500-800 字，可用伪代码或步骤列表）
 
+                ⚠️ 【输出格式 —— 必须严格遵守】
+                不要 JSON 外壳（不要 {"summaryMd":...}）。第一行起，先输出 techStack 段，紧接
+                Markdown 正文。techStack 段格式：
+
+                <<<TECH_STACK>>>
+                ["Java 21","Spring Boot 3","Vue 3","MySQL 8","Redis","Nacos"]
+                <<<END_TECH_STACK>>>
+
+                ## 项目定位
+                （Markdown 正文从这里开始）...
+
                 ⚠️ 【硬性要求】
-                1. 总字数 5000-6500 字（中文）
+                1. Markdown 正文总字数 5000-6500 字（中文）
                 2. 引用类/方法时必须带包路径：`com.socialflow.service.codeanalysis.CodeAnalysisService#trigger`
                 3. 代码片段用 ```java ... ``` 包裹，5-15 行，真实存在
                 4. 绝不虚构不存在的类
-                5. 以严格 JSON 返回，**不要 markdown 围栏**：
-                   {
-                     "summaryMd": "<Part 1 的完整 Markdown>",
-                     "projectName": "...",
-                     "oneLinePositioning": "一句话不超过 40 字",
-                     "techStack": ["Java 21", "Spring Boot 3", ...]
-                   }
+                5. techStack 段必须是合法 JSON 数组；分隔符拼写严格：<<<TECH_STACK>>> / <<<END_TECH_STACK>>>
+                6. 整份输出不要用 ``` 围栏包裹（代码片段内部可以）
                 """;
     }
 
@@ -410,14 +416,15 @@ public final class CodeReviewPrompts {
                 至少列 5-8 条。每条：问题 + 触发场景 + 建议修复
                 （800-1200 字）
 
+                ⚠️ 【输出格式 —— 必须严格遵守】
+                直接输出 Markdown 正文，**不要任何 JSON 外壳，也不要 ``` 围栏包整个报告**。
+                第一行就从 `## 模块深度解读` 开始。代码片段内部可以用 ```java 包裹。
+
                 ⚠️ 【硬性要求】
-                1. 总字数 5000-7000 字（中文）
+                1. Markdown 正文总字数 5000-7000 字（中文）
                 2. 每个模块深度解读必须有真实代码块
                 3. 与 Part 1 内容不重复，而是"在其基础上深入"
-                4. 以严格 JSON 返回：
-                   {
-                     "summaryMd": "<Part 2 的完整 Markdown>"
-                   }
+                4. 输出结构：## 模块深度解读 → ## 关键文件导读 → ## 部署与运行 → ## 潜在改进 / 坑
                 """;
     }
 
@@ -464,10 +471,15 @@ public final class CodeReviewPrompts {
                 - 主要调用方向（带箭头标签说明是什么调用）
                 - 异步队列 / 定时任务如果有也画进来
 
-                ⚠️ 以严格 JSON 返回：
-                {
-                  "mermaidCode": "graph TD\\n    ..."
-                }
+                ⚠️ 输出格式：**直接输出 Mermaid 源码，不要 JSON 外壳**。可选用 ```mermaid ... ```
+                围栏包裹，也可以第一行直接是 `graph TD`。绝对不要 `{"mermaidCode": "..."}` 这种 JSON。
+
+                示例正确输出：
+                ```mermaid
+                graph TD
+                    A["用户"] --> B["API 层"]
+                    ...
+                ```
                 """;
     }
 
@@ -478,7 +490,7 @@ public final class CodeReviewPrompts {
                 ## 项目完整报告（你基于此画架构图）
                 %s
 
-                请按 system prompt 输出 JSON { "mermaidCode": "..." }。
+                请按 system prompt 输出 Mermaid 源码（直接 graph TD 或 ```mermaid 围栏）。
                 """.formatted(repoName, fullSummary);
     }
 
