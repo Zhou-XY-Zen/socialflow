@@ -391,10 +391,11 @@ public final class CodeReviewPrompts {
                               userRequirementsBlock(userRequirements));
     }
 
-    /** FINAL Step 2：summaryMd 下半部分 system prompt */
+    /** FINAL Step 2：模块深度 + 关键文件。拆出了"部署与运行 / 潜在改进"到 PART3，
+     *  避免单次 completion 顶 8192 max_tokens 导致末尾章节被截断。 */
     public static String finalSummaryPart2System() {
         return """
-                接上一段报告（Part 1）。你现在要产出 **下半部分**（Part 2），专注以下章节：
+                你是资深技术架构师。请输出项目报告的 **Part 2**，只写以下两个章节：
 
                 ## 模块深度解读
                 为每个模块单独写一段 800-1200 字的深度解读。每段必须：
@@ -402,37 +403,28 @@ public final class CodeReviewPrompts {
                 - 列出 5-8 个关键类，每个类注明**完整包路径**和一句话作用
                 - 挑 1-2 个"最核心方法"贴出 5-15 行真实代码（从模块摘要里能推出来的）
                 - 指出该模块的"扩展点"：想替换/增强时从哪里介入
-                （总字数 4000-5500 字）
+                （总字数 3500-5000 字）
 
                 ## 关键文件导读
                 列 10-15 个新人必读文件，每个：路径 + 为什么值得看 + 该文件里的核心函数/类
                 （每项 150-250 字，共 1500-2500 字）
-
-                ## 部署与运行
-                启动命令、依赖服务（MySQL/Redis/Nacos...）、环境变量、常见启动报错
-                （600-1000 字）
-
-                ## 潜在改进 / 坑
-                至少列 5-8 条。每条：问题 + 触发场景 + 建议修复
-                （800-1200 字）
 
                 ⚠️ 【输出格式 —— 必须严格遵守】
                 直接输出 Markdown 正文，**不要任何 JSON 外壳，也不要 ``` 围栏包整个报告**。
                 第一行就从 `## 模块深度解读` 开始。代码片段内部可以用 ```java 包裹。
 
                 ⚠️ 【硬性要求】
-                1. Markdown 正文总字数 5000-7000 字（中文）
+                1. Markdown 正文总字数 4500-6000 字（中文），严禁超过 6500 字以免被截断
                 2. 每个模块深度解读必须有真实代码块
-                3. 与 Part 1 内容不重复，而是"在其基础上深入"
-                4. 输出结构：## 模块深度解读 → ## 关键文件导读 → ## 部署与运行 → ## 潜在改进 / 坑
+                3. 不要写 Part 1 / Part 3 的职责章节（定位/架构/数据流/部署/改进）
+                4. 输出结构只有两章：## 模块深度解读 → ## 关键文件导读
                 """;
     }
 
     /**
-     * FINAL Part2 与 Part1 **并行执行**（见 CodeAnalysisAsyncRunner），
-     * 因此这里拿不到 Part1 的产物。通过 system prompt 划分职责（Part1 讲定位/架构/数据流，
-     * Part2 讲模块深度/关键文件/部署/改进）避免重复。`part1Summary` 参数保留以兼容老调用点，
-     * 非空时仍作为上下文注入；空串时直接省略该段。
+     * FINAL Part2 与 Part1/Part3 **并行执行**（见 CodeAnalysisAsyncRunner），
+     * 因此这里拿不到 Part1 的产物。通过 system prompt 划分职责避免重复。
+     * `part1Summary` 参数保留以兼容老调用点，非空时仍作为上下文注入；空串时直接省略该段。
      */
     public static String finalSummaryPart2User(String repoName, String part1Summary,
                                                String moduleSummariesJoined,
@@ -446,9 +438,47 @@ public final class CodeReviewPrompts {
                 ## 各模块完整摘要（供深度展开时引用真实类名）
                 %s
                 %s
-                按 system prompt 的职责分工输出 Part 2 JSON —— 只写模块深度解读 / 关键文件导读 / 部署运行 / 潜在改进，不要写 Part 1 负责的定位/架构/数据流。
+                按 system prompt 输出 Part 2 Markdown —— 只写"模块深度解读"和"关键文件导读"两章。
                 """.formatted(repoName, part1Block, moduleSummariesJoined,
                               userRequirementsBlock(userRequirements));
+    }
+
+    /** FINAL Step 2b（PART3）：部署与运行 + 潜在改进 —— 两个短章节独立一次调用，
+     *  避免被 PART2 挤占 max_tokens。本身产出 1000-1800 字，远低于 8192 上限。 */
+    public static String finalSummaryPart3System() {
+        return """
+                你是资深技术架构师。请输出项目报告的 **Part 3**，只写以下两个章节：
+
+                ## 部署与运行
+                启动命令、依赖服务（MySQL/Redis/Nacos 等）、必需环境变量、常见启动报错与排查
+                （600-1000 字）
+
+                ## 潜在改进 / 坑
+                至少列 5-8 条。每条：问题一句话 + 触发场景 + 建议修复（带文件/类名更好）
+                （800-1200 字）
+
+                ⚠️ 【输出格式 —— 必须严格遵守】
+                直接输出 Markdown 正文，**不要任何 JSON 外壳，也不要 ``` 围栏包整个报告**。
+                第一行就从 `## 部署与运行` 开始。
+
+                ⚠️ 【硬性要求】
+                1. Markdown 正文总字数 1400-2200 字（中文）
+                2. 改进章节要基于代码里看得到的实际问题，不要泛泛而谈
+                3. 不要写 Part 1 / Part 2 的职责章节
+                4. 输出结构只有两章：## 部署与运行 → ## 潜在改进 / 坑
+                """;
+    }
+
+    public static String finalSummaryPart3User(String repoName, String moduleSummariesJoined,
+                                               String userRequirements) {
+        return """
+                仓库: %s
+
+                ## 各模块完整摘要（用于提炼部署依赖和潜在问题）
+                %s
+                %s
+                按 system prompt 输出 Part 3 Markdown —— 只写"部署与运行"和"潜在改进"两章。
+                """.formatted(repoName, moduleSummariesJoined, userRequirementsBlock(userRequirements));
     }
 
     /** FINAL Step 3：Mermaid 专用 system prompt */
