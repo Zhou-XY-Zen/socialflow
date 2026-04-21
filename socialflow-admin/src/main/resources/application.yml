@@ -241,16 +241,18 @@ resilience4j:
   circuitbreaker:
     instances:
       llm-deepseek: &llm-cb
-        # 只对"真实失败"熔断；LLM 调用本就慢（项目概览每次 40-180s 正常），
-        # 不启用 slow-call 熔断，否则连续几次 200s 的正常调用会误触发 OPEN
+        # 【关键】只对"真实失败"熔断。LLM 项目概览每次调用 40-180s 是正常的。
+        # 注意 Resilience4j 默认 slow-call-duration-threshold=60s, rate-threshold=100,
+        # 意味着"即使不配 slow-call-*"，10 次连续 >60s 的成功调用仍会触发 OPEN。
+        # 必须把阈值提到永远达不到的量级（10 分钟）才算真正禁用。
         sliding-window-size: 20
         minimum-number-of-calls: 10
         failure-rate-threshold: 60
-        # 15s 后自动半开试探，加速恢复
+        slow-call-duration-threshold: 10m
+        slow-call-rate-threshold: 100
         wait-duration-in-open-state: 15s
         permitted-number-of-calls-in-half-open-state: 3
         automatic-transition-from-open-to-half-open-enabled: true
-        # 不把业务异常计入失败
         ignore-exceptions:
           - com.socialflow.common.exception.GuardrailException
           - com.socialflow.common.exception.QuotaExceededException
