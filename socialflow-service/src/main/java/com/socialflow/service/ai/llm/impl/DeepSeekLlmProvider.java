@@ -55,7 +55,8 @@ public class DeepSeekLlmProvider implements LlmProviderService {
                 .responseTimeout(java.time.Duration.ofSeconds(300));
         this.webClient = webClientBuilder
                 .clientConnector(new org.springframework.http.client.reactive.ReactorClientHttpConnector(httpClient))
-                .codecs(c -> c.defaultCodecs().maxInMemorySize(4 * 1024 * 1024))
+                // 代码分析 FINAL 阶段响应可能含数 MB 的 summaryMd + Mermaid，4MB 太紧 → 16MB
+                .codecs(c -> c.defaultCodecs().maxInMemorySize(16 * 1024 * 1024))
                 .build();
     }
 

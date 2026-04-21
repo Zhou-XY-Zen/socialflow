@@ -55,7 +55,8 @@ public class QwenLlmProvider implements LlmProviderService {
                 .responseTimeout(java.time.Duration.ofSeconds(120));
         this.webClient = webClientBuilder
                 .clientConnector(new org.springframework.http.client.reactive.ReactorClientHttpConnector(httpClient))
-                .codecs(c -> c.defaultCodecs().maxInMemorySize(4 * 1024 * 1024))
+                // 代码分析场景响应较大，16MB 上限
+                .codecs(c -> c.defaultCodecs().maxInMemorySize(16 * 1024 * 1024))
                 .build();
     }
 

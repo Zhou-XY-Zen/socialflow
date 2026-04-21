@@ -92,7 +92,7 @@ public class GlmLlmProvider implements LlmProviderService {
     public GlmLlmProvider(WebClient.Builder webClientBuilder) {
         this.webClient = webClientBuilder
                 .codecs(configurer -> configurer.defaultCodecs()
-                        .maxInMemorySize(4 * 1024 * 1024))  // 响应体最大 4MB，防止大响应撑爆内存
+                        .maxInMemorySize(16 * 1024 * 1024))  // 响应体最大 16MB（代码分析 FINAL 阶段响应很大）
                 .build();
     }
 

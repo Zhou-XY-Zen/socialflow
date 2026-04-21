@@ -200,10 +200,18 @@ resilience4j:
         max-attempts: 3
         wait-duration: 1s
         exponential-backoff-multiplier: 2
+        # 覆盖所有瞬时网络错 —— IOException 已含大多数，但 Netty 的部分异常不继承 IOException
         retry-exceptions:
           - java.io.IOException
           - java.util.concurrent.TimeoutException
           - com.socialflow.common.exception.AiCallException
+          # Reactor Netty 专用异常（都不继承 IOException）
+          - io.netty.handler.timeout.ReadTimeoutException
+          - io.netty.handler.timeout.WriteTimeoutException
+          - reactor.netty.http.client.PrematureCloseException
+          # JDK 超时 / 关闭异常
+          - java.net.SocketTimeoutException
+          - java.nio.channels.ClosedChannelException
         ignore-exceptions:
           - com.socialflow.common.exception.GuardrailException
           - com.socialflow.common.exception.QuotaExceededException

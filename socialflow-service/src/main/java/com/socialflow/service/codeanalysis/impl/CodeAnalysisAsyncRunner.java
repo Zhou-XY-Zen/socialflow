@@ -162,7 +162,18 @@ public class CodeAnalysisAsyncRunner {
                     CodeReviewPrompts.projectOverviewFinalSystem(), userPrompt);
 
             updateProgress(analysisId, "RENDERING", 95, "解析结果并入库...");
-            JsonNode root = parseJson(resp.getContent());
+            // 宽松解析：JSON 坏掉时用"模块摘要拼接"做 summary 降级，不让 15 分钟分析白跑
+            JsonNode root = parseJsonSafe(resp.getContent());
+            String summaryMd = root.isMissingNode() ? null : sanitizeMarkdown(getText(root, "summaryMd"));
+            String mermaid   = root.isMissingNode() ? null : sanitizeMermaid(getText(root, "mermaidCode"));
+            JsonNode techStack = root.isMissingNode() ? null : root.get("techStack");
+
+            // 降级 1：summary 丢了 → 用模块摘要拼一份"半成品全景"，让用户至少看到内容
+            if (summaryMd == null || summaryMd.isBlank()) {
+                log.warn("[CodeAnalysis] FINAL summaryMd 缺失，降级为模块摘要拼接 id={}", analysisId);
+                summaryMd = "> ⚠️ AI 最终汇总失败（可能被 token 截断），以下是各模块独立摘要：\n\n"
+                        + moduleSummariesJoined;
+            }
 
             RepoAnalysis update = new RepoAnalysis();
             update.setId(analysisId);
@@ -170,9 +181,9 @@ public class CodeAnalysisAsyncRunner {
             update.setStage("DONE");
             update.setProgressPercent(100);
             update.setProgressMessage("分析完成");
-            update.setSummaryMd(sanitizeMarkdown(getText(root, "summaryMd")));
-            update.setMermaidCode(sanitizeMermaid(getText(root, "mermaidCode")));
-            update.setTechStackJson(writeJson(root.get("techStack")));
+            update.setSummaryMd(summaryMd);
+            update.setMermaidCode(mermaid);
+            update.setTechStackJson(writeJson(techStack));
             update.setLanguageStatsJson(writeJson(computeLangStatsVO(langs)));
             update.setDurationMs(System.currentTimeMillis() - start);
             update.setLlmTokensUsed(sumTokens(analysisId));
@@ -306,20 +317,41 @@ public class CodeAnalysisAsyncRunner {
             int med = (int) dedupFindings.stream().filter(f -> "MEDIUM".equals(f.getLevel())).count();
             int low = dedupFindings.size() - high - med;
 
-            // 最终合并 + 总结
+            // ⚡ 关键：先把已收集的 findings 入库，避免后续 FINAL 阶段失败时"整盘白跑"
+            for (RepoAnalysisFinding f : dedupFindings) findingMapper.insert(f);
+
+            // 最终合并 + 总结（失败时降级，不让前面的 findings 丢掉）
             updateProgress(analysisId, "FINAL", 85, "合并所有文件审查结果 + 生成总结...");
             String findingsJsonJoined = findingsAsBrief(dedupFindings);
             String userPrompt = CodeReviewPrompts.reviewMergeUser(repoName, dto.getCommitSha(), findingsJsonJoined,
                     dto.getUserRequirements());
-            LlmResponse resp = callLlm(userId, analysisId, "FINAL", "合并总结",
-                    CodeReviewPrompts.reviewMergeSystem(), userPrompt);
 
-            JsonNode root = parseJson(resp.getContent());
-            Integer score = root.has("overallScore") && !root.get("overallScore").isNull()
-                    ? root.get("overallScore").asInt()
-                    : Math.max(0, 100 - high * 15 - med * 5 - low);
-
-            for (RepoAnalysisFinding f : dedupFindings) findingMapper.insert(f);
+            String summaryMd = null;
+            Integer score = null;
+            try {
+                LlmResponse resp = callLlm(userId, analysisId, "FINAL", "合并总结",
+                        CodeReviewPrompts.reviewMergeSystem(), userPrompt);
+                JsonNode root = parseJsonSafe(resp.getContent());
+                if (!root.isMissingNode()) {
+                    summaryMd = getText(root, "summaryMd");
+                    if (root.has("overallScore") && !root.get("overallScore").isNull()) {
+                        score = root.get("overallScore").asInt();
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("[CodeAnalysis] FINAL 合并总结 LLM 调用失败，降级为静态摘要: {}", e.getMessage());
+            }
+            // 降级：summary 或 score 缺失时用规则生成
+            if (score == null) score = Math.max(0, 100 - high * 15 - med * 5 - low);
+            if (summaryMd == null || summaryMd.isBlank()) {
+                summaryMd = String.format(
+                        "> ⚠️ AI 最终汇总步骤失败或被截断，以下是按规则自动生成的总结：\n\n"
+                                + "## 风险概况\n\n本次共发现 **%d 条问题**，按严重程度分布：\n"
+                                + "- 🔴 高危：%d 条\n- 🟡 中危：%d 条\n- 🔵 低危：%d 条\n\n"
+                                + "## 评分\n\n按规则 100 - HIGH×15 - MEDIUM×5 - LOW×1 计算，综合评分：**%d / 100**\n\n"
+                                + "下方「详细发现」部分列出了全部问题定位和修复建议。",
+                        dedupFindings.size(), high, med, low, score);
+            }
 
             updateProgress(analysisId, "RENDERING", 95, "写入结果...");
             RepoAnalysis upd = new RepoAnalysis();
@@ -332,7 +364,7 @@ public class CodeAnalysisAsyncRunner {
             upd.setHighCount(high);
             upd.setMediumCount(med);
             upd.setLowCount(low);
-            upd.setSummaryMd(getText(root, "summaryMd"));
+            upd.setSummaryMd(summaryMd);
             upd.setDurationMs(System.currentTimeMillis() - start);
             upd.setLlmTokensUsed(sumTokens(analysisId));
             analysisMapper.updateById(upd);
@@ -404,20 +436,40 @@ public class CodeAnalysisAsyncRunner {
             int med = (int) dedupFindings.stream().filter(f -> "MEDIUM".equals(f.getLevel())).count();
             int low = dedupFindings.size() - high - med;
 
+            // ⚡ 先入库 findings（FINAL 失败时不丢）
+            for (RepoAnalysisFinding f : dedupFindings) findingMapper.insert(f);
+
             updateProgress(analysisId, "FINAL", 85, "合并并生成总结...");
             String findingsJsonJoined = findingsAsBrief(dedupFindings);
             String userPrompt = CodeReviewPrompts.reviewMergeUser(
                     repoName, dto.getBaseRef() + ".." + dto.getHeadRef(), findingsJsonJoined,
                     dto.getUserRequirements());
-            LlmResponse resp = callLlm(userId, analysisId, "FINAL", "合并总结",
-                    CodeReviewPrompts.reviewMergeSystem(), userPrompt);
 
-            JsonNode root = parseJson(resp.getContent());
-            Integer score = root.has("overallScore") && !root.get("overallScore").isNull()
-                    ? root.get("overallScore").asInt()
-                    : Math.max(0, 100 - high * 15 - med * 5 - low);
-
-            for (RepoAnalysisFinding f : dedupFindings) findingMapper.insert(f);
+            String summaryMd = null;
+            Integer score = null;
+            try {
+                LlmResponse resp = callLlm(userId, analysisId, "FINAL", "合并总结",
+                        CodeReviewPrompts.reviewMergeSystem(), userPrompt);
+                JsonNode root = parseJsonSafe(resp.getContent());
+                if (!root.isMissingNode()) {
+                    summaryMd = getText(root, "summaryMd");
+                    if (root.has("overallScore") && !root.get("overallScore").isNull()) {
+                        score = root.get("overallScore").asInt();
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("[CodeAnalysis] DIFF FINAL 合并总结失败，降级为静态摘要: {}", e.getMessage());
+            }
+            if (score == null) score = Math.max(0, 100 - high * 15 - med * 5 - low);
+            if (summaryMd == null || summaryMd.isBlank()) {
+                summaryMd = String.format(
+                        "> ⚠️ AI 最终汇总失败或被截断，以下是按规则生成的总结：\n\n"
+                                + "## 对比范围\n\n%s ... %s\n\n"
+                                + "## 风险概况\n\n共 **%d 条问题**：🔴 %d · 🟡 %d · 🔵 %d\n\n"
+                                + "## 评分\n\n按规则计算综合评分：**%d / 100**",
+                        dto.getBaseRef(), dto.getHeadRef(),
+                        dedupFindings.size(), high, med, low, score);
+            }
 
             updateProgress(analysisId, "RENDERING", 95, "写入结果...");
             RepoAnalysis upd = new RepoAnalysis();
@@ -430,7 +482,7 @@ public class CodeAnalysisAsyncRunner {
             upd.setHighCount(high);
             upd.setMediumCount(med);
             upd.setLowCount(low);
-            upd.setSummaryMd(getText(root, "summaryMd"));
+            upd.setSummaryMd(summaryMd);
             upd.setDurationMs(System.currentTimeMillis() - start);
             upd.setLlmTokensUsed(sumTokens(analysisId));
             analysisMapper.updateById(upd);
@@ -460,14 +512,11 @@ public class CodeAnalysisAsyncRunner {
             List<ChatMessage> messages = new ArrayList<>();
             messages.add(ChatMessage.system(systemPrompt));
             messages.add(ChatMessage.user(userPrompt));
-            // maxTokens 8192 = DeepSeek V3 的 completion 上限；
-            // 不设会落到服务端默认 4096，FINAL 阶段要求 2000+ 字总结（≈5000+ tokens）就会被截断，
-            // 导致 JSON 没闭合，下游 stripCodeFence + parseJson 也救不回来。
             LlmConfig cfg = LlmConfig.builder()
                     .model(model)
                     .temperature(temperature)
                     .apiKey(systemApiKey)
-                    .maxTokens(8192)
+                    .maxTokens(maxTokensFor(providerEnum))
                     .build();
             resp = llmRouter.get(providerEnum).chat(messages, cfg);
             success = true;
@@ -503,6 +552,25 @@ public class CodeAnalysisAsyncRunner {
             try { llmCallLogMapper.insert(logEntry); }
             catch (Exception ex) { log.warn("[LLM log] 写入失败: {}", ex.getMessage()); }
         }
+    }
+
+    /**
+     * 按 provider 返回该 provider 允许的最大 completion token 上限。
+     * - DeepSeek V3: 8192
+     * - Qwen (qwen-plus/max): 2000（超过会返回 400 Bad Request）
+     * - GLM-4: 4095
+     * - OpenAI / Claude: 4096（GPT-4o-mini / Claude 3.5 Haiku 等常见上限）
+     *
+     * 注意：这是 completion（输出）token 上限，不是 prompt（输入）上限。
+     */
+    private static int maxTokensFor(LlmProvider p) {
+        return switch (p) {
+            case DEEPSEEK -> 8192;
+            case QWEN     -> 2000;
+            case GLM      -> 4095;
+            case OPENAI   -> 4096;
+            case CLAUDE   -> 4096;
+        };
     }
 
     /** 汇总某次分析的所有 LLM 调用 token（用于更新 RepoAnalysis.llmTokensUsed） */
@@ -541,19 +609,41 @@ public class CodeAnalysisAsyncRunner {
         analysisMapper.updateById(u);
     }
 
+    /**
+     * 严格模式：失败直接抛，用于"缺了 JSON 就没法继续"的场景（如提交审查的 findings 解析）。
+     */
     private JsonNode parseJson(String content) {
-        if (content == null) throw new RuntimeException("LLM 返回空");
+        JsonNode node = parseJsonSafe(content);
+        if (node == null || node.isMissingNode()) {
+            throw new RuntimeException("LLM 返回 JSON 解析失败");
+        }
+        return node;
+    }
+
+    /**
+     * 宽松模式：失败时记 warn + 尝试正则提取关键字段 + 返回 MissingNode（非 null）。
+     * 调用方用 isMissingNode / has(field) 做字段级降级，避免一次解析失败让 15 分钟分析白跑。
+     *
+     * 典型失败原因：
+     *   - LLM 被 maxTokens 截断，JSON 结构不闭合
+     *   - LLM 前后拼了解释性文字（stripCodeFence 已尽力但非万能）
+     *   - 响应被 WebClient maxInMemorySize 截断（已调 16MB 降低概率）
+     */
+    private JsonNode parseJsonSafe(String content) {
+        if (content == null || content.isBlank()) {
+            log.warn("[CodeAnalysis] LLM 返回空内容");
+            return JsonUtil.mapper().missingNode();
+        }
         String raw = content.trim();
         String cleaned = stripCodeFence(raw);
         try {
             return JsonUtil.mapper().readTree(cleaned);
         } catch (Exception e) {
-            // 把 raw 和 cleaned 的长度、结尾都打出来，便于判断是"围栏没剥"还是"被截断"
             int rl = raw.length(), cl = cleaned.length();
             String cTail = cleaned.substring(Math.max(0, cl - 80));
-            log.warn("[CodeAnalysis] JSON 解析失败 (rawLen={}, cleanedLen={}, cleanedTail={}), cleaned 前 500 字：\n{}",
-                    rl, cl, cTail, cleaned.substring(0, Math.min(500, cl)));
-            throw new RuntimeException("LLM 返回 JSON 解析失败: " + e.getMessage());
+            log.warn("[CodeAnalysis] JSON 解析失败 (rawLen={}, cleanedLen={}, tail={}): {} — 降级为 MissingNode，调用方按字段 fallback",
+                    rl, cl, cTail, e.getMessage());
+            return JsonUtil.mapper().missingNode();
         }
     }
 
