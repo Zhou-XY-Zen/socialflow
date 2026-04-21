@@ -268,20 +268,27 @@ public final class CodeReviewPrompts {
                 一句话 + 两三段说明这个模块在整个项目中承担什么角色。
 
                 ## 关键类清单
-                列出 5-10 个最重要的类/接口（包括 Controller、Service、Mapper、Entity 等），
-                每条给出"类名 → 一句话作用"。
+                列出 5-10 个最重要的类/接口（Controller、Service、Mapper、Entity 等）。
+                **必须带完整包路径**，格式：`com.xxx.YyyService` → 一句话作用。
 
                 ## 核心流程
-                如果模块里有明确的业务流程（比如文案生成/发布/知识库入库），
-                用序号 1, 2, 3 写出该流程的关键步骤和涉及的方法。
+                如果模块里有明确的业务流程（文案生成/发布/审查 etc.），
+                用序号 1, 2, 3 写出关键步骤，**每步注明是哪个类的哪个方法**（格式 `ClassName#methodName`）。
+
+                ## 关键代码片段
+                挑 1-2 段 5-10 行的代码块（必须是原文里真实存在的），用 ```java ... ``` 包裹，
+                便于下游 FINAL 阶段直接引用到最终报告里。
 
                 ## 对外依赖
-                该模块依赖了哪些外部东西：其他内部模块、外部 SDK（LLM / Redis / DB）、HTTP 客户端等。
+                该模块依赖的：其他内部模块 / 外部 SDK（LLM / Redis / DB）/ HTTP 客户端等。
 
                 ## 值得注意的细节
-                任何值得新人留意的：安全陷阱、并发注意点、特殊配置、已知 TODO 等。
+                安全陷阱 / 并发注意点 / 特殊配置 / 已知 TODO 等。
 
-                必须紧凑：每部分 2-5 段，总长度 800-1500 字。不要输出任何 JSON 或 markdown 围栏。
+                【硬性约束】
+                1. 引用的所有类名/方法名必须**真实存在于输入源码中**，禁止虚构
+                2. 不要输出任何 JSON 或 markdown 围栏外层（只输出 Markdown 正文）
+                3. 总长度 1200-2000 字（比以往略长，但要言之有物）
                 """;
     }
 
@@ -306,6 +313,167 @@ public final class CodeReviewPrompts {
                 请按 system prompt 要求输出该模块的 Markdown 摘要。
                 若用户诉求与该模块相关，请在摘要中针对性展开 —— 长度不限，越详细越好。
                 """.formatted(moduleName, fileList, sources, userRequirementsBlock(userRequirements));
+    }
+
+    // ==================== 项目概览 FINAL 三段式 ====================
+    //   Step 1: summaryMd 上半（定位 / 功能 / 技术栈 / 架构 / 数据流）
+    //   Step 2: summaryMd 下半（模块深度 + 关键类引用 + 代码片段 + 潜在改进）
+    //   Step 3: mermaidCode 独立生成
+    //
+    //   拆分原因：DeepSeek V3 single completion 上限 ~8192 tokens ≈ 5500 中文字。
+    //            单次无法产 10000 字 + 高质量 Mermaid。拆三段后总报告 10000-12000 字。
+
+    /** FINAL Step 1：summaryMd 上半部分 system prompt */
+    public static String finalSummaryPart1System() {
+        return """
+                你是一位资深技术架构师。给你一个 Git 仓库的完整模块摘要集合 + 目录结构 + 语言统计。
+                请生成一份项目解读报告的 **上半部分**（Part 1），专注以下章节：
+
+                ## 项目定位
+                一段话说清楚这是什么产品、解决什么问题、目标用户是谁（300-400 字）
+
+                ## 核心功能
+                列出 8-12 个能力点。每个能力点：标题加粗 + 2-3 段说明 + **引用具体的类名或方法名**
+                （每项 200-300 字，共 2500-3500 字）
+
+                ## 技术选型
+                按"组件 / 选型 / 选它原因 / 如何集成"四列展开。组件 6-10 个
+                （每项 150-250 字，共 1500-2000 字）
+
+                ## 架构分层
+                从"请求入口 → 接口层 → 业务层 → 数据层"逐层说明。**必须引用真实的包名和类名**
+                （1500-2000 字）
+
+                ## 典型数据流
+                至少画出 1-2 条端到端流程。比如"用户触发 AI 生成 → 内容落库 → 推送队列"
+                （每条流程 500-800 字，可用伪代码或步骤列表）
+
+                ⚠️ 【硬性要求】
+                1. 总字数 5000-6500 字（中文）
+                2. 引用类/方法时必须带包路径：`com.socialflow.service.codeanalysis.CodeAnalysisService#trigger`
+                3. 代码片段用 ```java ... ``` 包裹，5-15 行，真实存在
+                4. 绝不虚构不存在的类
+                5. 以严格 JSON 返回，**不要 markdown 围栏**：
+                   {
+                     "summaryMd": "<Part 1 的完整 Markdown>",
+                     "projectName": "...",
+                     "oneLinePositioning": "一句话不超过 40 字",
+                     "techStack": ["Java 21", "Spring Boot 3", ...]
+                   }
+                """;
+    }
+
+    public static String finalSummaryPart1User(String repoName, String treeView,
+                                               String languageStats, String moduleSummariesJoined,
+                                               String userRequirements) {
+        return """
+                仓库: %s
+
+                ## 目录结构
+                ```
+                %s
+                ```
+
+                ## 语言统计
+                %s
+
+                ## 你之前产出的各模块摘要（完整保留）
+                %s
+                %s
+                请按 system prompt 输出 Part 1 JSON。
+                """.formatted(repoName, treeView, languageStats, moduleSummariesJoined,
+                              userRequirementsBlock(userRequirements));
+    }
+
+    /** FINAL Step 2：summaryMd 下半部分 system prompt */
+    public static String finalSummaryPart2System() {
+        return """
+                接上一段报告（Part 1）。你现在要产出 **下半部分**（Part 2），专注以下章节：
+
+                ## 模块深度解读
+                为每个模块单独写一段 800-1200 字的深度解读。每段必须：
+                - 模块职责一句话总结
+                - 列出 5-8 个关键类，每个类注明**完整包路径**和一句话作用
+                - 挑 1-2 个"最核心方法"贴出 5-15 行真实代码（从模块摘要里能推出来的）
+                - 指出该模块的"扩展点"：想替换/增强时从哪里介入
+                （总字数 4000-5500 字）
+
+                ## 关键文件导读
+                列 10-15 个新人必读文件，每个：路径 + 为什么值得看 + 该文件里的核心函数/类
+                （每项 150-250 字，共 1500-2500 字）
+
+                ## 部署与运行
+                启动命令、依赖服务（MySQL/Redis/Nacos...）、环境变量、常见启动报错
+                （600-1000 字）
+
+                ## 潜在改进 / 坑
+                至少列 5-8 条。每条：问题 + 触发场景 + 建议修复
+                （800-1200 字）
+
+                ⚠️ 【硬性要求】
+                1. 总字数 5000-7000 字（中文）
+                2. 每个模块深度解读必须有真实代码块
+                3. 与 Part 1 内容不重复，而是"在其基础上深入"
+                4. 以严格 JSON 返回：
+                   {
+                     "summaryMd": "<Part 2 的完整 Markdown>"
+                   }
+                """;
+    }
+
+    public static String finalSummaryPart2User(String repoName, String part1Summary,
+                                               String moduleSummariesJoined,
+                                               String userRequirements) {
+        return """
+                仓库: %s
+
+                ## Part 1 已产出内容（不要重复，只做补充）
+                %s
+
+                ## 各模块完整摘要（供深度展开时引用真实类名）
+                %s
+                %s
+                请按 system prompt 输出 Part 2 JSON。
+                """.formatted(repoName, part1Summary, moduleSummariesJoined,
+                              userRequirementsBlock(userRequirements));
+    }
+
+    /** FINAL Step 3：Mermaid 专用 system prompt */
+    public static String finalMermaidSystem() {
+        return """
+                你是架构图专家。给你一个项目的完整解读报告（summaryMd），请画一张 Mermaid 流程图
+                展示项目的核心架构 / 数据流 / 模块依赖。
+
+                ⚠️ 【Mermaid 语法强约束】—— 违反任意一条都会被下游丢弃：
+                1. 节点标签含特殊字符 `( ) / . , :` 空格 中文标点 等，必须用双引号包：
+                   ✅ `API["API Client (http.ts)"]`   `DB[("MySQL 8.0")]`
+                   ❌ `API[API Client (http.ts)]`    `DB[(MySQL 8.0)]`
+                2. 圆柱形数据库节点：`id[("...")]`，引号在 `(` 和 `)` 之间
+                3. 菱形判断：`id{"..."}`
+                4. arrow label：`A -->|"调用 LLM"| B`
+                5. 只能有一个 `graph TD` / `sequenceDiagram` 声明
+
+                图表规模 30-80 行，覆盖：
+                - 前端入口 / 后端 Controller / 核心 Service / 数据库 / 缓存 / 外部 API
+                - 主要调用方向（带箭头标签说明是什么调用）
+                - 异步队列 / 定时任务如果有也画进来
+
+                ⚠️ 以严格 JSON 返回：
+                {
+                  "mermaidCode": "graph TD\\n    ..."
+                }
+                """;
+    }
+
+    public static String finalMermaidUser(String repoName, String fullSummary) {
+        return """
+                仓库: %s
+
+                ## 项目完整报告（你基于此画架构图）
+                %s
+
+                请按 system prompt 输出 JSON { "mermaidCode": "..." }。
+                """.formatted(repoName, fullSummary);
     }
 
     /** 最终项目全景 system prompt：在所有模块摘要到位后，产出项目级报告 */

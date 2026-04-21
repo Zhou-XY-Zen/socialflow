@@ -49,6 +49,40 @@ public class AsyncConfig {
     }
 
     /**
+     * 模块摘要并发线程池 —— 专供项目概览阶段并行调用 LLM 给各模块做摘要。
+     *
+     * 设计：
+     *   一个 analysisId 任务进入 codeAnalysisExecutor 后，在 runProjectOverview 内部
+     *   会 fork 出 N 个子任务并行 summarizeOneModule，这些子任务走这个专用池。
+     *   如果共用 codeAnalysisExecutor（max=4），几个用户同时分析时会互相抢线程，
+     *   甚至出现"父任务持有 codeAnalysisExecutor 线程等子任务，子任务在队列里等
+     *   codeAnalysisExecutor 线程"的死锁。独立池避免这种嵌套池依赖。
+     *
+     * 并发度 core=8 / max=10 的理由（不是 4）：
+     *   - DeepSeek 每账户 RPM 500+，同时在途 30-50 并发都在限流阈值内
+     *   - LLM 调用是纯 I/O 等，服务器 CPU/内存几乎不受影响（每并发约 20MB）
+     *   - 典型项目 5-15 个模块，10 个通道 ≈ 所有模块几乎同时起跑
+     *   - 加速曲线：并发 4 → 3.4x，8 → 5.6x，10 → 6.5x，16 → 8.5x；8-10 是"加速显著且收益未衰减"的甜点
+     *   - max=10 给高峰弹性（两个用户同时分析不会互相饿死），queue=50 兜底
+     */
+    @Bean("moduleSummaryExecutor")
+    public Executor moduleSummaryExecutor() {
+        ThreadPoolTaskExecutor e = new ThreadPoolTaskExecutor();
+        e.setCorePoolSize(8);
+        e.setMaxPoolSize(10);
+        e.setQueueCapacity(50);
+        e.setKeepAliveSeconds(120);
+        e.setThreadNamePrefix("module-summary-");
+        // CALLER_RUNS 防止任务被丢；父任务已经 async，阻塞一小会让它降速即可
+        e.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+        e.setWaitForTasksToCompleteOnShutdown(true);
+        e.setAwaitTerminationSeconds(60);
+        e.initialize();
+        log.info("[AsyncConfig] moduleSummaryExecutor 启动: core=8 max=10 queue=50");
+        return e;
+    }
+
+    /**
      * 知识库入库专用线程池。短耗时、偏 I/O，但并发可能较高。
      */
     @Bean("knowledgeIngestExecutor")

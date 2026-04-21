@@ -30,6 +30,10 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicInteger;
+
 import java.io.File;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -59,6 +63,33 @@ public class CodeAnalysisAsyncRunner {
     private final CredentialService credentialService;
     private final RuleLibraryHolder ruleLibrary;
     private final FindingFeedbackService findingFeedback;
+    /**
+     * 模块摘要专用并发线程池，与父 codeAnalysisExecutor 隔离避免嵌套死锁。
+     * 字段名与 @Bean 名称一致，Spring 按 byName 自动匹配，无需 @Qualifier。
+     */
+    private final Executor moduleSummaryExecutor;
+
+    /** 模块级重试最大次数 —— 单个模块失败（包括下层 Resilience4j retry 全部耗尽）时再试 3 次 */
+    private static final int MODULE_MAX_RETRY = 3;
+    /** 源文件扩展名白名单 —— 其它一律不送 LLM，减少 token 浪费 */
+    private static final java.util.Set<String> SOURCE_EXTENSIONS = java.util.Set.of(
+            ".java", ".kt", ".groovy", ".scala",
+            ".js", ".jsx", ".ts", ".tsx", ".vue",
+            ".py", ".rb", ".go", ".rs", ".c", ".cpp", ".h", ".hpp",
+            ".sql", ".yml", ".yaml", ".properties", ".xml",
+            ".css", ".scss", ".less", ".html", ".sh"
+    );
+    /** 明确要跳过的文件名/后缀（二进制、锁文件、文档、构建产物） */
+    private static final java.util.Set<String> SKIP_FILE_NAMES = java.util.Set.of(
+            "package-lock.json", "yarn.lock", "pnpm-lock.yaml", "composer.lock",
+            "poetry.lock", "Cargo.lock", "Gemfile.lock"
+    );
+    private static final java.util.Set<String> SKIP_EXTENSIONS = java.util.Set.of(
+            ".md", ".markdown", ".txt", ".json", ".log", ".csv", ".tsv",
+            ".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico", ".webp",
+            ".pdf", ".zip", ".tar", ".gz", ".jar", ".class", ".exe",
+            ".lock", ".min.js", ".bundle.js"
+    );
 
     @Value("${socialflow.ai.system-api-key:}")
     private String systemApiKey;
@@ -133,47 +164,96 @@ public class CodeAnalysisAsyncRunner {
 
             String repoName = extractRepoName(dto.getGitUrl());
 
-            // 逐模块生成摘要
-            List<String> moduleSummaries = new ArrayList<>();
-            int totalModules = modules.size();
-            int idx = 0;
-            for (Map.Entry<String, List<SourceFile>> entry : modules.entrySet()) {
-                idx++;
-                String moduleName = entry.getKey();
-                List<SourceFile> files = entry.getValue();
-
-                int pct = 15 + (int) Math.floor(idx * 65.0 / totalModules);  // 15% → 80%
-                updateProgress(analysisId, "MODULE_SUMMARY", pct,
-                        String.format("分析模块 %d/%d: %s (%d 个文件)", idx, totalModules, moduleName, files.size()));
-
-                String summary = summarizeOneModule(userId, analysisId, repoName, moduleName, files);
-                moduleSummaries.add("### " + moduleName + "\n" + summary);
+            // 过滤非源码 + 空模块，减少无效 LLM 调用
+            modules = filterSourceModules(modules);
+            if (modules.isEmpty()) {
+                throw new RuntimeException("过滤后没有可分析的源文件");
             }
 
-            // 最终汇总
-            updateProgress(analysisId, "FINAL", 85, "汇总所有模块摘要生成项目全景...");
+            // ⚡ 并发模块摘要：moduleSummaryExecutor core=8 max=10
+            //   每个模块最多重试 3 次（指数退避 5s/15s），失败用占位替代不中断整个任务
+            int totalModules = modules.size();
+            AtomicInteger completed = new AtomicInteger(0);
+            AtomicInteger running = new AtomicInteger(0);
+            List<Map.Entry<String, List<SourceFile>>> moduleList = new ArrayList<>(modules.entrySet());
+
+            List<CompletableFuture<String>> futures = new ArrayList<>(totalModules);
+            for (Map.Entry<String, List<SourceFile>> entry : moduleList) {
+                final String moduleName = entry.getKey();
+                final List<SourceFile> files = entry.getValue();
+                CompletableFuture<String> fut = CompletableFuture.supplyAsync(() -> {
+                    running.incrementAndGet();
+                    updateParallelProgress(analysisId, totalModules, completed.get(), running.get(), moduleName);
+                    try {
+                        String summary = summarizeWithRetry(userId, analysisId, repoName, moduleName, files);
+                        return "### " + moduleName + "\n" + summary;
+                    } finally {
+                        running.decrementAndGet();
+                        int done = completed.incrementAndGet();
+                        updateParallelProgress(analysisId, totalModules, done, running.get(), moduleName);
+                    }
+                }, moduleSummaryExecutor);
+                futures.add(fut);
+            }
+            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+            List<String> moduleSummaries = futures.stream()
+                    .map(CompletableFuture::join)
+                    .collect(java.util.stream.Collectors.toList());
+
+            // ========= FINAL 三段式：突破单次 completion 上限，产出 10000+ 字报告 =========
             String langStatsText = formatLangStats(langs);
             String moduleSummariesJoined = String.join("\n\n---\n\n", moduleSummaries);
             String userReq = dto.getUserRequirements();
-            String userPrompt = CodeReviewPrompts.projectOverviewFinalUser(
-                    repoName, tree, langStatsText, moduleSummariesJoined, userReq);
-            LlmResponse resp = callLlm(
-                    userId, analysisId, "FINAL", "生成项目全景报告",
-                    CodeReviewPrompts.projectOverviewFinalSystem(), userPrompt);
+
+            // Step 1: summaryMd 上半 + techStack + projectName
+            updateProgress(analysisId, "FINAL", 80, "汇总上半：项目定位 / 功能 / 架构 / 数据流...");
+            String part1Md = "";
+            JsonNode techStack = null;
+            try {
+                LlmResponse p1 = callLlm(userId, analysisId, "FINAL_PART1", "汇总 Part 1（上半）",
+                        CodeReviewPrompts.finalSummaryPart1System(),
+                        CodeReviewPrompts.finalSummaryPart1User(repoName, tree, langStatsText,
+                                moduleSummariesJoined, userReq));
+                JsonNode n1 = parseJsonSafe(p1.getContent());
+                if (!n1.isMissingNode()) {
+                    part1Md = getText(n1, "summaryMd");
+                    techStack = n1.get("techStack");
+                }
+            } catch (Exception e) {
+                log.warn("[CodeAnalysis] FINAL Part1 失败: {}", e.getMessage());
+            }
+
+            // Step 2: summaryMd 下半 —— 模块深度 + 关键文件 + 部署 + 改进
+            updateProgress(analysisId, "FINAL", 88, "汇总下半：模块深度解读 + 关键文件导读...");
+            String part2Md = "";
+            try {
+                LlmResponse p2 = callLlm(userId, analysisId, "FINAL_PART2", "汇总 Part 2（下半）",
+                        CodeReviewPrompts.finalSummaryPart2System(),
+                        CodeReviewPrompts.finalSummaryPart2User(repoName, part1Md, moduleSummariesJoined, userReq));
+                JsonNode n2 = parseJsonSafe(p2.getContent());
+                if (!n2.isMissingNode()) part2Md = getText(n2, "summaryMd");
+            } catch (Exception e) {
+                log.warn("[CodeAnalysis] FINAL Part2 失败: {}", e.getMessage());
+            }
+
+            // 合成完整 summaryMd
+            String summaryMd = assembleFinalSummary(part1Md, part2Md, moduleSummariesJoined);
+
+            // Step 3: Mermaid 独立生成（基于完整 summary 画图，质量更好）
+            updateProgress(analysisId, "FINAL", 93, "生成核心架构 Mermaid 流程图...");
+            String mermaid = null;
+            try {
+                LlmResponse p3 = callLlm(userId, analysisId, "FINAL_MERMAID", "生成 Mermaid 架构图",
+                        CodeReviewPrompts.finalMermaidSystem(),
+                        CodeReviewPrompts.finalMermaidUser(repoName, summaryMd));
+                JsonNode n3 = parseJsonSafe(p3.getContent());
+                if (!n3.isMissingNode()) mermaid = sanitizeMermaid(getText(n3, "mermaidCode"));
+            } catch (Exception e) {
+                log.warn("[CodeAnalysis] FINAL Mermaid 失败: {}", e.getMessage());
+            }
 
             updateProgress(analysisId, "RENDERING", 95, "解析结果并入库...");
-            // 宽松解析：JSON 坏掉时用"模块摘要拼接"做 summary 降级，不让 15 分钟分析白跑
-            JsonNode root = parseJsonSafe(resp.getContent());
-            String summaryMd = root.isMissingNode() ? null : sanitizeMarkdown(getText(root, "summaryMd"));
-            String mermaid   = root.isMissingNode() ? null : sanitizeMermaid(getText(root, "mermaidCode"));
-            JsonNode techStack = root.isMissingNode() ? null : root.get("techStack");
-
-            // 降级 1：summary 丢了 → 用模块摘要拼一份"半成品全景"，让用户至少看到内容
-            if (summaryMd == null || summaryMd.isBlank()) {
-                log.warn("[CodeAnalysis] FINAL summaryMd 缺失，降级为模块摘要拼接 id={}", analysisId);
-                summaryMd = "> ⚠️ AI 最终汇总失败（可能被 token 截断），以下是各模块独立摘要：\n\n"
-                        + moduleSummariesJoined;
-            }
+            summaryMd = sanitizeMarkdown(summaryMd);
 
             RepoAnalysis update = new RepoAnalysis();
             update.setId(analysisId);
@@ -197,6 +277,105 @@ public class CodeAnalysisAsyncRunner {
         } finally {
             if (repo != null) gitRepoService.cleanup(repo);
         }
+    }
+
+    /**
+     * 模块级重试包装：summarizeOneModule 失败时退避重试 3 次。
+     * 与 Resilience4j retry（针对单次 LLM 调用的网络层重试）是叠加关系：
+     *   - Resilience4j retry：3 次，间隔 1-2s，覆盖瞬时网络故障
+     *   - 模块级 retry：3 次，间隔 5s/15s/30s，给 LLM 端时间恢复，避免"整个模块一批 LLM 请求
+     *     全军覆没"导致整体任务失败
+     * 3 次都失败则返回一个 placeholder 摘要，不让单个模块拖垮全局任务。
+     */
+    private String summarizeWithRetry(Long userId, Long analysisId, String repoName,
+                                      String moduleName, List<SourceFile> files) {
+        Throwable last = null;
+        for (int attempt = 1; attempt <= MODULE_MAX_RETRY; attempt++) {
+            try {
+                return summarizeOneModule(userId, analysisId, repoName, moduleName, files);
+            } catch (Throwable t) {
+                last = t;
+                log.warn("[Module] {} 第 {}/{} 次摘要失败: {}",
+                        moduleName, attempt, MODULE_MAX_RETRY, t.getMessage());
+                if (attempt < MODULE_MAX_RETRY) {
+                    long backoff = attempt * 5000L;  // 5s / 10s / 15s
+                    try { Thread.sleep(backoff); }
+                    catch (InterruptedException ie) { Thread.currentThread().interrupt(); break; }
+                }
+            }
+        }
+        log.error("[Module] {} 重试 {} 次全部失败，用占位摘要替代", moduleName, MODULE_MAX_RETRY, last);
+        return String.format(
+                "> ⚠️ 此模块分析失败（%d 次重试均未成功）\n> 原因：%s\n\n" +
+                        "请查看其他模块摘要，或在「仓库凭证」页确认凭证可用后重试整个分析。\n",
+                MODULE_MAX_RETRY, last != null ? last.getMessage() : "unknown");
+    }
+
+    /**
+     * 并发场景的进度条更新："已完成 X/Y · 并行 N 个 · 最新 moduleName"
+     */
+    private void updateParallelProgress(Long analysisId, int total, int done, int running, String current) {
+        int pct = 15 + (int) Math.floor(done * 65.0 / total);
+        String msg = String.format("并行分析中 · 已完成 %d/%d · 并行 %d · 正在: %s",
+                done, total, running, current);
+        updateProgress(analysisId, "MODULE_SUMMARY", pct, msg);
+    }
+
+    /**
+     * 过滤掉非源码文件 + 空模块。白名单：常见代码/配置扩展名；黑名单：锁文件/文档/图片等。
+     * 能显著减少 prompt 大小（典型项目能省 15-30% token）。
+     */
+    private Map<String, List<SourceFile>> filterSourceModules(Map<String, List<SourceFile>> modules) {
+        Map<String, List<SourceFile>> out = new LinkedHashMap<>();
+        int totalBefore = 0, totalAfter = 0;
+        for (var e : modules.entrySet()) {
+            List<SourceFile> before = e.getValue();
+            totalBefore += before.size();
+            List<SourceFile> after = new ArrayList<>(before.size());
+            for (SourceFile f : before) {
+                if (isSourceFile(f.path)) after.add(f);
+            }
+            totalAfter += after.size();
+            if (!after.isEmpty()) out.put(e.getKey(), after);
+        }
+        log.info("[CodeAnalysis] 源文件过滤：{} 个 → {} 个（{} 个模块）", totalBefore, totalAfter, out.size());
+        return out;
+    }
+
+    /**
+     * 把 FINAL Part1 + Part2 拼成完整报告；任一半失败就用可用部分 + 模块摘要兜底。
+     */
+    private String assembleFinalSummary(String part1, String part2, String moduleJoined) {
+        boolean hasP1 = part1 != null && !part1.isBlank();
+        boolean hasP2 = part2 != null && !part2.isBlank();
+        if (hasP1 && hasP2) {
+            return part1 + "\n\n---\n\n" + part2;
+        }
+        if (hasP1) {
+            return part1 + "\n\n---\n\n> ⚠️ 下半部分（模块深度解读）生成失败，以下为各模块独立摘要：\n\n" + moduleJoined;
+        }
+        if (hasP2) {
+            return "> ⚠️ 上半部分（定位/功能/架构）生成失败，下半内容如下：\n\n" + part2;
+        }
+        // 两半都失败 —— 用模块摘要拼 + 提示
+        return "> ⚠️ 最终汇总两步均失败（可能 LLM 端波动），以下是各模块独立摘要：\n\n" + moduleJoined;
+    }
+
+    private static boolean isSourceFile(String path) {
+        if (path == null || path.isBlank()) return false;
+        String lower = path.toLowerCase();
+        // 跳过明确黑名单文件名
+        String name = lower.substring(lower.lastIndexOf('/') + 1);
+        if (SKIP_FILE_NAMES.contains(name)) return false;
+        // 跳过明确黑名单扩展
+        for (String ext : SKIP_EXTENSIONS) {
+            if (lower.endsWith(ext)) return false;
+        }
+        // 必须命中源码扩展白名单
+        for (String ext : SOURCE_EXTENSIONS) {
+            if (lower.endsWith(ext)) return true;
+        }
+        return false;
     }
 
     /** 为一个模块生成摘要：若该模块体积大，采用"分批读再合并摘要"的内部循环。
