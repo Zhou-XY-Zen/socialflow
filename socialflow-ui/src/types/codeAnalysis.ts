@@ -68,6 +68,8 @@ export interface CodeAnalysis {
   errorMsg?: string
   durationMs?: number
   llmTokensUsed?: number
+  /** 用户提交分析时输入的自定义诉求，可能为空 */
+  userRequirements?: string
   createTime?: string
 }
 
@@ -154,6 +156,8 @@ export interface AnalyzeRepoDTO {
   commitSha?: string
   baseRef?: string
   headRef?: string
+  /** 用户自定义分析诉求；详尽越好，服务端会注入 LLM Prompt */
+  userRequirements?: string
 }
 
 export interface SaveBookmarkDTO {

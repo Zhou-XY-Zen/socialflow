@@ -63,4 +63,10 @@ public class RepoAnalysis extends BaseEntity {
     private String errorMsg;
     private Long durationMs;
     private Integer llmTokensUsed;
+
+    /**
+     * 用户提交分析时输入的自定义诉求；被用于给 LLM 注入"优先关注点"。
+     * 也在审查结果页回显给查看者，便于理解"为什么报告这样写"。
+     */
+    private String userRequirements;
 }

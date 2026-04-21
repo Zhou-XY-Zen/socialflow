@@ -154,8 +154,9 @@ public class CodeAnalysisAsyncRunner {
             updateProgress(analysisId, "FINAL", 85, "汇总所有模块摘要生成项目全景...");
             String langStatsText = formatLangStats(langs);
             String moduleSummariesJoined = String.join("\n\n---\n\n", moduleSummaries);
+            String userReq = dto.getUserRequirements();
             String userPrompt = CodeReviewPrompts.projectOverviewFinalUser(
-                    repoName, tree, langStatsText, moduleSummariesJoined);
+                    repoName, tree, langStatsText, moduleSummariesJoined, userReq);
             LlmResponse resp = callLlm(
                     userId, analysisId, "FINAL", "生成项目全景报告",
                     CodeReviewPrompts.projectOverviewFinalSystem(), userPrompt);
@@ -187,9 +188,13 @@ public class CodeAnalysisAsyncRunner {
         }
     }
 
-    /** 为一个模块生成摘要：若该模块体积大，采用"分批读再合并摘要"的内部循环 */
+    /** 为一个模块生成摘要：若该模块体积大，采用"分批读再合并摘要"的内部循环。
+     *  会把当前分析记录的 userRequirements 注入 prompt，让每个模块摘要也围绕诉求做提取。 */
     private String summarizeOneModule(Long userId, Long analysisId, String repoName,
                                       String moduleName, List<SourceFile> files) {
+        // 取一次即可，避免每批重复查库
+        RepoAnalysis rec = analysisMapper.selectById(analysisId);
+        String userReq = rec == null ? null : rec.getUserRequirements();
         // 按字节分批：每批拼到 PER_MODULE_BYTES 就结束一批
         List<List<SourceFile>> batches = new ArrayList<>();
         List<SourceFile> current = new ArrayList<>();
@@ -222,7 +227,7 @@ public class CodeAnalysisAsyncRunner {
                     ? String.format("模块 %s 分批摘要 %d/%d", moduleName, i + 1, batches.size())
                     : String.format("模块 %s 摘要", moduleName);
 
-            String user = CodeReviewPrompts.moduleSummaryUser(moduleName, fileList, sources.toString());
+            String user = CodeReviewPrompts.moduleSummaryUser(moduleName, fileList, sources.toString(), userReq);
             LlmResponse resp = callLlm(userId, analysisId, stage, label,
                     CodeReviewPrompts.moduleSummarySystem(), user);
             batchSummaries.add(resp.getContent());
@@ -273,7 +278,8 @@ public class CodeAnalysisAsyncRunner {
                 // Wave 6 C-1：注入按文件类型挑选的相关规约清单，让 LLM 引用真实编号
                 String ruleListMarkdown = renderRuleList(fd.file);
                 String userPrompt = CodeReviewPrompts.fileReviewUser(
-                        repoName, dto.getCommitSha(), fd.file, diffContent, ruleListMarkdown);
+                        repoName, dto.getCommitSha(), fd.file, diffContent, ruleListMarkdown,
+                        dto.getUserRequirements());
                 String stage = "FILE_REVIEW_" + safeStageSegment(fd.file);
                 try {
                     LlmResponse resp = callLlm(userId, analysisId, stage,
@@ -303,7 +309,8 @@ public class CodeAnalysisAsyncRunner {
             // 最终合并 + 总结
             updateProgress(analysisId, "FINAL", 85, "合并所有文件审查结果 + 生成总结...");
             String findingsJsonJoined = findingsAsBrief(dedupFindings);
-            String userPrompt = CodeReviewPrompts.reviewMergeUser(repoName, dto.getCommitSha(), findingsJsonJoined);
+            String userPrompt = CodeReviewPrompts.reviewMergeUser(repoName, dto.getCommitSha(), findingsJsonJoined,
+                    dto.getUserRequirements());
             LlmResponse resp = callLlm(userId, analysisId, "FINAL", "合并总结",
                     CodeReviewPrompts.reviewMergeSystem(), userPrompt);
 
@@ -373,7 +380,8 @@ public class CodeAnalysisAsyncRunner {
                 // Wave 6 C-1：注入相关规约清单
                 String ruleListMarkdown = renderRuleList(fd.file);
                 String userPrompt = CodeReviewPrompts.fileReviewUser(
-                        repoName, dto.getBaseRef() + ".." + dto.getHeadRef(), fd.file, fd.diff, ruleListMarkdown);
+                        repoName, dto.getBaseRef() + ".." + dto.getHeadRef(), fd.file, fd.diff, ruleListMarkdown,
+                        dto.getUserRequirements());
                 String stage = "FILE_REVIEW_" + safeStageSegment(fd.file);
                 try {
                     LlmResponse resp = callLlm(userId, analysisId, stage,
@@ -399,7 +407,8 @@ public class CodeAnalysisAsyncRunner {
             updateProgress(analysisId, "FINAL", 85, "合并并生成总结...");
             String findingsJsonJoined = findingsAsBrief(dedupFindings);
             String userPrompt = CodeReviewPrompts.reviewMergeUser(
-                    repoName, dto.getBaseRef() + ".." + dto.getHeadRef(), findingsJsonJoined);
+                    repoName, dto.getBaseRef() + ".." + dto.getHeadRef(), findingsJsonJoined,
+                    dto.getUserRequirements());
             LlmResponse resp = callLlm(userId, analysisId, "FINAL", "合并总结",
                     CodeReviewPrompts.reviewMergeSystem(), userPrompt);
 

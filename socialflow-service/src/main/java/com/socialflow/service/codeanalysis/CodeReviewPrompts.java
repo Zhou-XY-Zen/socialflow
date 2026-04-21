@@ -13,6 +13,41 @@ public final class CodeReviewPrompts {
 
     private CodeReviewPrompts() {}
 
+    /** 用户诉求在 prompt 中的软截断长度 —— 防止 token 爆炸 */
+    private static final int USER_REQ_MAX = 8000;
+
+    /**
+     * 构造一段"用户自定义关注点"指令，在 system / user prompt 合适位置插入。
+     * 核心原则：
+     *   1. 若用户给了诉求，优先级 > 默认模板结构（但不破坏 JSON 输出格式）
+     *   2. 强调"详尽"—— 不限字数、要做到读者看完不需要再看源码
+     *   3. 若为空则返回空字符串，调用方拼进去不会产生任何副作用
+     */
+    public static String userRequirementsBlock(String raw) {
+        if (raw == null || raw.isBlank()) return "";
+        String trimmed = raw.length() > USER_REQ_MAX ? raw.substring(0, USER_REQ_MAX) + "...[已截断]" : raw;
+        return """
+
+                ---
+
+                【用户自定义关注点（最高优先级）】
+                本次分析请求者额外提出以下重点关注方向，你的报告 **必须** 深度覆盖这些诉求。
+                即使默认模板没涉及的内容，只要在诉求范围内，都要展开详细说明。
+                追求"读完不需要再看源码就能完全理解项目"的详尽度 —— 内容长度不限，详细度越高越好。
+                可以：
+                  - 引用具体类名/方法名/字段名解释
+                  - 用 Mermaid 图或伪代码描述复杂流程
+                  - 说明"为什么这样设计"而不只是"是什么"
+                  - 列举边界 case、异常处理、配置依赖
+                但仍需保持输出为有效 JSON，summaryMd 字段里可以放任意 Markdown。
+
+                用户诉求原文：
+                \"\"\"
+                %s
+                \"\"\"
+                """.formatted(trimmed);
+    }
+
     /** 阿里规约精选条款清单（作为 system prompt 主体） */
     public static final String ALIBABA_RULES = """
             你是一位资深 Java 代码审查专家，严格按《阿里巴巴 Java 开发手册（嵩山版）》审查代码。
@@ -251,6 +286,12 @@ public final class CodeReviewPrompts {
     }
 
     public static String moduleSummaryUser(String moduleName, String fileList, String sources) {
+        return moduleSummaryUser(moduleName, fileList, sources, null);
+    }
+
+    /** 重载：支持用户诉求（模块摘要阶段也针对诉求做提取） */
+    public static String moduleSummaryUser(String moduleName, String fileList, String sources,
+                                           String userRequirements) {
         return """
                 模块名: %s
 
@@ -261,9 +302,10 @@ public final class CodeReviewPrompts {
                 ```
                 %s
                 ```
-
+                %s
                 请按 system prompt 要求输出该模块的 Markdown 摘要。
-                """.formatted(moduleName, fileList, sources);
+                若用户诉求与该模块相关，请在摘要中针对性展开 —— 长度不限，越详细越好。
+                """.formatted(moduleName, fileList, sources, userRequirementsBlock(userRequirements));
     }
 
     /** 最终项目全景 system prompt：在所有模块摘要到位后，产出项目级报告 */
@@ -319,6 +361,13 @@ public final class CodeReviewPrompts {
 
     public static String projectOverviewFinalUser(String repoName, String treeView,
                                                   String languageStats, String moduleSummariesJoined) {
+        return projectOverviewFinalUser(repoName, treeView, languageStats, moduleSummariesJoined, null);
+    }
+
+    /** 重载：支持用户诉求（优先覆盖默认模板） */
+    public static String projectOverviewFinalUser(String repoName, String treeView,
+                                                  String languageStats, String moduleSummariesJoined,
+                                                  String userRequirements) {
         return """
                 仓库: %s
 
@@ -332,9 +381,10 @@ public final class CodeReviewPrompts {
 
                 ## 你已经产出的各模块摘要
                 %s
-
+                %s
                 请按 system prompt 输出最终 JSON。
-                """.formatted(repoName, treeView, languageStats, moduleSummariesJoined);
+                """.formatted(repoName, treeView, languageStats, moduleSummariesJoined,
+                              userRequirementsBlock(userRequirements));
     }
 
     /**
@@ -440,6 +490,12 @@ public final class CodeReviewPrompts {
      */
     public static String fileReviewUser(String repoName, String commitSha, String filePath, String fileDiff,
                                         String ruleListMarkdown) {
+        return fileReviewUser(repoName, commitSha, filePath, fileDiff, ruleListMarkdown, null);
+    }
+
+    /** 重载：支持用户诉求（单文件审查阶段） */
+    public static String fileReviewUser(String repoName, String commitSha, String filePath, String fileDiff,
+                                        String ruleListMarkdown, String userRequirements) {
         String rulePart = (ruleListMarkdown == null || ruleListMarkdown.isBlank())
                 ? ""
                 : "\n## 本文件类型相关的黄山版规约（findings 的 ruleRef 必须从这里选取真实编号）\n\n"
@@ -453,9 +509,10 @@ public final class CodeReviewPrompts {
                 ```diff
                 %s
                 ```
-
+                %s
                 请按 system prompt 返回 findings JSON。
-                """.formatted(repoName, commitSha, filePath, rulePart, fileDiff);
+                """.formatted(repoName, commitSha, filePath, rulePart, fileDiff,
+                              userRequirementsBlock(userRequirements));
     }
 
     /** 旧版 4 参数签名，保留兼容（无规约清单时调用） */
@@ -499,14 +556,21 @@ public final class CodeReviewPrompts {
     }
 
     public static String reviewMergeUser(String repoName, String commitSha, String findingsJsonJoined) {
+        return reviewMergeUser(repoName, commitSha, findingsJsonJoined, null);
+    }
+
+    /** 重载：支持用户诉求（最终总结阶段也要对诉求有回应） */
+    public static String reviewMergeUser(String repoName, String commitSha, String findingsJsonJoined,
+                                         String userRequirements) {
         return """
                 仓库: %s
                 提交: %s
 
                 ## 所有文件审查得到的 findings（合并后）
                 %s
-
+                %s
                 请按 system prompt 返回 { overallScore, summaryMd } JSON。
-                """.formatted(repoName, commitSha, findingsJsonJoined);
+                """.formatted(repoName, commitSha, findingsJsonJoined,
+                              userRequirementsBlock(userRequirements));
     }
 }

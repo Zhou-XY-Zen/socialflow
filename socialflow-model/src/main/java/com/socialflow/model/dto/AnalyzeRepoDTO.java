@@ -46,4 +46,16 @@ public class AnalyzeRepoDTO implements Serializable {
 
     @Schema(description = "最大分析文件数，默认 200")
     private Integer maxFiles;
+
+    /**
+     * 用户自定义分析诉求 / 重点关注方向 —— 可选。
+     * 若提供，LLM 会在默认报告之上深度覆盖这些诉求，追求"读完不用看源码就能懂"的详尽度。
+     * 长度无硬性限制，但过长会线性增加 prompt token 消耗；服务端做 8000 字符软截断。
+     * 示例：
+     *   "重点说明评估中心的打分算法，以及内容如何经过多 Agent 协作生成"
+     *   "我想把这个项目接入公司系统，请列出所有关键扩展点和接口契约"
+     *   "详细分析缓存降级、限流和熔断是怎么做的"
+     */
+    @Schema(description = "自定义分析诉求，越详细越好；为空时走默认模板")
+    private String userRequirements;
 }

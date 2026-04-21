@@ -13,7 +13,17 @@ import FindingCard from '@/components/code-analysis/FindingCard.vue'
 
 const md = new MarkdownIt({ html: false, linkify: true, breaks: true })
 
-const form = reactive({ gitUrl: '', branch: '', baseRef: '', headRef: '' })
+const form = reactive({ gitUrl: '', branch: '', baseRef: '', headRef: '', userRequirements: '' })
+
+const REQ_EXAMPLES: { label: string; text: string }[] = [
+  { label: '兼容性评估', text: '重点评估 base 到 head 之间的改动对线上老逻辑、对外 API、对下游调用方的兼容性。列出破坏性变更。' },
+  { label: '性能与容量', text: '关注本次 diff 中的性能变化：新增的数据库查询、循环嵌套、大对象分配、热点路径变更。' },
+  { label: '安全审计', text: '按 OWASP Top 10 审查：SQL 注入 / XSS / 权限校验 / 敏感信息处理 / 文件操作 / 反序列化。' },
+  { label: '回滚风险', text: '评估本次改动出问题时的回滚风险：是否有不可逆操作、是否涉及数据库 schema 变更、feature flag 是否到位。' },
+]
+function fillExample(i: number) {
+  form.userRequirements = REQ_EXAMPLES[i].text
+}
 const pickerValue = reactive<{ gitUrl: string; branch?: string; credentialId?: string }>({
   gitUrl: '', branch: '',
 })
@@ -114,6 +124,36 @@ onUnmounted(stopPoll)
             </el-input>
           </el-form-item>
         </div>
+
+        <!-- 自定义审查重点 -->
+        <el-form-item>
+          <template #label>
+            <div class="req-label">
+              <span class="req-label-main">
+                <el-icon><ChatLineRound /></el-icon>
+                自定义审查重点
+              </span>
+              <span class="req-label-hint">可选 · 让 AI 按你的关注维度深入</span>
+            </div>
+          </template>
+          <el-input
+            v-model="form.userRequirements"
+            type="textarea"
+            :rows="3"
+            resize="vertical"
+            maxlength="8000"
+            show-word-limit
+            placeholder="例：重点评估对下游的兼容性；按 OWASP Top 10 做安全审计；列出破坏性 API 变更 …"
+          />
+          <div class="req-examples">
+            <span class="req-examples-label">💡 示例：</span>
+            <button v-for="(ex, i) in REQ_EXAMPLES" :key="ex.label"
+                    type="button" class="req-example-chip" @click="fillExample(i)">
+              {{ ex.label }}
+            </button>
+          </div>
+        </el-form-item>
+
         <el-button type="primary" size="large" :loading="loading" class="submit-btn" @click="start">
           <el-icon v-if="!loading" style="margin-right:6px"><MagicStick /></el-icon>
           开始对比审查
@@ -283,6 +323,50 @@ onUnmounted(stopPoll)
 .submit-btn:hover {
   transform: translateY(-2px);
   box-shadow: var(--sf-shadow-glow-brand) !important;
+}
+
+/* ========== 自定义审查重点 ========== */
+.req-label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sf-space-2);
+  width: 100%;
+}
+.req-label-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: var(--sf-text-primary);
+  font-size: 14px;
+}
+.req-label-main :deep(.el-icon) { color: var(--sf-primary); }
+.req-label-hint { color: var(--sf-text-muted); font-size: 12px; font-weight: 400; }
+.req-examples {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: var(--sf-space-2);
+}
+.req-examples-label { color: var(--sf-text-tertiary); font-size: 12px; }
+.req-example-chip {
+  padding: 4px 10px;
+  background: rgba(102, 126, 234, 0.08);
+  border: 1px solid rgba(102, 126, 234, 0.2);
+  color: var(--sf-primary-dark);
+  border-radius: var(--sf-radius-full);
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--sf-transition-fast);
+  font-family: inherit;
+}
+.req-example-chip:hover {
+  background: rgba(102, 126, 234, 0.18);
+  border-color: var(--sf-primary);
+  transform: translateY(-1px);
 }
 
 /* ========== 亮点 + 提示（表单下方，填满空间） ========== */

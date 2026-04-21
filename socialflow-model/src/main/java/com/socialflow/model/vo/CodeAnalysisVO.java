@@ -68,5 +68,8 @@ public class CodeAnalysisVO implements Serializable {
     private Long durationMs;
     private Integer llmTokensUsed;
 
+    @Schema(description = "用户提交分析时的自定义诉求，可能为 null")
+    private String userRequirements;
+
     private LocalDateTime createTime;
 }

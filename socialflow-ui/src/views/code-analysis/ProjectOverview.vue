@@ -18,7 +18,20 @@ const md = new MarkdownIt({ html: false, linkify: true, breaks: true })
 const form = reactive({
   gitUrl: '',
   branch: 'main',
+  userRequirements: '',
 })
+
+/** 预置示例诉求，点一下填入 textarea，引导用户快速上手 */
+const REQ_EXAMPLES: { label: string; text: string }[] = [
+  { label: '架构与扩展点', text: '请详细说明项目的分层架构、模块之间的调用关系，以及二次开发时可以介入的扩展点（接口、回调、配置项、SPI 等）。最好用 Mermaid 画出关键调用链。' },
+  { label: '关键算法原理', text: '我想彻底弄懂以下关键算法/流程的实现原理（按代码逐层展开）：(1) RAG 检索+重排 (2) 代码审查的规约注入与反向校验 (3) Finding 反馈闭环的去重与屏蔽机制。最好配合伪代码或流程图说明。' },
+  { label: '缓存与容灾', text: '请详细讲清楚项目的缓存策略、限流熔断、降级回退、重试机制各自如何实现的。分别列出：涉及的类/配置/注解、触发条件、失败后的行为、监控指标。' },
+  { label: '接入与上手', text: '假设我是新入职的工程师，请帮我整理一份"第一周上手手册"：环境准备、启动流程、最常见的 10 个开发任务怎么做（比如加一个 API、加一个 LLM Provider、加一个定时任务）、踩坑经验。' },
+  { label: '性能与并发', text: '请详细分析项目的性能关键点：数据库索引使用、慢查询、线程池配置、异步任务调度、高并发场景的竞态保护。每一项都要具体到代码位置。' },
+]
+function fillExample(i: number) {
+  form.userRequirements = REQ_EXAMPLES[i].text
+}
 
 // 用于 v-model 给 RepoPicker
 const pickerValue = reactive<{ gitUrl: string; branch?: string; credentialId?: string }>({
@@ -186,6 +199,36 @@ onUnmounted(stopPoll)
           <el-form-item label="选择要分析的仓库">
             <RepoPicker :model-value="pickerValue" @update:model-value="onPickerChange" :show-branch="true" />
           </el-form-item>
+
+          <!-- 自定义分析诉求 -->
+          <el-form-item>
+            <template #label>
+              <div class="req-label">
+                <span class="req-label-main">
+                  <el-icon><ChatLineRound /></el-icon>
+                  自定义分析诉求
+                </span>
+                <span class="req-label-hint">可选 · 越详细 AI 写得越深入</span>
+              </div>
+            </template>
+            <el-input
+              v-model="form.userRequirements"
+              type="textarea"
+              :rows="4"
+              resize="vertical"
+              maxlength="8000"
+              show-word-limit
+              placeholder="例：请详细说明评估中心的打分算法；重点分析多 Agent 协作流程；列出所有二次开发扩展点 …&#10;写得越具体，AI 的分析就越有针对性、越深入。"
+            />
+            <div class="req-examples">
+              <span class="req-examples-label">💡 快速填入示例：</span>
+              <button v-for="(ex, i) in REQ_EXAMPLES" :key="ex.label"
+                      type="button" class="req-example-chip" @click="fillExample(i)">
+                {{ ex.label }}
+              </button>
+            </div>
+          </el-form-item>
+
           <div class="sub-hint" style="margin-bottom: 12px;">
             Map-Reduce 全量扫描：逐模块读全部源码 → 汇总项目全景
           </div>
@@ -388,6 +431,12 @@ onUnmounted(stopPoll)
           </div>
         </div>
 
+        <!-- 用户当初的分析诉求 -->
+        <div v-if="current.userRequirements" class="req-display">
+          <div class="req-display-title"><el-icon><ChatLineRound /></el-icon>本次分析的自定义诉求</div>
+          <div class="req-display-body">{{ current.userRequirements }}</div>
+        </div>
+
         <!-- Mermaid 核心流程图（SVG 渲染） -->
         <div v-if="current.mermaidCode" class="mermaid-box">
           <div class="mermaid-title">🧭 核心流程图</div>
@@ -467,6 +516,57 @@ onUnmounted(stopPoll)
 .submit-btn:hover {
   transform: translateY(-2px);
   box-shadow: var(--sf-shadow-glow-brand) !important;
+}
+
+/* ========== 自定义分析诉求输入 ========== */
+.req-label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sf-space-2);
+  width: 100%;
+}
+.req-label-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: var(--sf-text-primary);
+  font-size: 14px;
+}
+.req-label-main :deep(.el-icon) { color: var(--sf-primary); }
+.req-label-hint {
+  color: var(--sf-text-muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+.req-examples {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: var(--sf-space-2);
+}
+.req-examples-label {
+  color: var(--sf-text-tertiary);
+  font-size: 12px;
+}
+.req-example-chip {
+  padding: 4px 10px;
+  background: rgba(102, 126, 234, 0.08);
+  border: 1px solid rgba(102, 126, 234, 0.2);
+  color: var(--sf-primary-dark);
+  border-radius: var(--sf-radius-full);
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--sf-transition-fast);
+  font-family: inherit;
+}
+.req-example-chip:hover {
+  background: rgba(102, 126, 234, 0.18);
+  border-color: var(--sf-primary);
+  transform: translateY(-1px);
 }
 
 .bookmark-item {
@@ -1098,6 +1198,34 @@ onUnmounted(stopPoll)
   text-align: right;
   font-variant-numeric: tabular-nums;
   font-weight: 500;
+}
+
+/* 结果卡：用户诉求回显 */
+.req-display {
+  margin: 0 var(--sf-space-5) var(--sf-space-4);
+  background: linear-gradient(135deg, rgba(102,126,234,0.05) 0%, rgba(118,75,162,0.05) 100%);
+  border: 1px solid rgba(102,126,234,0.2);
+  border-radius: var(--sf-radius-md);
+  padding: var(--sf-space-3) var(--sf-space-4);
+}
+.req-display-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--sf-primary-dark);
+  margin-bottom: var(--sf-space-2);
+}
+.req-display-body {
+  color: var(--sf-text-primary);
+  font-size: 13px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  padding: var(--sf-space-2) var(--sf-space-3);
+  background: rgba(255,255,255,0.6);
+  border-left: 3px solid var(--sf-primary);
+  border-radius: 0 var(--sf-radius-sm) var(--sf-radius-sm) 0;
 }
 
 /* ========== Mermaid 图表区 ========== */

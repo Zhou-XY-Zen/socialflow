@@ -108,6 +108,9 @@ public class CodeAnalysisServiceImpl implements CodeAnalysisService {
         return a.getId();
     }
 
+    /** 用户诉求落库长度上限（与 prompt 软截断对齐） */
+    private static final int USER_REQ_MAX_LEN = 8000;
+
     private RepoAnalysis initRecord(Long userId, AnalyzeRepoDTO dto, String type) {
         RepoAnalysis a = new RepoAnalysis();
         a.setUserId(userId);
@@ -121,6 +124,13 @@ public class CodeAnalysisServiceImpl implements CodeAnalysisService {
         a.setMediumCount(0);
         a.setLowCount(0);
         a.setIsFavorite(0);
+        // 保存用户诉求，便于结果页回显 + AsyncRunner 注入 prompt
+        String req = dto.getUserRequirements();
+        if (req != null && req.length() > USER_REQ_MAX_LEN) {
+            req = req.substring(0, USER_REQ_MAX_LEN);
+            log.warn("[CodeAnalysis] userRequirements 长度超限已截断到 {} 字符", USER_REQ_MAX_LEN);
+        }
+        a.setUserRequirements(req);
         return a;
     }
 

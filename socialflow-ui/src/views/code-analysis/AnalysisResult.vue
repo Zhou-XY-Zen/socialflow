@@ -252,6 +252,12 @@ async function doExport(format: 'markdown' | 'html' | 'pdf') {
         </div>
       </div>
 
+      <!-- 用户当初的分析诉求（若有） -->
+      <div v-if="current.userRequirements" class="content-card req-card">
+        <div class="card-title">✍️ 本次分析的自定义诉求</div>
+        <div class="req-body">{{ current.userRequirements }}</div>
+      </div>
+
       <!-- Mermaid 流程图（项目概览类型显示）-->
       <div v-if="current.analysisType === 'PROJECT_OVERVIEW' && current.mermaidCode" class="content-card">
         <div class="card-title">🧭 核心流程图</div>
@@ -667,6 +673,22 @@ async function doExport(format: 'markdown' | 'html' | 'pdf') {
   transition: box-shadow var(--sf-transition-base);
 }
 .content-card:hover { box-shadow: var(--sf-shadow-md); }
+
+/* 用户诉求卡：浅紫背景 + 左侧竖条 */
+.req-card {
+  background: linear-gradient(135deg, rgba(102,126,234,0.05) 0%, rgba(118,75,162,0.05) 100%);
+  border-color: rgba(102,126,234,0.2);
+}
+.req-body {
+  color: var(--sf-text-primary);
+  font-size: 13.5px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  padding: var(--sf-space-3) var(--sf-space-4);
+  background: rgba(255,255,255,0.6);
+  border-left: 3px solid var(--sf-primary);
+  border-radius: 0 var(--sf-radius-sm) var(--sf-radius-sm) 0;
+}
 .card-title {
   font-size: 15px;
   font-weight: 600;

@@ -15,7 +15,18 @@ import FindingCard from '@/components/code-analysis/FindingCard.vue'
 const md = new MarkdownIt({ html: false, linkify: true, breaks: true })
 
 const step = ref<1 | 2 | 3>(1)
-const form = reactive({ gitUrl: '', branch: 'main' })
+const form = reactive({ gitUrl: '', branch: 'main', userRequirements: '' })
+
+/** 审查视角的预置诉求示例 */
+const REQ_EXAMPLES: { label: string; text: string }[] = [
+  { label: '性能与并发', text: '重点审查性能和并发问题：数据库 N+1 / 索引使用 / 线程池配置 / 锁粒度 / 内存泄漏 / 慢查询。' },
+  { label: '安全漏洞', text: '重点检查安全风险：SQL 注入 / XSS / 权限越权 / 敏感信息泄漏 / 文件上传漏洞 / CSRF / SSRF。每条要指出具体 payload 场景。' },
+  { label: '设计与可读性', text: '关注架构合理性：分层是否清晰、是否有跨层调用、DTO/VO/BO 是否混用、方法长度和圈复杂度、是否过度使用继承。' },
+  { label: '向后兼容', text: '重点评估本次改动对线上老逻辑、对外 API、对下游调用方的兼容性。哪些字段/接口签名变了，有没有加版本控制。' },
+]
+function fillExample(i: number) {
+  form.userRequirements = REQ_EXAMPLES[i].text
+}
 
 const pickerValue = reactive<{ gitUrl: string; branch?: string; credentialId?: string }>({
   gitUrl: '', branch: 'main',
@@ -67,6 +78,7 @@ async function selectCommit(c: RepoCommit) {
       gitUrl: form.gitUrl,
       branch: form.branch,
       commitSha: c.sha,
+      userRequirements: form.userRequirements || undefined,
     })
     await poll(res.id)
   } catch (e: any) {
@@ -173,6 +185,36 @@ onUnmounted(stopPoll)
           <el-form-item label="选择要审查的仓库">
             <RepoPicker :model-value="pickerValue" @update:model-value="onPickerChange" :show-branch="true" />
           </el-form-item>
+
+          <!-- 自定义审查重点 -->
+          <el-form-item>
+            <template #label>
+              <div class="req-label">
+                <span class="req-label-main">
+                  <el-icon><ChatLineRound /></el-icon>
+                  自定义审查重点
+                </span>
+                <span class="req-label-hint">可选 · 让 AI 聚焦你关心的维度</span>
+              </div>
+            </template>
+            <el-input
+              v-model="form.userRequirements"
+              type="textarea"
+              :rows="3"
+              resize="vertical"
+              maxlength="8000"
+              show-word-limit
+              placeholder="例：请重点检查并发安全；特别关注 SQL 注入和越权风险；评估对下游 API 的兼容性 …"
+            />
+            <div class="req-examples">
+              <span class="req-examples-label">💡 示例：</span>
+              <button v-for="(ex, i) in REQ_EXAMPLES" :key="ex.label"
+                      type="button" class="req-example-chip" @click="fillExample(i)">
+                {{ ex.label }}
+              </button>
+            </div>
+          </el-form-item>
+
           <el-button type="primary" size="large" :loading="loadingCommits" @click="fetchCommits" class="submit-btn"
                      :disabled="!form.gitUrl">
             <el-icon v-if="!loadingCommits" style="margin-right:6px"><Right /></el-icon>
@@ -475,6 +517,54 @@ onUnmounted(stopPoll)
 .submit-btn:hover {
   transform: translateY(-2px);
   box-shadow: var(--sf-shadow-glow-brand) !important;
+}
+
+/* ========== 自定义审查重点 ========== */
+.req-label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sf-space-2);
+  width: 100%;
+}
+.req-label-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: var(--sf-text-primary);
+  font-size: 14px;
+}
+.req-label-main :deep(.el-icon) { color: var(--sf-primary); }
+.req-label-hint {
+  color: var(--sf-text-muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+.req-examples {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: var(--sf-space-2);
+}
+.req-examples-label { color: var(--sf-text-tertiary); font-size: 12px; }
+.req-example-chip {
+  padding: 4px 10px;
+  background: rgba(102, 126, 234, 0.08);
+  border: 1px solid rgba(102, 126, 234, 0.2);
+  color: var(--sf-primary-dark);
+  border-radius: var(--sf-radius-full);
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--sf-transition-fast);
+  font-family: inherit;
+}
+.req-example-chip:hover {
+  background: rgba(102, 126, 234, 0.18);
+  border-color: var(--sf-primary);
+  transform: translateY(-1px);
 }
 
 /* ========== 审查能力亮点 4 连卡 ========== */
