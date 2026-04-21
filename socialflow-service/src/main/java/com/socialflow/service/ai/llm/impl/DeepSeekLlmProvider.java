@@ -49,10 +49,17 @@ public class DeepSeekLlmProvider implements LlmProviderService {
 
     private final WebClient webClient;
 
+    /** 流式调用的 idle timeout —— "两次 chunk 间隔"超过此值才认为卡死。
+     *  DeepSeek 正常吐 token 每秒几十个，这里给 120s 覆盖偶发 warmup / 服务端排队。 */
+    private static final Duration STREAM_IDLE_TIMEOUT = Duration.ofSeconds(120);
+
     public DeepSeekLlmProvider(WebClient.Builder webClientBuilder) {
+        // responseTimeout 是 Netty 的"接收完整响应总时长"硬天花板。流式模式下保留 30 分钟兜底，
+        // 实际超时主要由 Flux.timeout(idle) 控制 —— 服务端持续吐 token 就永不超时。
+        // DeepSeek 官方 TCP 维持 30 分钟，对齐该值。
         reactor.netty.http.client.HttpClient httpClient = reactor.netty.http.client.HttpClient.create()
                 .option(io.netty.channel.ChannelOption.CONNECT_TIMEOUT_MILLIS, 10000)
-                .responseTimeout(java.time.Duration.ofSeconds(300));
+                .responseTimeout(Duration.ofMinutes(30));
         this.webClient = webClientBuilder
                 .clientConnector(new org.springframework.http.client.reactive.ReactorClientHttpConnector(httpClient))
                 // 代码分析 FINAL 阶段响应可能含数 MB 的 summaryMd + Mermaid，4MB 太紧 → 16MB
@@ -73,42 +80,43 @@ public class DeepSeekLlmProvider implements LlmProviderService {
         String model = (config.getModel() != null && !config.getModel().isBlank()) ? config.getModel() : defaultModel;
         String url = resolveBaseUrl(config);
 
-        Map<String, Object> body = buildRequest(messages, model, config, false);
-        log.debug("DeepSeek chat: model={}, messages={}", model, messages.size());
+        // 内部改走 SSE 流式聚合 —— 对外接口仍返回完整 LlmResponse。
+        // 这样做的关键收益：DeepSeek 生成 5000+ 字长回答时，单次推理总时长偶尔 > 300s 会撞 Netty
+        // responseTimeout 硬天花板触发 Resilience4j 重试 3 次（15 分钟惩罚）。改用 idle timeout 后，
+        // 只要服务端持续吐 token 就永不超时；整个 30 分钟连接上限内都能跑完。
+        Map<String, Object> body = buildRequest(messages, model, config, true);
+        body.put("stream_options", Map.of("include_usage", true));  // 最后一个 chunk 带 usage
+        log.debug("DeepSeek chat (stream): model={}, messages={}", model, messages.size());
 
+        StringBuilder contentBuf = new StringBuilder(16384);
+        int[] usage = {0, 0};  // [prompt_tokens, completion_tokens]
         long start = System.currentTimeMillis();
         try {
-            String json = webClient.post()
+            webClient.post()
                     .uri(url + "chat/completions")
                     .header(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey)
                     .contentType(MediaType.APPLICATION_JSON)
+                    .accept(MediaType.TEXT_EVENT_STREAM)
                     .bodyValue(body)
                     .retrieve()
-                    .bodyToMono(String.class)
-                    .timeout(timeout)
-                    .block();
+                    .bodyToFlux(String.class)
+                    // idle timeout：相邻 chunk 间隔 > 120s 才视为卡死；正常吐 token 场景永不触发
+                    .timeout(STREAM_IDLE_TIMEOUT)
+                    .doOnNext(raw -> accumulateStreamChunk(raw, contentBuf, usage))
+                    .blockLast();
 
             long latency = System.currentTimeMillis() - start;
-            JsonNode root = JsonUtil.mapper().readTree(json);
-
-            // deepseek-reasoner：只取 content（最终回答），不取 reasoning_content（推理过程）
-            String content = root.path("choices").path(0).path("message").path("content").asText("");
-            // 过滤掉可能混入的 <think> 标签
-            if (content.contains("<think>")) {
-                content = content.replaceAll("<think>[\\s\\S]*?</think>", "").trim();
-            }
-            int prompt = root.path("usage").path("prompt_tokens").asInt(0);
-            int completion = root.path("usage").path("completion_tokens").asInt(0);
-
-            // 按黄山版 2.3.2：每个占位符对应一个变量
+            String content = stripThinkTags(contentBuf.toString());
+            int prompt = usage[0], completion = usage[1];
             int totalTokens = prompt + completion;
+
             log.info("DeepSeek OK: model={}, latency={}ms, prompt={}, completion={}, total={}",
                     model, latency, prompt, completion, totalTokens);
             return LlmResponse.builder()
                     .content(content)
                     .promptTokens(prompt)
                     .completionTokens(completion)
-                    .totalTokens(prompt + completion)
+                    .totalTokens(totalTokens)
                     .model(model)
                     .latencyMs(latency)
                     .build();
@@ -121,6 +129,52 @@ public class DeepSeekLlmProvider implements LlmProviderService {
         } catch (Exception e) {
             throw new AiCallException("DeepSeek call failed: " + e.getMessage(), e);
         }
+    }
+
+    /**
+     * 解析一条 SSE data 行，累积到 contentBuf 和 usage 数组。
+     *
+     * DeepSeek SSE 流格式（stream_options.include_usage=true）：
+     *   data: {"choices":[{"delta":{"content":"你"}}]}
+     *   data: {"choices":[{"delta":{"content":"好"}}]}
+     *   ...
+     *   data: {"choices":[],"usage":{"prompt_tokens":N,"completion_tokens":M,"total_tokens":K}}
+     *   data: [DONE]
+     *
+     * 这里解析 content delta + 流末尾的 usage。reasoner 的 reasoning_content chunk 跳过。
+     */
+    private void accumulateStreamChunk(String raw, StringBuilder contentBuf, int[] usage) {
+        if (raw == null) return;
+        String line = raw.trim();
+        if (line.isEmpty()) return;
+        // bodyToFlux(String) 通常已经去掉 "data: " 前缀，但有时会保留（不同 Netty 版本），做一次兼容处理
+        if (line.startsWith("data:")) line = line.substring(5).trim();
+        if (line.isEmpty() || "[DONE]".equals(line) || line.startsWith(":")) return;
+        try {
+            JsonNode node = JsonUtil.mapper().readTree(line);
+            JsonNode choices = node.path("choices");
+            if (choices.isArray() && !choices.isEmpty()) {
+                JsonNode delta = choices.path(0).path("delta");
+                // deepseek-reasoner：跳过纯 reasoning_content chunk
+                String content = delta.path("content").asText("");
+                if (!content.isEmpty()) contentBuf.append(content);
+            }
+            JsonNode u = node.path("usage");
+            if (u.isObject() && !u.isMissingNode()) {
+                usage[0] = u.path("prompt_tokens").asInt(usage[0]);
+                usage[1] = u.path("completion_tokens").asInt(usage[1]);
+            }
+        } catch (Exception e) {
+            // 单条 chunk 解析失败不中断整条流 —— 记日志继续
+            log.warn("[DeepSeek] SSE chunk 解析失败: {} (chunk preview: {})",
+                    e.getMessage(), line.length() > 120 ? line.substring(0, 120) + "..." : line);
+        }
+    }
+
+    /** 过滤 <think>...</think> 标签（reasoner 模型混入时） */
+    private static String stripThinkTags(String s) {
+        if (s == null || !s.contains("<think>")) return s == null ? "" : s;
+        return s.replaceAll("<think>[\\s\\S]*?</think>", "").trim();
     }
 
     @Override
@@ -136,10 +190,12 @@ public class DeepSeekLlmProvider implements LlmProviderService {
                 .uri(url + "chat/completions")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey)
                 .contentType(MediaType.APPLICATION_JSON)
+                .accept(MediaType.TEXT_EVENT_STREAM)
                 .bodyValue(body)
                 .retrieve()
                 .bodyToFlux(String.class)
-                .timeout(timeout)
+                // idle timeout，与 chat() 统一：相邻 token 间隔 > 120s 才视为卡死
+                .timeout(STREAM_IDLE_TIMEOUT)
                 .filter(line -> !line.isBlank())
                 .map(String::trim)
                 .filter(line -> line.startsWith("data:") || line.startsWith("{"))

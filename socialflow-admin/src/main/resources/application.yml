@@ -197,7 +197,9 @@ resilience4j:
   retry:
     instances:
       llm-deepseek: &llm-retry
-        max-attempts: 3
+        # 【关键】降到 2（原 3）—— LLM 改流式聚合后 300s 硬天花板消失，TimeoutException 几乎绝迹；
+        # 保留 1 次重试兜底偶发网络断流。如果再失败就放弃（避免"真失败"被放大成 15 分钟惩罚）。
+        max-attempts: 2
         wait-duration: 1s
         exponential-backoff-multiplier: 2
         # 覆盖所有瞬时网络错 —— IOException 已含大多数，但 Netty 的部分异常不继承 IOException
