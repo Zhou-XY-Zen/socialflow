@@ -25,7 +25,8 @@ async function onLogin() {
   try {
     const data = await authApi.login(form)
     userStore.setSession(data.token, data.user)
-    const redirect = (router.currentRoute.value.query.redirect as string) || '/workspace'
+    // 登录后默认跳欢迎页；若有 query.redirect 则优先使用（用户被拦截前想去的地方）
+    const redirect = (router.currentRoute.value.query.redirect as string) || '/welcome'
     router.replace(redirect)
   } finally {
     loading.value = false

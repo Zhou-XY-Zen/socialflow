@@ -36,8 +36,8 @@ import { useUserStore } from '@/stores/user'
  *   只有用户真正访问该路由时才加载，加快首屏速度。
  */
 const routes: RouteRecordRaw[] = [
-  /* 根路径 '/' 自动重定向到工作台 */
-  { path: '/', redirect: '/workspace' },
+  /* 根路径 '/' 自动重定向到欢迎页 —— 登录后的默认落地 */
+  { path: '/', redirect: '/welcome' },
 
   /* 登录和注册页面 —— meta.public = true 表示无需登录即可访问 */
   { path: '/login', component: () => import('@/views/Login.vue'), meta: { public: true } },
@@ -60,6 +60,9 @@ const routes: RouteRecordRaw[] = [
     path: '/',
     component: () => import('@/views/Layout.vue'),
     children: [
+      /* 欢迎页 —— 登录后 / 刷新后默认落地 */
+      { path: 'welcome', name: 'welcome', component: () => import('@/views/Welcome.vue'),
+        meta: { title: '欢迎' } },
       /* 工作台 —— AI 文案生成的主界面 */
       { path: 'workspace', name: 'workspace', component: () => import('@/views/Workspace.vue'),
         meta: { title: '工作台' } },
@@ -138,21 +141,38 @@ const router = createRouter({
 })
 
 /**
- * ---- 全局前置守卫（Navigation Guard） ----
- * router.beforeEach() 会在每次路由跳转前执行回调函数。
- * 参数 `to` 是即将进入的目标路由对象。
- *
- * 逻辑：
- *   1. 如果目标路由的 meta.public 为 true（登录 / 注册页），直接放行。
- *   2. 否则检查用户是否已有 Token（是否已登录）。
- *      - 有 Token → 放行
- *      - 无 Token → 重定向到 /login，并把原始路径放在 query.redirect 中，
- *        这样登录成功后可以跳回用户原本想访问的页面。
+ * 全局"初次导航"标记：模块加载到第一次真正跳转完成之前为 true。
+ * 结合 from.name === undefined，能精确识别"浏览器刷新 / 地址栏直接输入 URL"
+ * 这两种"冷启动"场景 —— 这时候把用户引回欢迎页。
  */
-router.beforeEach((to) => {
-  if (to.meta?.public) return true
+let isFirstNavigation = true
+
+/**
+ * ---- 全局前置守卫（Navigation Guard） ----
+ *
+ * 逻辑优先级：
+ *   1. 目标路由 public（登录 / 注册 / 分享视图）→ 放行
+ *   2. 未登录 → 跳 /login 并携带原始路径作为 redirect
+ *   3. 已登录且是"冷启动"（刷新 / 首次进入）且目标不是欢迎页 → 强制跳 /welcome
+ *      这实现了需求："登录后 / 浏览器刷新后都回到欢迎页"
+ *   4. 其他情况 → 放行（正常的用户在站内点击跳转）
+ */
+router.beforeEach((to, from) => {
+  if (to.meta?.public) {
+    isFirstNavigation = false
+    return true
+  }
   const userStore = useUserStore()
-  if (!userStore.token) return { path: '/login', query: { redirect: to.fullPath } }
+  if (!userStore.token) {
+    isFirstNavigation = false
+    return { path: '/login', query: { redirect: to.fullPath } }
+  }
+  // 冷启动（刷新 / 外部跳入）：from.name === undefined 且是首次进入路由系统
+  const coldStart = isFirstNavigation && from.name === undefined
+  isFirstNavigation = false
+  if (coldStart && to.path !== '/welcome') {
+    return { path: '/welcome' }
+  }
   return true
 })
 
