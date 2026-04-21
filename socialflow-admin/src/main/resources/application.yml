@@ -241,18 +241,16 @@ resilience4j:
   circuitbreaker:
     instances:
       llm-deepseek: &llm-cb
-        # 放宽阈值，避免"一次网络抖动 + retry 3 次失败"就把窗口填满触发熔断
+        # 只对"真实失败"熔断；LLM 调用本就慢（项目概览每次 40-180s 正常），
+        # 不启用 slow-call 熔断，否则连续几次 200s 的正常调用会误触发 OPEN
         sliding-window-size: 20
         minimum-number-of-calls: 10
         failure-rate-threshold: 60
-        # 慢调用（Deepseek 超时）单独阈值：30s 以上算慢；仅当 80% 慢才熔断
-        slow-call-duration-threshold: 30s
-        slow-call-rate-threshold: 80
-        # 15s 后自动半开试探（比原来 30s 更快恢复）
+        # 15s 后自动半开试探，加速恢复
         wait-duration-in-open-state: 15s
         permitted-number-of-calls-in-half-open-state: 3
         automatic-transition-from-open-to-half-open-enabled: true
-        # 不把受检异常和参数异常计入失败
+        # 不把业务异常计入失败
         ignore-exceptions:
           - com.socialflow.common.exception.GuardrailException
           - com.socialflow.common.exception.QuotaExceededException
