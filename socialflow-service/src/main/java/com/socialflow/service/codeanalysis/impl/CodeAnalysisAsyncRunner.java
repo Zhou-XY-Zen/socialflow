@@ -170,35 +170,58 @@ public class CodeAnalysisAsyncRunner {
                 throw new RuntimeException("过滤后没有可分析的源文件");
             }
 
-            // ⚡ 并发模块摘要：moduleSummaryExecutor core=8 max=10
-            //   每个模块最多重试 3 次（指数退避 5s/15s），失败用占位替代不中断整个任务
-            int totalModules = modules.size();
-            AtomicInteger completed = new AtomicInteger(0);
-            AtomicInteger running = new AtomicInteger(0);
-            List<Map.Entry<String, List<SourceFile>>> moduleList = new ArrayList<>(modules.entrySet());
+            // ⚡ 扁平化并发：把所有模块的所有 batch 展平到同一个池子并发
+            // 避免"大模块内部串行 8 批"成为瓶颈（socialflow-service 以前单模块就要 16 分钟）
+            RepoAnalysis rec0 = analysisMapper.selectById(analysisId);
+            String userReqShared = rec0 == null ? null : rec0.getUserRequirements();
 
-            List<CompletableFuture<String>> futures = new ArrayList<>(totalModules);
-            for (Map.Entry<String, List<SourceFile>> entry : moduleList) {
-                final String moduleName = entry.getKey();
-                final List<SourceFile> files = entry.getValue();
-                CompletableFuture<String> fut = CompletableFuture.supplyAsync(() -> {
-                    running.incrementAndGet();
-                    updateParallelProgress(analysisId, totalModules, completed.get(), running.get(), moduleName);
+            List<BatchTask> allBatches = flattenBatches(modules);
+            int totalBatches = allBatches.size();
+            int totalModules = modules.size();
+            log.info("[CodeAnalysis] 扁平化：{} 模块 → {} 批次，并发池大小 {}",
+                    totalModules, totalBatches, 10);
+
+            AtomicInteger doneBatches = new AtomicInteger(0);
+            AtomicInteger runningBatches = new AtomicInteger(0);
+            // key = moduleName, value = 按 batchIndex 排序的每批摘要
+            Map<String, String[]> byModule = new java.util.concurrent.ConcurrentHashMap<>();
+            for (BatchTask bt : allBatches) {
+                byModule.computeIfAbsent(bt.moduleName, k -> new String[bt.totalBatches]);
+            }
+
+            List<CompletableFuture<Void>> futures = new ArrayList<>(totalBatches);
+            for (BatchTask bt : allBatches) {
+                CompletableFuture<Void> fut = CompletableFuture.runAsync(() -> {
+                    runningBatches.incrementAndGet();
+                    updateParallelProgress(analysisId, totalBatches, doneBatches.get(),
+                            runningBatches.get(), bt.moduleName + "(" + (bt.batchIndex + 1) + "/" + bt.totalBatches + ")");
                     try {
-                        String summary = summarizeWithRetry(userId, analysisId, repoName, moduleName, files);
-                        return "### " + moduleName + "\n" + summary;
+                        String summary = summarizeOneBatchWithRetry(userId, analysisId, repoName, bt, userReqShared);
+                        byModule.get(bt.moduleName)[bt.batchIndex] = summary;
                     } finally {
-                        running.decrementAndGet();
-                        int done = completed.incrementAndGet();
-                        updateParallelProgress(analysisId, totalModules, done, running.get(), moduleName);
+                        runningBatches.decrementAndGet();
+                        int d = doneBatches.incrementAndGet();
+                        updateParallelProgress(analysisId, totalBatches, d, runningBatches.get(),
+                                bt.moduleName);
                     }
                 }, moduleSummaryExecutor);
                 futures.add(fut);
             }
             CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
-            List<String> moduleSummaries = futures.stream()
-                    .map(CompletableFuture::join)
-                    .collect(java.util.stream.Collectors.toList());
+
+            // 按模块名顺序（保持原 Map 顺序）拼接各批摘要
+            List<String> moduleSummaries = new ArrayList<>(totalModules);
+            for (String moduleName : modules.keySet()) {
+                String[] batchArr = byModule.get(moduleName);
+                String joined = batchArr.length == 1
+                        ? (batchArr[0] == null ? "（无内容）" : batchArr[0])
+                        : "（本模块内容分 " + batchArr.length + " 批摘要）\n\n" +
+                          String.join("\n\n---\n\n",
+                                  java.util.Arrays.stream(batchArr)
+                                          .map(s -> s == null ? "（该批次失败）" : s)
+                                          .toList());
+                moduleSummaries.add("### " + moduleName + "\n" + joined);
+            }
 
             // ========= FINAL 三段式：突破单次 completion 上限，产出 10000+ 字报告 =========
             String langStatsText = formatLangStats(langs);
@@ -277,6 +300,91 @@ public class CodeAnalysisAsyncRunner {
         } finally {
             if (repo != null) gitRepoService.cleanup(repo);
         }
+    }
+
+    /** 一个 batch 任务的描述：belong to 哪个模块、是第几个 batch / 共几批、文件清单 */
+    private record BatchTask(String moduleName, int batchIndex, int totalBatches, List<SourceFile> files) {}
+
+    /**
+     * 把各模块 files 切批后展平成一个扁平的 BatchTask 列表。
+     * 逻辑等同原来 summarizeOneModule 里的字节分批：每批 ≤ PER_MODULE_BYTES。
+     */
+    private List<BatchTask> flattenBatches(Map<String, List<SourceFile>> modules) {
+        List<BatchTask> out = new ArrayList<>();
+        for (var entry : modules.entrySet()) {
+            String moduleName = entry.getKey();
+            List<SourceFile> files = entry.getValue();
+            List<List<SourceFile>> batches = new ArrayList<>();
+            List<SourceFile> cur = new ArrayList<>();
+            int curSize = 0;
+            for (SourceFile f : files) {
+                int sz = f.content.length() + f.path.length() + 50;
+                if (curSize + sz > PER_MODULE_BYTES && !cur.isEmpty()) {
+                    batches.add(cur);
+                    cur = new ArrayList<>();
+                    curSize = 0;
+                }
+                cur.add(f);
+                curSize += sz;
+            }
+            if (!cur.isEmpty()) batches.add(cur);
+            int total = batches.size();
+            for (int i = 0; i < total; i++) {
+                out.add(new BatchTask(moduleName, i, total, batches.get(i)));
+            }
+        }
+        return out;
+    }
+
+    /**
+     * 批次级重试 3 次（指数退避 5/10/15 秒）。
+     * 相比"模块级 retry"粒度更细：一个超大模块分 8 批，某一批失败不拖累其他 7 批。
+     * 3 次都失败用占位摘要替代，不中断整体任务。
+     */
+    private String summarizeOneBatchWithRetry(Long userId, Long analysisId, String repoName,
+                                              BatchTask bt, String userRequirements) {
+        Throwable last = null;
+        for (int attempt = 1; attempt <= MODULE_MAX_RETRY; attempt++) {
+            try {
+                return summarizeOneBatch(userId, analysisId, repoName, bt, userRequirements);
+            } catch (Throwable t) {
+                last = t;
+                log.warn("[Batch] {}({}/{}) 第 {}/{} 次失败: {}",
+                        bt.moduleName, bt.batchIndex + 1, bt.totalBatches,
+                        attempt, MODULE_MAX_RETRY, t.getMessage());
+                if (attempt < MODULE_MAX_RETRY) {
+                    try { Thread.sleep(attempt * 5000L); }
+                    catch (InterruptedException ie) { Thread.currentThread().interrupt(); break; }
+                }
+            }
+        }
+        log.error("[Batch] {}({}/{}) 重试 {} 次全部失败", bt.moduleName, bt.batchIndex + 1,
+                bt.totalBatches, MODULE_MAX_RETRY, last);
+        return String.format("> ⚠️ 批次 %d/%d 分析失败（%d 次重试均未成功）\n> 原因：%s\n",
+                bt.batchIndex + 1, bt.totalBatches, MODULE_MAX_RETRY,
+                last != null ? last.getMessage() : "unknown");
+    }
+
+    /** 单个批次的 LLM 调用（无重试逻辑，由外层 summarizeOneBatchWithRetry 包装） */
+    private String summarizeOneBatch(Long userId, Long analysisId, String repoName,
+                                     BatchTask bt, String userRequirements) {
+        String fileList = buildFileList(bt.files);
+        StringBuilder sources = new StringBuilder();
+        for (SourceFile f : bt.files) {
+            sources.append("\n\n// ========== ").append(f.path).append(" (")
+                   .append(f.lines).append(" lines) ==========\n")
+                   .append(f.content);
+        }
+        String stage = "MODULE_SUMMARY_" + safeStageSegment(bt.moduleName)
+                + (bt.totalBatches > 1 ? "_p" + (bt.batchIndex + 1) : "");
+        String label = bt.totalBatches > 1
+                ? String.format("模块 %s 分批摘要 %d/%d", bt.moduleName, bt.batchIndex + 1, bt.totalBatches)
+                : String.format("模块 %s 摘要", bt.moduleName);
+
+        String user = CodeReviewPrompts.moduleSummaryUser(bt.moduleName, fileList, sources.toString(), userRequirements);
+        LlmResponse resp = callLlm(userId, analysisId, stage, label,
+                CodeReviewPrompts.moduleSummarySystem(), user);
+        return resp.getContent();
     }
 
     /**
