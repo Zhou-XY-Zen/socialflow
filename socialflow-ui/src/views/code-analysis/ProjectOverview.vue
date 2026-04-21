@@ -9,7 +9,7 @@ import MarkdownIt from 'markdown-it'
 import { codeAnalysisApi } from '@/api/codeAnalysis'
 import { useMermaid } from '@/composables/useMermaid'
 import RepoPicker from '@/components/code-analysis/RepoPicker.vue'
-import type { CodeAnalysis, RepoBookmark } from '@/types/codeAnalysis'
+import type { CodeAnalysis, LlmCallLog, RepoBookmark } from '@/types/codeAnalysis'
 
 const router = useRouter()
 const route = useRoute()
@@ -59,7 +59,106 @@ let pollDelayMs = POLL_BASE_MS
 
 const STAGE_LABEL: Record<string, string> = {
   INIT: '初始化', CLONING: '克隆仓库', SCANNING: '扫描结构',
+  MODULE_SUMMARY: '逐模块摘要', FINAL: '汇总全景',
   ANALYZING: 'LLM 分析', RENDERING: '渲染报告', DONE: '完成',
+}
+
+/* ====== 进行中页的实时遥测：计时器 + Token + 日志 ====== */
+const analysisStartAt = ref(0)            // Date.now() 记录开始时间
+const elapsedSec = ref(0)                 // 已耗时（秒），每秒 tick
+const liveCalls = ref<LlmCallLog[]>([])   // 实时 LLM 调用记录
+let elapsedTimer: number | null = null
+
+/** mm:ss 格式的耗时字符串 */
+const elapsedStr = computed(() => {
+  const s = elapsedSec.value
+  const m = Math.floor(s / 60)
+  const sec = s % 60
+  return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`
+})
+
+/** 聚合当前实时 Token 消耗 */
+const liveTokens = computed(() => {
+  const sum = liveCalls.value.reduce((a, c) => a + (c.totalTokens || 0), 0)
+  const prompt = liveCalls.value.reduce((a, c) => a + (c.promptTokens || 0), 0)
+  const completion = liveCalls.value.reduce((a, c) => a + (c.completionTokens || 0), 0)
+  return { sum, prompt, completion, count: liveCalls.value.length }
+})
+
+/** 按当前进度 + 已耗时线性外推剩余时间 */
+const estimatedRemainStr = computed(() => {
+  const p = current.value?.progressPercent || 0
+  if (p <= 5 || p >= 100 || elapsedSec.value < 3) return '估算中...'
+  const remain = Math.ceil(elapsedSec.value / p * (100 - p))
+  if (remain < 60) return `约 ${remain} 秒`
+  return `约 ${Math.floor(remain / 60)} 分 ${remain % 60} 秒`
+})
+
+/** 项目概览的阶段管线 */
+const pipelineStages = [
+  { key: 'CLONING',        idx: 0, label: '克隆仓库',   icon: 'Download' },
+  { key: 'SCANNING',       idx: 1, label: '扫描源文件',  icon: 'Search' },
+  { key: 'MODULE_SUMMARY', idx: 2, label: '逐模块摘要',  icon: 'Document' },
+  { key: 'FINAL',          idx: 3, label: '汇总全景',   icon: 'MagicStick' },
+  { key: 'RENDERING',      idx: 4, label: '渲染结果',   icon: 'Reading' },
+]
+function stageIndex(stage?: string): number {
+  if (!stage) return -1
+  if (stage.startsWith('CLONING')) return 0
+  if (stage.startsWith('SCANNING')) return 1
+  if (stage.startsWith('MODULE_SUMMARY')) return 2
+  if (stage === 'FINAL' || stage.startsWith('FINAL')) return 3
+  if (stage === 'RENDERING' || stage === 'DONE') return 4
+  return -1
+}
+
+/** 每秒自增 elapsedSec */
+function startElapsedTimer() {
+  if (elapsedTimer != null) return
+  analysisStartAt.value = Date.now()
+  elapsedSec.value = 0
+  elapsedTimer = window.setInterval(() => {
+    if (analysisStartAt.value > 0) {
+      elapsedSec.value = Math.floor((Date.now() - analysisStartAt.value) / 1000)
+    }
+  }, 1000)
+}
+function stopElapsedTimer() {
+  if (elapsedTimer != null) { window.clearInterval(elapsedTimer); elapsedTimer = null }
+}
+
+/** Token 数字格式化（K / M） */
+function fmtTokens(n?: number | null) {
+  if (n == null || n === 0) return '0'
+  if (n < 1000) return String(n)
+  if (n < 1_000_000) return (n / 1000).toFixed(1) + 'K'
+  return (n / 1_000_000).toFixed(2) + 'M'
+}
+function fmtLatency(ms?: number | null) {
+  if (ms == null) return '—'
+  if (ms < 1000) return `${ms}ms`
+  return `${(ms / 1000).toFixed(1)}s`
+}
+
+/** "你知道吗" 卡片轮播 */
+const FACTS = [
+  'Map-Reduce 扫描会把每个模块独立送 LLM 读全部源码，最后再汇总成项目全景',
+  '大模块会自动分批喂，避免单次 prompt 超过 token 上限',
+  '生成的 Mermaid 会经过 3 重清洗：去重声明 / 修复畸形节点 / 标签自动加引号',
+  '每次 LLM 调用都会落入 llm_call_log 表，代码分析仪表盘可实时查询',
+  '分析过程加了 Resilience4j 熔断 + retry，一两次网络抖动不会导致任务失败',
+  '项目概览默认走 DeepSeek V3；生成中可随时在历史记录里看到正在进行的分析',
+]
+const factIndex = ref(0)
+let factTimer: number | null = null
+function startFactRotate() {
+  if (factTimer != null) return
+  factTimer = window.setInterval(() => {
+    factIndex.value = (factIndex.value + 1) % FACTS.length
+  }, 5500)
+}
+function stopFactRotate() {
+  if (factTimer != null) { window.clearInterval(factTimer); factTimer = null }
 }
 
 const summaryHtml = computed(() =>
@@ -98,12 +197,20 @@ async function start() {
 async function poll(id: string) {
   stopPoll()
   pollDelayMs = POLL_BASE_MS
+  // 启动实时遥测：计时器 + 你知道吗轮播 + 重置 LLM 调用列表
+  startElapsedTimer()
+  startFactRotate()
+  liveCalls.value = []
   const tick = async () => {
     try {
       const r = await codeAnalysisApi.get(id)
       current.value = r
+      // 并行拉 LLM 调用详情（出错忽略，不影响主轮询）
+      try { liveCalls.value = await codeAnalysisApi.llmCalls(id) } catch { /* ignore */ }
       if (r.status === 'SUCCESS' || r.status === 'FAILED') {
         stopPoll()
+        stopElapsedTimer()
+        stopFactRotate()
         loading.value = false
         return
       }
@@ -111,6 +218,8 @@ async function poll(id: string) {
       pollerTimer = window.setTimeout(tick, pollDelayMs)
     } catch {
       stopPoll()
+      stopElapsedTimer()
+      stopFactRotate()
       loading.value = false
     }
   }
@@ -184,7 +293,7 @@ onMounted(() => {
     pickerValue.branch = q.branch
   }
 })
-onUnmounted(stopPoll)
+onUnmounted(() => { stopPoll(); stopElapsedTimer(); stopFactRotate() })
 </script>
 
 <template>
@@ -353,16 +462,113 @@ onUnmounted(stopPoll)
         </div>
       </div>
 
-      <!-- 进度卡 -->
+      <!-- 进度卡（丰富版：计时器 + Token 实时统计 + Pipeline + 日志 + 轮播提示） -->
       <div v-else-if="current.status !== 'SUCCESS' && current.status !== 'FAILED'" class="progress-card">
-        <div class="progress-title">
-          <el-icon class="spin"><Loading /></el-icon>
-          {{ STAGE_LABEL[current.stage || 'INIT'] || current.stage }}
+        <!-- 背景光斑 -->
+        <div class="pc-bg-glow pc-bg-glow-1"></div>
+        <div class="pc-bg-glow pc-bg-glow-2"></div>
+
+        <!-- Hero：大号阶段名 + 脉动 loading -->
+        <div class="pc-hero">
+          <div class="pc-icon-wrap">
+            <span class="pc-ring pc-ring-1"></span>
+            <span class="pc-ring pc-ring-2"></span>
+            <el-icon class="spin"><Loading /></el-icon>
+          </div>
+          <div class="pc-stage-name">{{ STAGE_LABEL[current.stage || 'INIT'] || current.stage }}</div>
+          <div class="pc-stage-msg">{{ current.progressMessage || '正在处理...' }}</div>
         </div>
-        <el-progress :percentage="current.progressPercent || 0"
-                     :stroke-width="10" :show-text="true"
-                     :color="[{color: '#667eea', percentage: 50}, {color: '#764ba2', percentage: 100}]" />
-        <div class="progress-msg">{{ current.progressMessage || '正在处理...' }}</div>
+
+        <!-- 渐变进度条 + 百分比 -->
+        <div class="pc-progress-wrap">
+          <el-progress :percentage="current.progressPercent || 0"
+                       :stroke-width="10" :show-text="false"
+                       :color="[{color: '#667eea', percentage: 50}, {color: '#a855f7', percentage: 100}]" />
+          <div class="pc-progress-meta">
+            <span class="pc-progress-pct">{{ current.progressPercent || 0 }}%</span>
+            <span class="pc-progress-stage">阶段 {{ Math.max(1, stageIndex(current.stage) + 1) }} / 5</span>
+          </div>
+        </div>
+
+        <!-- 4 个实时指标卡 -->
+        <div class="pc-stats">
+          <div class="pc-stat">
+            <div class="pc-stat-icon is-info"><el-icon><Timer /></el-icon></div>
+            <div class="pc-stat-body">
+              <div class="pc-stat-value pc-stat-time">{{ elapsedStr }}</div>
+              <div class="pc-stat-label">已耗时</div>
+            </div>
+          </div>
+          <div class="pc-stat">
+            <div class="pc-stat-icon is-brand"><el-icon><Cpu /></el-icon></div>
+            <div class="pc-stat-body">
+              <div class="pc-stat-value">{{ fmtTokens(liveTokens.sum) }}</div>
+              <div class="pc-stat-label">Token · 进 {{ fmtTokens(liveTokens.prompt) }} / 出 {{ fmtTokens(liveTokens.completion) }}</div>
+            </div>
+          </div>
+          <div class="pc-stat">
+            <div class="pc-stat-icon is-success"><el-icon><ChatLineRound /></el-icon></div>
+            <div class="pc-stat-body">
+              <div class="pc-stat-value">{{ liveTokens.count }}</div>
+              <div class="pc-stat-label">LLM 调用次数</div>
+            </div>
+          </div>
+          <div class="pc-stat">
+            <div class="pc-stat-icon is-sunset"><el-icon><PieChart /></el-icon></div>
+            <div class="pc-stat-body">
+              <div class="pc-stat-value pc-stat-estimate">{{ estimatedRemainStr }}</div>
+              <div class="pc-stat-label">预计剩余</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 阶段管线可视化 -->
+        <div class="pc-pipeline-wrap">
+          <div class="pc-pipeline-title">
+            <el-icon><Position /></el-icon>
+            分析管线
+          </div>
+          <div class="pc-pipeline">
+            <div v-for="st in pipelineStages" :key="st.key" class="pl-step"
+                 :class="{ done: stageIndex(current.stage) > st.idx, active: stageIndex(current.stage) === st.idx }">
+              <div class="pl-dot"><el-icon><component :is="st.icon" /></el-icon></div>
+              <div class="pl-label">{{ st.label }}</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 实时 LLM 调用日志 -->
+        <div v-if="liveCalls.length > 0" class="pc-live-log">
+          <div class="pc-live-log-title">
+            <el-icon><Monitor /></el-icon>
+            实时调用日志
+            <span class="pc-live-log-badge">{{ liveCalls.length }} 条</span>
+          </div>
+          <div class="pc-live-list">
+            <div v-for="l in liveCalls.slice().reverse().slice(0, 6)" :key="l.id" class="pc-live-item"
+                 :class="{ 'is-fail': !l.success }">
+              <span class="pc-live-status">
+                <el-icon v-if="l.success"><CircleCheck /></el-icon>
+                <el-icon v-else><CircleCloseFilled /></el-icon>
+              </span>
+              <span class="pc-live-stage" :title="l.stageLabel || l.stage">{{ l.stageLabel || l.stage }}</span>
+              <span class="pc-live-model">{{ l.model }}</span>
+              <span class="pc-live-tokens">{{ fmtTokens(l.totalTokens) }} tk</span>
+              <span class="pc-live-latency">{{ fmtLatency(l.latencyMs) }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 你知道吗：每 5.5s 轮播 -->
+        <div class="pc-fact">
+          <el-icon class="pc-fact-icon"><MagicStick /></el-icon>
+          <div class="pc-fact-text">
+            <strong>💡 你知道吗：</strong>
+            <transition name="fact-fade" mode="out-in">
+              <span :key="factIndex">{{ FACTS[factIndex] }}</span>
+            </transition>
+          </div>
+        </div>
       </div>
 
       <!-- 失败 -->
@@ -927,35 +1133,373 @@ onUnmounted(stopPoll)
   margin-bottom: 16px;
 }
 
-/* ========== 进度卡 ========== */
+/* ========== 进度卡（丰富版） ========== */
 .progress-card {
+  position: relative;
   background: var(--sf-surface-gradient);
   border: 1px solid var(--sf-border-light);
   border-radius: var(--sf-radius-lg);
-  padding: var(--sf-space-7);
+  padding: var(--sf-space-6);
   box-shadow: var(--sf-shadow-sm);
   display: flex;
   flex-direction: column;
-  gap: var(--sf-space-4);
+  gap: var(--sf-space-5);
+  overflow: hidden;
 }
-.progress-title {
-  font-size: 16px;
-  font-weight: 600;
+/* 背景光斑 */
+.pc-bg-glow {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(60px);
+  opacity: 0.4;
+  pointer-events: none;
+}
+.pc-bg-glow-1 {
+  width: 320px; height: 320px;
+  top: -120px; right: -40px;
+  background: radial-gradient(circle, rgba(165, 180, 252, 0.8) 0%, transparent 70%);
+  animation: sf-float 9s ease-in-out infinite;
+}
+.pc-bg-glow-2 {
+  width: 280px; height: 280px;
+  bottom: -100px; left: 30%;
+  background: radial-gradient(circle, rgba(249, 168, 212, 0.7) 0%, transparent 70%);
+  animation: sf-float 11s ease-in-out infinite reverse;
+}
+
+/* Hero 区 */
+.pc-hero {
+  position: relative;
+  z-index: 1;
   display: flex;
+  flex-direction: column;
   align-items: center;
   gap: var(--sf-space-2);
-  color: var(--sf-text-primary);
 }
-.spin {
+.pc-icon-wrap {
+  position: relative;
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  background: var(--sf-gradient-aurora);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--sf-shadow-glow-brand);
+  margin-bottom: var(--sf-space-2);
+}
+.pc-icon-wrap .spin {
+  color: #fff;
+  font-size: 32px;
   animation: spin 1s linear infinite;
-  color: var(--sf-primary);
-  font-size: 20px;
+  z-index: 2;
+}
+.pc-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid rgba(102, 126, 234, 0.45);
+  animation: pc-ring-pulse 2.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  pointer-events: none;
+}
+.pc-ring-1 { animation-delay: 0s; }
+.pc-ring-2 { animation-delay: 0.8s; }
+@keyframes pc-ring-pulse {
+  0%   { transform: scale(1);   opacity: 0.7; }
+  100% { transform: scale(1.8); opacity: 0;   }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
-.progress-msg {
+
+.pc-stage-name {
+  font-size: 22px;
+  font-weight: 700;
+  background: var(--sf-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  letter-spacing: -0.01em;
+}
+.pc-stage-msg {
   color: var(--sf-text-tertiary);
   font-size: 13px;
+  text-align: center;
+  max-width: 80%;
 }
+
+/* 渐变进度条 */
+.pc-progress-wrap {
+  position: relative;
+  z-index: 1;
+}
+.pc-progress-meta {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--sf-text-tertiary);
+}
+.pc-progress-pct {
+  font-size: 16px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  background: var(--sf-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.pc-progress-stage {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 4 个实时指标 */
+.pc-stats {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--sf-space-3);
+}
+@media (max-width: 900px) { .pc-stats { grid-template-columns: 1fr 1fr; } }
+.pc-stat {
+  display: flex;
+  align-items: center;
+  gap: var(--sf-space-3);
+  padding: var(--sf-space-3);
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--sf-border-light);
+  border-radius: var(--sf-radius-md);
+  transition: all var(--sf-transition-base);
+}
+.pc-stat:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--sf-shadow-md);
+  border-color: var(--sf-primary-light);
+}
+.pc-stat-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: var(--sf-radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 18px;
+  flex-shrink: 0;
+  box-shadow: var(--sf-shadow-sm);
+}
+.pc-stat-icon.is-info    { background: var(--sf-info-gradient); }
+.pc-stat-icon.is-brand   { background: var(--sf-gradient-aurora); }
+.pc-stat-icon.is-success { background: var(--sf-success-gradient); }
+.pc-stat-icon.is-sunset  { background: var(--sf-gradient-sunset); }
+.pc-stat-body { min-width: 0; flex: 1; }
+.pc-stat-value {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--sf-text-primary);
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.pc-stat-time {
+  font-family: 'SF Mono', 'Menlo', monospace;
+  color: var(--sf-primary-dark);
+}
+.pc-stat-estimate { font-size: 14px; }
+.pc-stat-label {
+  color: var(--sf-text-tertiary);
+  font-size: 11.5px;
+  margin-top: 3px;
+  line-height: 1.4;
+}
+
+/* 阶段管线 */
+.pc-pipeline-wrap {
+  position: relative;
+  z-index: 1;
+}
+.pc-pipeline-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--sf-text-secondary);
+  margin-bottom: var(--sf-space-3);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.pc-pipeline-title :deep(.el-icon) { color: var(--sf-primary); }
+.pc-pipeline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--sf-space-2) 0;
+}
+.pl-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  position: relative;
+  flex: 1;
+}
+.pl-step:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  top: 17px;
+  left: calc(50% + 18px);
+  right: calc(-50% + 18px);
+  height: 2px;
+  background: var(--sf-border);
+  z-index: 0;
+  transition: background var(--sf-transition-base);
+}
+.pl-step.done::after { background: var(--sf-success); }
+.pl-step.active::after { background: linear-gradient(90deg, var(--sf-primary), var(--sf-border)); }
+.pl-dot {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--sf-surface);
+  border: 2px solid var(--sf-border);
+  color: var(--sf-text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  z-index: 1;
+  transition: all var(--sf-transition-base);
+}
+.pl-step.done .pl-dot {
+  background: var(--sf-success-gradient);
+  border-color: transparent;
+  color: #fff;
+}
+.pl-step.active .pl-dot {
+  background: var(--sf-gradient);
+  border-color: transparent;
+  color: #fff;
+  box-shadow: var(--sf-shadow-brand);
+  animation: sf-glow-pulse 1.8s ease-in-out infinite;
+}
+.pl-label {
+  font-size: 11px;
+  color: var(--sf-text-tertiary);
+  font-weight: 500;
+}
+.pl-step.active .pl-label { color: var(--sf-primary-dark); font-weight: 600; }
+.pl-step.done .pl-label { color: var(--sf-success); }
+
+/* 实时 LLM 调用日志 */
+.pc-live-log {
+  position: relative;
+  z-index: 1;
+  background: #0f172a;
+  border-radius: var(--sf-radius-md);
+  padding: var(--sf-space-3) var(--sf-space-4);
+  color: #cbd5e1;
+}
+.pc-live-log-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #94a3b8;
+  margin-bottom: var(--sf-space-2);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.pc-live-log-title :deep(.el-icon) { color: #60a5fa; }
+.pc-live-log-badge {
+  margin-left: auto;
+  padding: 2px 8px;
+  background: rgba(96, 165, 250, 0.15);
+  color: #60a5fa;
+  border-radius: var(--sf-radius-full);
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.pc-live-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-family: 'SF Mono', Menlo, monospace;
+  font-size: 12px;
+}
+.pc-live-item {
+  display: grid;
+  grid-template-columns: 20px 1fr 90px 70px 60px;
+  gap: var(--sf-space-2);
+  padding: 4px 6px;
+  align-items: center;
+  border-radius: var(--sf-radius-xs);
+  transition: background var(--sf-transition-fast);
+}
+.pc-live-item:hover { background: rgba(255, 255, 255, 0.05); }
+.pc-live-item.is-fail .pc-live-status { color: #f87171; }
+.pc-live-status {
+  color: #34d399;
+  display: flex;
+  align-items: center;
+}
+.pc-live-stage {
+  color: #e2e8f0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pc-live-model {
+  color: #a78bfa;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pc-live-tokens {
+  color: #fbbf24;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.pc-live-latency {
+  color: #64748b;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 你知道吗轮播 */
+.pc-fact {
+  position: relative;
+  z-index: 1;
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.06) 0%, rgba(118, 75, 162, 0.06) 100%);
+  border: 1px solid rgba(102, 126, 234, 0.15);
+  border-radius: var(--sf-radius-md);
+  padding: var(--sf-space-3) var(--sf-space-4);
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sf-space-3);
+}
+.pc-fact-icon {
+  color: var(--sf-primary);
+  font-size: 18px;
+  flex-shrink: 0;
+  margin-top: 2px;
+  animation: sf-float 3s ease-in-out infinite;
+}
+.pc-fact-text {
+  color: var(--sf-text-secondary);
+  font-size: 13px;
+  line-height: 1.7;
+  min-height: 22px;
+}
+.pc-fact-text strong {
+  color: var(--sf-text-primary);
+  font-weight: 600;
+  margin-right: 4px;
+}
+/* "你知道吗" 文字轮播淡入淡出 */
+.fact-fade-enter-active, .fact-fade-leave-active { transition: opacity 0.4s; }
+.fact-fade-enter-from, .fact-fade-leave-to { opacity: 0; }
 
 /* ========== 错误卡 ========== */
 .error-card {
