@@ -62,9 +62,16 @@ public class GitRepoServiceImpl implements GitRepoService {
     @Value("${socialflow.code-analysis.mirror-enabled:true}")
     private boolean mirrorEnabled;
 
+    /** 任意层级命中即排除（典型的构建产物/依赖/缓存，放在业务包里也不该扫）*/
     private static final Set<String> DEFAULT_EXCLUDE = Set.of(
             "node_modules", "target", "dist", ".git", ".idea", ".vscode",
             "build", "out", "coverage", "__pycache__", "logs"
+    );
+
+    /** 仅匹配仓库根一级目录 —— 避免误伤业务包里同名子目录（如 com.foo.frontend）。
+     *  需要排除别的前端目录请用 AnalyzeRepoDTO.excludeDirs 传入。*/
+    private static final Set<String> TOP_LEVEL_EXCLUDE = Set.of(
+            "socialflow-ui"
     );
 
     /** 判断是否源码文件（扩展名白名单）*/
@@ -441,6 +448,11 @@ public class GitRepoServiceImpl implements GitRepoService {
 
     private static boolean isExcluded(Path root, Path p, Set<String> excludes) {
         Path rel = root.relativize(p);
+        // 顶级目录精准匹配（socialflow-ui 等前端模块名风险大，深层同名子包不应被误杀）
+        if (rel.getNameCount() >= 1 && TOP_LEVEL_EXCLUDE.contains(rel.getName(0).toString())) {
+            return true;
+        }
+        // 任意层级段匹配（node_modules/target 等，只要在路径里就必须排除）
         for (Path seg : rel) {
             if (excludes.contains(seg.toString())) return true;
         }

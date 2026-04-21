@@ -89,6 +89,28 @@ function fmtTokens(n?: number) {
   if (n < TOKEN_M) return (n / TOKEN_K).toFixed(1) + 'K'
   return (n / TOKEN_M).toFixed(2) + 'M'
 }
+
+/** 耗时格式化：1.2s / 45s / 3m 25s / 1h 5m */
+function fmtDuration(ms?: number) {
+  if (ms == null || ms <= 0) return '-'
+  if (ms < 1000) return ms + 'ms'
+  const sec = Math.round(ms / 1000)
+  if (sec < 60) return sec + 's'
+  const min = Math.floor(sec / 60)
+  const rsec = sec % 60
+  if (min < 60) return rsec > 0 ? `${min}m ${rsec}s` : `${min}m`
+  const hr = Math.floor(min / 60)
+  const rmin = min % 60
+  return rmin > 0 ? `${hr}h ${rmin}m` : `${hr}h`
+}
+
+/** 耗时健康色：≤8m 绿 / ≤20m 黄 / >20m 红。对标优化后预期 6-8 分钟 */
+function durationColor(ms?: number) {
+  if (ms == null || ms <= 0) return '#9ca3af'
+  if (ms <= 8 * 60_000) return '#059669'
+  if (ms <= 20 * 60_000) return '#b45309'
+  return '#b91c1c'
+}
 </script>
 
 <template>
@@ -166,6 +188,16 @@ function fmtTokens(n?: number) {
           <span v-else style="color: #9ca3af">-</span>
         </template>
       </el-table-column>
+      <el-table-column label="耗时" width="110" align="center">
+        <template #default="{ row }">
+          <span v-if="row.durationMs && row.durationMs > 0" class="duration-chip"
+                :style="{ color: durationColor(row.durationMs), borderColor: durationColor(row.durationMs) + '40' }"
+                :title="`${row.durationMs.toLocaleString()} ms`">
+            ⏱ {{ fmtDuration(row.durationMs) }}
+          </span>
+          <span v-else style="color: #9ca3af">-</span>
+        </template>
+      </el-table-column>
       <el-table-column label="时间" width="170" prop="createTime">
         <template #default="{ row }">
           <span style="color: #6b7280; font-size: 12px">{{ fmtTime(row.createTime) }}</span>
@@ -217,6 +249,16 @@ function fmtTokens(n?: number) {
   border-radius: 10px;
   background: #ecfeff;
   color: #0e7490;
+  font-size: 12px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.duration-chip {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: #fff;
+  border: 1px solid;
   font-size: 12px;
   font-weight: 500;
   font-variant-numeric: tabular-nums;

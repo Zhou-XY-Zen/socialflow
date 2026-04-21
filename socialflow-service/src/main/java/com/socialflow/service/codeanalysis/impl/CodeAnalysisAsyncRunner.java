@@ -71,15 +71,17 @@ public class CodeAnalysisAsyncRunner {
 
     /** 模块级重试最大次数 —— 单个模块失败（包括下层 Resilience4j retry 全部耗尽）时再试 3 次 */
     private static final int MODULE_MAX_RETRY = 3;
-    /** 源文件扩展名白名单 —— 其它一律不送 LLM，减少 token 浪费 */
+    /** 源文件扩展名白名单 —— 其它一律不送 LLM，减少 token 浪费
+     *  注：本工具定位"后端代码分析"，不分析前端 SPA 框架源码（.vue/.jsx/.tsx 已移到 SKIP）。
+     *  .ts/.js 保留是因为 Node.js 后端（NestJS/Express）仍会用。 */
     private static final java.util.Set<String> SOURCE_EXTENSIONS = java.util.Set.of(
             ".java", ".kt", ".groovy", ".scala",
-            ".js", ".jsx", ".ts", ".tsx", ".vue",
+            ".js", ".ts",
             ".py", ".rb", ".go", ".rs", ".c", ".cpp", ".h", ".hpp",
             ".sql", ".yml", ".yaml", ".properties", ".xml",
-            ".css", ".scss", ".less", ".html", ".sh"
+            ".sh"
     );
-    /** 明确要跳过的文件名/后缀（二进制、锁文件、文档、构建产物） */
+    /** 明确要跳过的文件名/后缀（二进制、锁文件、文档、构建产物、前端框架源码） */
     private static final java.util.Set<String> SKIP_FILE_NAMES = java.util.Set.of(
             "package-lock.json", "yarn.lock", "pnpm-lock.yaml", "composer.lock",
             "poetry.lock", "Cargo.lock", "Gemfile.lock"
@@ -88,7 +90,11 @@ public class CodeAnalysisAsyncRunner {
             ".md", ".markdown", ".txt", ".json", ".log", ".csv", ".tsv",
             ".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico", ".webp",
             ".pdf", ".zip", ".tar", ".gz", ".jar", ".class", ".exe",
-            ".lock", ".min.js", ".bundle.js"
+            ".lock", ".min.js", ".bundle.js",
+            // 前端 SPA 框架专属文件 —— 本工具只分析后端代码
+            ".vue", ".jsx", ".tsx",
+            // 前端样式/视图 —— 不参与后端代码质量分析
+            ".css", ".scss", ".less", ".sass", ".styl", ".html", ".htm"
     );
 
     @Value("${socialflow.ai.system-api-key:}")
@@ -228,36 +234,50 @@ public class CodeAnalysisAsyncRunner {
             String moduleSummariesJoined = String.join("\n\n---\n\n", moduleSummaries);
             String userReq = dto.getUserRequirements();
 
-            // Step 1: summaryMd 上半 + techStack + projectName
-            updateProgress(analysisId, "FINAL", 80, "汇总上半：项目定位 / 功能 / 架构 / 数据流...");
+            // Step 1+2 并行：PART1（定位/架构/数据流）与 PART2（模块深度/关键文件/部署）都只依赖 moduleSummariesJoined，
+            // PART2 接收的 part1Summary 仅是"不要重复"提示而非硬依赖 —— 并行可省 50-80 秒。
+            updateProgress(analysisId, "FINAL", 80, "并行生成上半（项目定位/架构）+ 下半（模块深度）...");
+            final String finalUserReq = userReq;
+            final String finalModuleSummaries = moduleSummariesJoined;
+
+            CompletableFuture<JsonNode> p1Future = CompletableFuture.supplyAsync(() -> {
+                try {
+                    LlmResponse r = callLlm(userId, analysisId, "FINAL_PART1", "汇总 Part 1（上半）",
+                            CodeReviewPrompts.finalSummaryPart1System(),
+                            CodeReviewPrompts.finalSummaryPart1User(repoName, tree, langStatsText,
+                                    finalModuleSummaries, finalUserReq));
+                    return parseJsonSafe(r.getContent());
+                } catch (Exception e) {
+                    log.warn("[CodeAnalysis] FINAL Part1 失败: {}", e.getMessage());
+                    return parseJsonSafe("{}");
+                }
+            }, moduleSummaryExecutor);
+
+            CompletableFuture<JsonNode> p2Future = CompletableFuture.supplyAsync(() -> {
+                try {
+                    // PART2 不等 PART1，传空字符串 —— system prompt 已约束职责分工
+                    LlmResponse r = callLlm(userId, analysisId, "FINAL_PART2", "汇总 Part 2（下半）",
+                            CodeReviewPrompts.finalSummaryPart2System(),
+                            CodeReviewPrompts.finalSummaryPart2User(repoName, "", finalModuleSummaries, finalUserReq));
+                    return parseJsonSafe(r.getContent());
+                } catch (Exception e) {
+                    log.warn("[CodeAnalysis] FINAL Part2 失败: {}", e.getMessage());
+                    return parseJsonSafe("{}");
+                }
+            }, moduleSummaryExecutor);
+
+            CompletableFuture.allOf(p1Future, p2Future).join();
+
             String part1Md = "";
             JsonNode techStack = null;
-            try {
-                LlmResponse p1 = callLlm(userId, analysisId, "FINAL_PART1", "汇总 Part 1（上半）",
-                        CodeReviewPrompts.finalSummaryPart1System(),
-                        CodeReviewPrompts.finalSummaryPart1User(repoName, tree, langStatsText,
-                                moduleSummariesJoined, userReq));
-                JsonNode n1 = parseJsonSafe(p1.getContent());
-                if (!n1.isMissingNode()) {
-                    part1Md = getText(n1, "summaryMd");
-                    techStack = n1.get("techStack");
-                }
-            } catch (Exception e) {
-                log.warn("[CodeAnalysis] FINAL Part1 失败: {}", e.getMessage());
+            JsonNode n1 = p1Future.join();
+            if (!n1.isMissingNode()) {
+                part1Md = getText(n1, "summaryMd");
+                techStack = n1.get("techStack");
             }
-
-            // Step 2: summaryMd 下半 —— 模块深度 + 关键文件 + 部署 + 改进
-            updateProgress(analysisId, "FINAL", 88, "汇总下半：模块深度解读 + 关键文件导读...");
             String part2Md = "";
-            try {
-                LlmResponse p2 = callLlm(userId, analysisId, "FINAL_PART2", "汇总 Part 2（下半）",
-                        CodeReviewPrompts.finalSummaryPart2System(),
-                        CodeReviewPrompts.finalSummaryPart2User(repoName, part1Md, moduleSummariesJoined, userReq));
-                JsonNode n2 = parseJsonSafe(p2.getContent());
-                if (!n2.isMissingNode()) part2Md = getText(n2, "summaryMd");
-            } catch (Exception e) {
-                log.warn("[CodeAnalysis] FINAL Part2 失败: {}", e.getMessage());
-            }
+            JsonNode n2 = p2Future.join();
+            if (!n2.isMissingNode()) part2Md = getText(n2, "summaryMd");
 
             // 合成完整 summaryMd
             String summaryMd = assembleFinalSummary(part1Md, part2Md, moduleSummariesJoined);
@@ -337,9 +357,10 @@ public class CodeAnalysisAsyncRunner {
     }
 
     /**
-     * 批次级重试 3 次（指数退避 5/10/15 秒）。
+     * 批次级重试 3 次（指数退避 2/4/8 秒）。
      * 相比"模块级 retry"粒度更细：一个超大模块分 8 批，某一批失败不拖累其他 7 批。
      * 3 次都失败用占位摘要替代，不中断整体任务。
+     * 退避时长 2/4/8 —— Resilience4j 单次调用已内置 1/2/4s 网络层退避，外层不必再等 5-15 秒。
      */
     private String summarizeOneBatchWithRetry(Long userId, Long analysisId, String repoName,
                                               BatchTask bt, String userRequirements) {
@@ -353,7 +374,8 @@ public class CodeAnalysisAsyncRunner {
                         bt.moduleName, bt.batchIndex + 1, bt.totalBatches,
                         attempt, MODULE_MAX_RETRY, t.getMessage());
                 if (attempt < MODULE_MAX_RETRY) {
-                    try { Thread.sleep(attempt * 5000L); }
+                    long backoff = (1L << attempt) * 1000L;  // 2s / 4s / 8s
+                    try { Thread.sleep(backoff); }
                     catch (InterruptedException ie) { Thread.currentThread().interrupt(); break; }
                 }
             }

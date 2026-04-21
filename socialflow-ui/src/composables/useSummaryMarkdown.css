@@ -1,0 +1,44 @@
+/*
+ * 内嵌 Mermaid 渲染样式，由 useSummaryMarkdown composable 导入。
+ * 这些类挂在 v-html 渲染出的节点上（不受组件 scoped 影响），
+ * 所以必须是全局样式。故独立成一个 css 文件，由 composable 统一引入。
+ */
+
+.mermaid-inline {
+  margin: 12px 0;
+  padding: 16px;
+  background: #fafafa;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  overflow-x: auto;
+}
+.mermaid-inline.rendered {
+  display: flex;
+  justify-content: center;
+  background: #ffffff;
+}
+.mermaid-inline svg {
+  max-width: 100%;
+  height: auto;
+}
+.mermaid-inline .mermaid-fallback {
+  margin: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+  color: #475569;
+  font-size: 12px;
+}
+.mermaid-inline.rendered .mermaid-fallback { display: none; }
+.mermaid-inline.render-failed {
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+.mermaid-inline-error {
+  color: #b91c1c;
+  background: #fee2e2;
+  padding: 6px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  margin-bottom: 8px;
+}

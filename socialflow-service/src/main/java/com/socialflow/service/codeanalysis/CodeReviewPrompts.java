@@ -421,20 +421,26 @@ public final class CodeReviewPrompts {
                 """;
     }
 
+    /**
+     * FINAL Part2 与 Part1 **并行执行**（见 CodeAnalysisAsyncRunner），
+     * 因此这里拿不到 Part1 的产物。通过 system prompt 划分职责（Part1 讲定位/架构/数据流，
+     * Part2 讲模块深度/关键文件/部署/改进）避免重复。`part1Summary` 参数保留以兼容老调用点，
+     * 非空时仍作为上下文注入；空串时直接省略该段。
+     */
     public static String finalSummaryPart2User(String repoName, String part1Summary,
                                                String moduleSummariesJoined,
                                                String userRequirements) {
+        String part1Block = (part1Summary != null && !part1Summary.isBlank())
+                ? "\n                ## Part 1 已产出内容（不要重复，只做补充）\n                " + part1Summary + "\n"
+                : "";
         return """
                 仓库: %s
-
-                ## Part 1 已产出内容（不要重复，只做补充）
                 %s
-
                 ## 各模块完整摘要（供深度展开时引用真实类名）
                 %s
                 %s
-                请按 system prompt 输出 Part 2 JSON。
-                """.formatted(repoName, part1Summary, moduleSummariesJoined,
+                按 system prompt 的职责分工输出 Part 2 JSON —— 只写模块深度解读 / 关键文件导读 / 部署运行 / 潜在改进，不要写 Part 1 负责的定位/架构/数据流。
+                """.formatted(repoName, part1Block, moduleSummariesJoined,
                               userRequirementsBlock(userRequirements));
     }
 

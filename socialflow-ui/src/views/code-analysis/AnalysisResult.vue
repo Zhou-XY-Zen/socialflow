@@ -6,16 +6,15 @@
 import { onMounted, onUnmounted, ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import MarkdownIt from 'markdown-it'
 import { codeAnalysisApi } from '@/api/codeAnalysis'
 import { useMermaid } from '@/composables/useMermaid'
+import { useSummaryMarkdown } from '@/composables/useSummaryMarkdown'
 import type { CodeAnalysis, FindingLevel, LlmCallLog } from '@/types/codeAnalysis'
 import ScoreGauge from '@/components/code-analysis/ScoreGauge.vue'
 import FindingCard from '@/components/code-analysis/FindingCard.vue'
 
 const route = useRoute()
 const router = useRouter()
-const md = new MarkdownIt({ html: false, linkify: true, breaks: true })
 
 const current = ref<CodeAnalysis>()
 const loading = ref(true)
@@ -109,9 +108,10 @@ function stopPoll() { if (pollerTimer != null) { window.clearTimeout(pollerTimer
 onMounted(load)
 onUnmounted(stopPoll)
 
-const summaryHtml = computed(() => current.value?.summaryMd ? md.render(current.value.summaryMd) : '')
+// summaryMd 渲染 + 内嵌 ```mermaid 代码块的流程图渲染（数据流/时序图等）
+const { summaryHtml, containerRef: summaryContainer } = useSummaryMarkdown(() => current.value?.summaryMd)
 
-// Mermaid
+// Mermaid：独立的 mermaidCode 字段（项目概览核心架构图）
 const { svg: mermaidSvg, error: mermaidError, render: renderMermaid } = useMermaid()
 watch(() => current.value?.mermaidCode, async (code) => {
   await renderMermaid(code)
@@ -268,7 +268,7 @@ async function doExport(format: 'markdown' | 'html' | 'pdf') {
       <!-- 摘要 -->
       <div v-if="summaryHtml" class="content-card">
         <div class="card-title">{{ current.analysisType === 'PROJECT_OVERVIEW' ? '📝 项目详细介绍' : '📝 审查总结' }}</div>
-        <div class="markdown-body" v-html="summaryHtml" />
+        <div ref="summaryContainer" class="markdown-body" v-html="summaryHtml" />
       </div>
 
       <!-- Findings -->
@@ -790,6 +790,8 @@ async function doExport(format: 'markdown' | 'html' | 'pdf') {
   border-radius: var(--sf-radius-sm);
   font-size: 13px;
 }
+
+/* summaryMd 内嵌 Mermaid 样式由 useSummaryMarkdown.css 统一提供（全局） */
 
 /* ========== LLM 调用详情 ========== */
 .llm-header {

@@ -7,15 +7,14 @@
 import { onMounted, ref, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import MarkdownIt from 'markdown-it'
 import { codeAnalysisApi } from '@/api/codeAnalysis'
 import { useMermaid } from '@/composables/useMermaid'
+import { useSummaryMarkdown } from '@/composables/useSummaryMarkdown'
 import type { CodeAnalysis, FindingLevel } from '@/types/codeAnalysis'
 import ScoreGauge from '@/components/code-analysis/ScoreGauge.vue'
 import FindingCard from '@/components/code-analysis/FindingCard.vue'
 
 const route = useRoute()
-const md = new MarkdownIt({ html: false, linkify: true, breaks: true })
 
 const current = ref<CodeAnalysis>()
 const loading = ref(true)
@@ -36,7 +35,7 @@ async function load() {
 
 onMounted(load)
 
-const summaryHtml = computed(() => current.value?.summaryMd ? md.render(current.value.summaryMd) : '')
+const { summaryHtml, containerRef: summaryContainer } = useSummaryMarkdown(() => current.value?.summaryMd)
 const filteredFindings = computed(() => {
   if (!current.value?.findings) return []
   return filterLevel.value === 'ALL'
@@ -142,7 +141,7 @@ const typeMeta: Record<string, { label: string; icon: string }> = {
       <!-- 摘要 -->
       <div v-if="summaryHtml" class="content-card">
         <div class="card-title">{{ current.analysisType === 'PROJECT_OVERVIEW' ? '📝 项目介绍' : '📝 审查总结' }}</div>
-        <div class="markdown-body" v-html="summaryHtml" />
+        <div ref="summaryContainer" class="markdown-body" v-html="summaryHtml" />
       </div>
 
       <!-- Findings（分享视图下不可修改状态，只展示） -->

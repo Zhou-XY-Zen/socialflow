@@ -5,15 +5,14 @@
 import { onMounted, onUnmounted, ref, computed, reactive, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import MarkdownIt from 'markdown-it'
 import { codeAnalysisApi } from '@/api/codeAnalysis'
 import { useMermaid } from '@/composables/useMermaid'
+import { useSummaryMarkdown } from '@/composables/useSummaryMarkdown'
 import RepoPicker from '@/components/code-analysis/RepoPicker.vue'
 import type { CodeAnalysis, LlmCallLog, RepoBookmark } from '@/types/codeAnalysis'
 
 const router = useRouter()
 const route = useRoute()
-const md = new MarkdownIt({ html: false, linkify: true, breaks: true })
 
 const form = reactive({
   gitUrl: '',
@@ -161,8 +160,7 @@ function stopFactRotate() {
   if (factTimer != null) { window.clearInterval(factTimer); factTimer = null }
 }
 
-const summaryHtml = computed(() =>
-  current.value?.summaryMd ? md.render(current.value.summaryMd) : '')
+const { summaryHtml, containerRef: summaryContainer } = useSummaryMarkdown(() => current.value?.summaryMd)
 
 // Mermaid 流程图渲染
 const { svg: mermaidSvg, error: mermaidError, render: renderMermaid } = useMermaid()
@@ -658,7 +656,7 @@ onUnmounted(() => { stopPoll(); stopElapsedTimer(); stopFactRotate() })
         </div>
 
         <!-- Markdown 长文 -->
-        <div class="markdown-body" v-html="summaryHtml" />
+        <div ref="summaryContainer" class="markdown-body" v-html="summaryHtml" />
       </div>
     </div>
   </div>
