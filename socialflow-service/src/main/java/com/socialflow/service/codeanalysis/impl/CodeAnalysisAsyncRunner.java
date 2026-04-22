@@ -251,11 +251,15 @@ public class CodeAnalysisAsyncRunner {
 
             // 改造：FINAL 不再用 JSON 外壳 —— DeepSeek max_tokens=8192 装不下 JSON+7000 字中文。
             // 新协议：PART1 用 <<<TECH_STACK>>>...<<<END_TECH_STACK>>> 分隔符 + Markdown 正文；
-            //        PART2/PART3/MERMAID 直接纯文本输出。
+            //        PART2/PART3/PART4/MERMAID 直接纯文本输出。
             //
-            // PART2 只写模块深度+关键文件（4500-6000 字），PART3 写部署+改进（1400-2200 字）—— 拆分
-            // 是为了让每个 part 的 completion 远低于 8192 上限，规避"末尾章节被截断"问题。
-            // 三个 part 在 moduleSummaryExecutor 上真并行，墙钟时间 ≈ max(PART1, PART2, PART3)。
+            // 分成 4 part 并行：
+            //   PART1: techStack + 定位/功能/架构/数据流 (5000-6500 字)
+            //   PART2: 模块深度解读 (9 模块 × 700-1100 字 = 6300-9900 字，仍可能顶 8192)
+            //   PART3: 部署与运行 + 潜在改进 (1400-2200 字，充裕)
+            //   PART4: 关键文件导读 (1500-2500 字，充裕)
+            // 每个 part 单独独立章节，即使 completion 顶 8192 截断也只缺结尾不缺后续章节。
+            // 4 个 part 在 moduleSummaryExecutor(core=8) 上真并行，墙钟 ≈ max(4 个 part)。
             CompletableFuture<String> p1Future = CompletableFuture.supplyAsync(() -> {
                 try {
                     LlmResponse r = callLlm(userId, analysisId, "FINAL_PART1", "汇总 Part 1（上半）",
@@ -272,7 +276,7 @@ public class CodeAnalysisAsyncRunner {
             CompletableFuture<String> p2Future = CompletableFuture.supplyAsync(() -> {
                 try {
                     // PART2 不等 PART1，传空字符串 —— system prompt 已约束职责分工
-                    LlmResponse r = callLlm(userId, analysisId, "FINAL_PART2", "汇总 Part 2（模块深度+关键文件）",
+                    LlmResponse r = callLlm(userId, analysisId, "FINAL_PART2", "汇总 Part 2（模块深度解读）",
                             CodeReviewPrompts.finalSummaryPart2System(),
                             CodeReviewPrompts.finalSummaryPart2User(repoName, "", finalModuleSummaries, finalUserReq));
                     return r.getContent();
@@ -294,7 +298,19 @@ public class CodeAnalysisAsyncRunner {
                 }
             }, moduleSummaryExecutor);
 
-            CompletableFuture.allOf(p1Future, p2Future, p3Future).join();
+            CompletableFuture<String> p4Future = CompletableFuture.supplyAsync(() -> {
+                try {
+                    LlmResponse r = callLlm(userId, analysisId, "FINAL_PART4", "汇总 Part 4（关键文件导读）",
+                            CodeReviewPrompts.finalSummaryPart4System(),
+                            CodeReviewPrompts.finalSummaryPart4User(repoName, finalModuleSummaries, finalUserReq));
+                    return r.getContent();
+                } catch (Exception e) {
+                    log.warn("[CodeAnalysis] FINAL Part4 失败: {}", e.getMessage());
+                    return "";
+                }
+            }, moduleSummaryExecutor);
+
+            CompletableFuture.allOf(p1Future, p2Future, p3Future, p4Future).join();
 
             // PART1：提取 <<<TECH_STACK>>>...<<<END_TECH_STACK>>> 段（若存在），剩余就是 Markdown 正文
             String p1Raw = p1Future.join();
@@ -302,12 +318,14 @@ public class CodeAnalysisAsyncRunner {
             String part1Md = stripOuterFence(extract.markdown);
             JsonNode techStack = extract.techStack;
 
-            // PART2/PART3：整个响应就是 Markdown 正文，只需 strip 最外层围栏
+            // PART2/PART3/PART4：整个响应就是 Markdown 正文，只需 strip 最外层围栏
             String part2Md = stripOuterFence(p2Future.join());
             String part3Md = stripOuterFence(p3Future.join());
+            String part4Md = stripOuterFence(p4Future.join());
 
-            // 合成完整 summaryMd
-            String summaryMd = assembleFinalSummary(part1Md, part2Md, part3Md, moduleSummariesJoined);
+            // 合成完整 summaryMd（章节顺序：PART1 → PART2 → PART4 → PART3
+            //  —— 把"关键文件导读"放在"模块深度"之后、"部署"之前，阅读连贯性更好）
+            String summaryMd = assembleFinalSummary(part1Md, part2Md, part4Md, part3Md, moduleSummariesJoined);
 
             // Step 3: Mermaid 独立生成 —— 输出直接是 mermaid 源码（可能带 ```mermaid 围栏），sanitizeMermaid 内部处理围栏
             updateProgress(analysisId, "FINAL", 93, "生成核心架构 Mermaid 流程图...");
@@ -530,37 +548,40 @@ public class CodeAnalysisAsyncRunner {
     }
 
     /**
-     * 把 FINAL Part1 + Part2 + Part3 拼成完整报告；任何一 part 失败时其他 part 仍可用，
-     * 最坏情况（三 part 全失败）用模块摘要兜底。
-     *   Part1: 定位/功能/技术选型/架构/数据流
-     *   Part2: 模块深度解读 / 关键文件导读
-     *   Part3: 部署与运行 / 潜在改进
+     * 把 FINAL 4 个 part 拼成完整报告；任一 part 失败时其他 part 仍可用，
+     * 最坏情况（4 part 全失败）用模块摘要兜底。
+     * 参数顺序即最终拼接顺序：
+     *   overview: 定位/功能/技术选型/架构/数据流 (PART1)
+     *   modules:  模块深度解读 (PART2)
+     *   files:    关键文件导读 (PART4)
+     *   opsNotes: 部署与运行 / 潜在改进 (PART3)
      */
-    private String assembleFinalSummary(String part1, String part2, String part3, String moduleJoined) {
-        boolean hasP1 = part1 != null && !part1.isBlank();
-        boolean hasP2 = part2 != null && !part2.isBlank();
-        boolean hasP3 = part3 != null && !part3.isBlank();
+    private String assembleFinalSummary(String overview, String modules, String files,
+                                        String opsNotes, String moduleJoined) {
+        boolean hasO = overview != null && !overview.isBlank();
+        boolean hasM = modules != null && !modules.isBlank();
+        boolean hasF = files != null && !files.isBlank();
+        boolean hasP = opsNotes != null && !opsNotes.isBlank();
 
-        // 全成功：三段串起来
-        if (hasP1 && hasP2 && hasP3) {
-            return part1 + "\n\n---\n\n" + part2 + "\n\n---\n\n" + part3;
-        }
         // 全失败：走模块摘要兜底
-        if (!hasP1 && !hasP2 && !hasP3) {
-            return "> ⚠️ 最终汇总三步均失败（可能 LLM 端波动），以下是各模块独立摘要：\n\n" + moduleJoined;
+        if (!hasO && !hasM && !hasF && !hasP) {
+            return "> ⚠️ 最终汇总四步均失败（可能 LLM 端波动），以下是各模块独立摘要：\n\n" + moduleJoined;
         }
 
-        // 部分成功：拼接已有 part，缺失的章节用提示标注
         StringBuilder sb = new StringBuilder(65536);
-        if (hasP1) sb.append(part1);
-        else sb.append("> ⚠️ Part 1（定位/架构）生成失败\n");
+        if (hasO) sb.append(overview);
+        else sb.append("> ⚠️ Part 1（定位/架构/数据流）生成失败\n");
 
         sb.append("\n\n---\n\n");
-        if (hasP2) sb.append(part2);
-        else sb.append("> ⚠️ Part 2（模块深度 / 关键文件）生成失败，参考各模块独立摘要：\n\n").append(moduleJoined);
+        if (hasM) sb.append(modules);
+        else sb.append("> ⚠️ Part 2（模块深度解读）生成失败，参考各模块独立摘要：\n\n").append(moduleJoined);
 
         sb.append("\n\n---\n\n");
-        if (hasP3) sb.append(part3);
+        if (hasF) sb.append(files);
+        else sb.append("> ⚠️ Part 4（关键文件导读）生成失败\n");
+
+        sb.append("\n\n---\n\n");
+        if (hasP) sb.append(opsNotes);
         else sb.append("> ⚠️ Part 3（部署 / 潜在改进）生成失败\n");
         return sb.toString();
     }

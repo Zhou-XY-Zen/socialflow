@@ -391,33 +391,29 @@ public final class CodeReviewPrompts {
                               userRequirementsBlock(userRequirements));
     }
 
-    /** FINAL Step 2：模块深度 + 关键文件。拆出了"部署与运行 / 潜在改进"到 PART3，
-     *  避免单次 completion 顶 8192 max_tokens 导致末尾章节被截断。 */
+    /** FINAL Step 2：只写"模块深度解读"一章。
+     *  关键文件导读已拆到 PART4、部署/改进已拆到 PART3，避免多章共用 8192 max_tokens
+     *  时被截断（生产教训：id=2046646319690805250 两章共用时关键文件导读被挤掉）。 */
     public static String finalSummaryPart2System() {
         return """
-                你是资深技术架构师。请输出项目报告的 **Part 2**，只写以下两个章节：
+                你是资深技术架构师。请输出项目报告的 **Part 2**，只写一个章节：
 
                 ## 模块深度解读
-                为每个模块单独写一段 800-1200 字的深度解读。每段必须：
+                为每个模块单独写一段 700-1100 字的深度解读。每段必须：
                 - 模块职责一句话总结
                 - 列出 5-8 个关键类，每个类注明**完整包路径**和一句话作用
                 - 挑 1-2 个"最核心方法"贴出 5-15 行真实代码（从模块摘要里能推出来的）
                 - 指出该模块的"扩展点"：想替换/增强时从哪里介入
-                （总字数 3500-5000 字）
-
-                ## 关键文件导读
-                列 10-15 个新人必读文件，每个：路径 + 为什么值得看 + 该文件里的核心函数/类
-                （每项 150-250 字，共 1500-2500 字）
 
                 ⚠️ 【输出格式 —— 必须严格遵守】
                 直接输出 Markdown 正文，**不要任何 JSON 外壳，也不要 ``` 围栏包整个报告**。
                 第一行就从 `## 模块深度解读` 开始。代码片段内部可以用 ```java 包裹。
 
                 ⚠️ 【硬性要求】
-                1. Markdown 正文总字数 4500-6000 字（中文），严禁超过 6500 字以免被截断
-                2. 每个模块深度解读必须有真实代码块
-                3. 不要写 Part 1 / Part 3 的职责章节（定位/架构/数据流/部署/改进）
-                4. 输出结构只有两章：## 模块深度解读 → ## 关键文件导读
+                1. 只写"## 模块深度解读"一章；不要写关键文件导读/部署/改进 —— 它们在别的 Part
+                2. 每个模块解读 700-1100 字，总字数不要超过"模块数 × 1100 字"
+                3. 每个模块深度解读必须有真实代码块
+                4. 引用类/方法时必须带包路径
                 """;
     }
 
@@ -478,6 +474,49 @@ public final class CodeReviewPrompts {
                 %s
                 %s
                 按 system prompt 输出 Part 3 Markdown —— 只写"部署与运行"和"潜在改进"两章。
+                """.formatted(repoName, moduleSummariesJoined, userRequirementsBlock(userRequirements));
+    }
+
+    /** FINAL Step 2c（PART4）：关键文件导读独立一次调用。
+     *  1500-2500 字专门写 10-15 个必读文件，远低于 8192 上限不会截断。 */
+    public static String finalSummaryPart4System() {
+        return """
+                你是资深技术架构师。请输出项目报告的 **Part 4**，只写一个章节：
+
+                ## 关键文件导读
+                为新工程师列 10-15 个必读文件。每个条目格式：
+                - **路径**（完整相对路径，如 `socialflow-service/src/main/.../CodeAnalysisAsyncRunner.java`）
+                - **为什么值得看**：一句话说明这个文件的价值（配置中枢？核心算法？复杂流程的编排？）
+                - **核心函数/类**：列 2-4 个文件内的关键函数或内部类，每个带一句话作用
+
+                每项控制在 150-200 字。优先挑：
+                - 主入口（Application / *Runner）
+                - 业务核心（复杂 Service 的 Impl）
+                - 框架关键配置（AsyncConfig / SecurityConfig / application.yml）
+                - 设计模式示范（责任链 / Router / Provider 多实现）
+                - 有趣的算法或流程（多智能体协作 / 异步编排 / RAG 管道）
+
+                ⚠️ 【输出格式 —— 必须严格遵守】
+                直接输出 Markdown 正文，**不要任何 JSON 外壳，也不要 ``` 围栏包整个报告**。
+                第一行就从 `## 关键文件导读` 开始。
+
+                ⚠️ 【硬性要求】
+                1. Markdown 正文总字数 1500-2500 字（中文）
+                2. 只写"## 关键文件导读"一章，不要写其他章节
+                3. 文件路径必须是真实存在的（从模块摘要里能看到）
+                4. 避免只列"XxxMapper.java"这种 CRUD 样板，优先选有设计价值的文件
+                """;
+    }
+
+    public static String finalSummaryPart4User(String repoName, String moduleSummariesJoined,
+                                               String userRequirements) {
+        return """
+                仓库: %s
+
+                ## 各模块完整摘要（用于挑出最值得新人先看的文件）
+                %s
+                %s
+                按 system prompt 输出 Part 4 Markdown —— 只写"关键文件导读"一章。
                 """.formatted(repoName, moduleSummariesJoined, userRequirementsBlock(userRequirements));
     }
 
