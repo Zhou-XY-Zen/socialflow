@@ -239,7 +239,8 @@ const typeMeta: Record<string, { label: string; icon: string }> = {
 .markdown-body :deep(h2) { font-size: 16px; margin: 12px 0 6px; }
 .markdown-body :deep(p) { margin: 6px 0; }
 .markdown-body :deep(code) { background: #f3f4f6; padding: 2px 6px; border-radius: 3px; font-size: 0.9em; color: #6d28d9; }
-.markdown-body :deep(pre) { background: #1e293b; color: #e2e8f0; padding: 12px; border-radius: 6px; overflow-x: auto; }
+.markdown-body :deep(pre) { background: #fafafa; color: #1e293b; padding: 12px; border-radius: 6px; overflow-x: auto; border: 1px solid #e5e7eb; font-size: 13px; line-height: 1.6; }
+.markdown-body :deep(pre code) { background: transparent; color: inherit; padding: 0; border: none; font-size: 13px; }
 
 .mermaid-svg { display: flex; justify-content: center; overflow-x: auto; }
 .mermaid-svg :deep(svg) { max-width: 100%; height: auto; }

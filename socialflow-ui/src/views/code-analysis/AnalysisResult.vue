@@ -765,12 +765,21 @@ async function doExport(format: 'markdown' | 'html' | 'pdf') {
   border: 1px solid rgba(102, 126, 234, 0.12);
 }
 .markdown-body :deep(pre) {
-  background: #1e293b;
-  color: #e2e8f0;
+  background: #fafafa;
+  color: #1e293b;
   padding: var(--sf-space-4);
   border-radius: var(--sf-radius-md);
   overflow-x: auto;
-  box-shadow: var(--sf-shadow-md);
+  border: 1px solid #e5e7eb;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.markdown-body :deep(pre code) {
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  border: none;
+  font-size: 13px;
 }
 
 /* ========== Mermaid ========== */
