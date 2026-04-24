@@ -6,8 +6,10 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.socialflow.common.constant.CommonConstants;
 import com.socialflow.common.result.R;
 import com.socialflow.model.dto.AnalyzeRepoDTO;
+import com.socialflow.model.dto.CodeAnalysisConfigDTO;
 import com.socialflow.model.dto.FindingStatusDTO;
 import com.socialflow.model.dto.SaveBookmarkDTO;
+import com.socialflow.model.entity.CodeAnalysisConfig;
 import com.socialflow.model.vo.AnalysisStatsVO;
 import com.socialflow.model.vo.CodeAnalysisVO;
 import com.socialflow.model.entity.RuleLibraryItem;
@@ -15,6 +17,7 @@ import com.socialflow.model.vo.LlmCallLogVO;
 import com.socialflow.model.vo.RepoBookmarkVO;
 import com.socialflow.model.vo.RepoCommitVO;
 import com.socialflow.model.vo.RuleLibraryItemVO;
+import com.socialflow.service.codeanalysis.CodeAnalysisConfigService;
 import com.socialflow.service.codeanalysis.CodeAnalysisExportService;
 import com.socialflow.service.codeanalysis.CodeAnalysisService;
 import com.socialflow.service.codeanalysis.RuleLibraryHolder;
@@ -64,6 +67,7 @@ public class CodeAnalysisController {
     private final RuleLibraryService ruleLibraryService;
     private final RuleLibraryHolder ruleLibraryHolder;
     private final ShareTokenRateLimiter shareRateLimiter;
+    private final CodeAnalysisConfigService configService;
 
     // ---------- 仪表盘 ----------
 
@@ -310,5 +314,32 @@ public class CodeAnalysisController {
         ruleLibraryService.deleteCustom(id);
         ruleLibraryHolder.reloadFromDb();
         return R.ok();
+    }
+
+    // ---------- 用户级 LLM 配置 ----------
+    //   未配置（GET 返回 null）时前端展示"系统默认"；save 覆盖；reset 清除回到默认。
+    //   优先级高于 application.yml 的 socialflow.code-analysis.* —— 具体选择逻辑在
+    //   CodeAnalysisAsyncRunner.callLlm() 里实现。
+
+    @Operation(summary = "获取当前用户的 LLM 配置；未配置返回 null（前端展示系统默认）")
+    @SaCheckLogin
+    @GetMapping("/config/llm")
+    public R<CodeAnalysisConfig> getLlmConfig() {
+        return R.ok(configService.findByUserId(StpUtil.getLoginIdAsLong()));
+    }
+
+    @Operation(summary = "保存/更新当前用户的 LLM 配置（upsert）")
+    @SaCheckLogin
+    @PutMapping("/config/llm")
+    public R<CodeAnalysisConfig> saveLlmConfig(@Valid @RequestBody CodeAnalysisConfigDTO dto) {
+        return R.ok(configService.save(StpUtil.getLoginIdAsLong(), dto));
+    }
+
+    @Operation(summary = "恢复系统默认（删除用户配置，回到 application.yml 默认）")
+    @SaCheckLogin
+    @DeleteMapping("/config/llm")
+    public R<Map<String, Integer>> resetLlmConfig() {
+        int removed = configService.reset(StpUtil.getLoginIdAsLong());
+        return R.ok(Map.of("removed", removed));
     }
 }

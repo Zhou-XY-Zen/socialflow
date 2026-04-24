@@ -240,6 +240,23 @@ export interface RuleLibraryItem {
   updateTime?: string
 }
 
+/** 代码分析用户级 LLM 配置（code_analysis_config 表；未配置时接口返回 null） */
+export interface CodeAnalysisLlmConfig {
+  id: string
+  userId: string
+  provider: 'DEEPSEEK' | 'QWEN' | 'GLM' | 'OPENAI' | 'CLAUDE'
+  model: string
+  temperature: number
+  createTime?: string
+  updateTime?: string
+}
+
+export interface CodeAnalysisLlmConfigDTO {
+  provider: 'DEEPSEEK' | 'QWEN' | 'GLM' | 'OPENAI' | 'CLAUDE'
+  model: string
+  temperature: number
+}
+
 export interface SaveRuleDTO {
   id?: string | number
   code: string

@@ -11,6 +11,8 @@ import type {
   AnalysisStats,
   AnalyzeRepoDTO,
   CodeAnalysis,
+  CodeAnalysisLlmConfig,
+  CodeAnalysisLlmConfigDTO,
   FindingStatusDTO,
   LlmCallLog,
   RepoAuthCredential,
@@ -117,6 +119,12 @@ export const codeAnalysisApi = {
   saveRule: (dto: SaveRuleDTO) =>
     post<RuleLibraryItem, SaveRuleDTO>('/code-analysis/rules', dto),
   deleteRule: (id: Id) => del<void>(`/code-analysis/rules/${id}`),
+
+  /* 用户级 LLM 配置（code_analysis_config 表） —— 未配置时 getLlmConfig 返回 null */
+  getLlmConfig: () => get<CodeAnalysisLlmConfig | null>('/code-analysis/config/llm'),
+  saveLlmConfig: (dto: CodeAnalysisLlmConfigDTO) =>
+    put<CodeAnalysisLlmConfig, CodeAnalysisLlmConfigDTO>('/code-analysis/config/llm', dto),
+  resetLlmConfig: () => del<{ removed: number }>('/code-analysis/config/llm'),
 }
 
 /** 从 Content-Disposition 头解析文件名，优先 RFC 5987 的 filename*=UTF-8'' */

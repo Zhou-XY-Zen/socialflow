@@ -61,7 +61,7 @@ const menuGroups: MenuGroup[] = [
       { path: '/code-analysis/bookmarks',   label: '仓库收藏',  icon: 'Star' },
       { path: '/code-analysis/credentials', label: '仓库凭证',  icon: 'Key' },
       { path: '/code-analysis/rules',       label: '规约库',    icon: 'DocumentCopy' },
-      { path: '/code-analysis/settings',  label: '设置',      icon: 'Setting' },
+      // 原"设置"项已并入「个人设置 → 代码分析 · 模型 / 偏好」
     ],
   },
 ]

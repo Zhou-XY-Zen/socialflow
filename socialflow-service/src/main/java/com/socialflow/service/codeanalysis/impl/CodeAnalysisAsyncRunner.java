@@ -63,6 +63,7 @@ public class CodeAnalysisAsyncRunner {
     private final CredentialService credentialService;
     private final RuleLibraryHolder ruleLibrary;
     private final FindingFeedbackService findingFeedback;
+    private final com.socialflow.service.codeanalysis.CodeAnalysisConfigService configService;
     /**
      * 模块摘要专用并发线程池，与父 codeAnalysisExecutor 隔离避免嵌套死锁。
      * 字段名与 @Bean 名称一致，Spring 按 byName 自动匹配，无需 @Qualifier。
@@ -908,7 +909,15 @@ public class CodeAnalysisAsyncRunner {
     private LlmResponse callLlm(Long userId, Long analysisId, String stage, String label,
                                 String systemPrompt, String userPrompt) {
         long t0 = System.currentTimeMillis();
-        LlmProvider providerEnum = LlmProvider.valueOf(defaultProviderCode.toUpperCase());
+        // 优先读用户配置（code_analysis_config 表）；没有就用 yml 默认。
+        // 好处：用户可在"个人设置 → 代码分析"页自选模型，不重启后端即生效（下次分析就用新配置）。
+        com.socialflow.model.entity.CodeAnalysisConfig userCfg = configService.findByUserId(userId);
+        String effProvider = userCfg != null ? userCfg.getProvider() : defaultProviderCode;
+        String effModel    = userCfg != null ? userCfg.getModel()    : model;
+        Double effTemp     = userCfg != null && userCfg.getTemperature() != null
+                ? userCfg.getTemperature().doubleValue()
+                : temperature;
+        LlmProvider providerEnum = LlmProvider.valueOf(effProvider.toUpperCase());
         LlmResponse resp = null;
         String errorMsg = null;
         boolean success = false;
@@ -917,8 +926,8 @@ public class CodeAnalysisAsyncRunner {
             messages.add(ChatMessage.system(systemPrompt));
             messages.add(ChatMessage.user(userPrompt));
             LlmConfig cfg = LlmConfig.builder()
-                    .model(model)
-                    .temperature(temperature)
+                    .model(effModel)
+                    .temperature(effTemp)
                     .apiKey(systemApiKey)
                     .maxTokens(maxTokensFor(providerEnum))
                     .build();

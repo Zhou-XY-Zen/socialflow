@@ -90,9 +90,25 @@ const routes: RouteRecordRaw[] = [
       /* 数据看板 —— 数据统计与可视化 */
       { path: 'dashboard', name: 'dashboard', component: () => import('@/views/Dashboard.vue'),
         meta: { title: '数据看板' } },
-      /* 个人设置 —— 用户偏好、API Key 管理等 */
-      { path: 'settings', name: 'settings', component: () => import('@/views/Settings.vue'),
-        meta: { title: '个人设置' } },
+      /* 个人设置 —— 嵌套路由，左栏菜单 + 右栏 <router-view /> 风格 */
+      { path: 'settings', component: () => import('@/views/settings/SettingsLayout.vue'),
+        meta: { title: '个人设置' },
+        children: [
+          { path: '', redirect: { name: 'settings-profile' } },
+          { path: 'profile', name: 'settings-profile',
+            component: () => import('@/views/settings/ProfilePanel.vue'),
+            meta: { title: '个人设置 · 账号信息' } },
+          { path: 'api-keys', name: 'settings-api-keys',
+            component: () => import('@/views/settings/ApiKeysPanel.vue'),
+            meta: { title: '个人设置 · API Key 管理' } },
+          { path: 'code-analysis-model', name: 'settings-ca-model',
+            component: () => import('@/views/settings/CodeAnalysisModelPanel.vue'),
+            meta: { title: '个人设置 · 代码分析模型' } },
+          { path: 'preferences', name: 'settings-preferences',
+            component: () => import('@/views/settings/PreferencesPanel.vue'),
+            meta: { title: '个人设置 · 偏好' } },
+        ]
+      },
 
       /* ================= 代码分析（一级菜单 + 8 个二级） ================= */
       { path: 'code-analysis', redirect: '/code-analysis/dashboard' },
@@ -120,9 +136,9 @@ const routes: RouteRecordRaw[] = [
       { path: 'code-analysis/rules', name: 'ca-rules',
         component: () => import('@/views/code-analysis/Rules.vue'),
         meta: { title: '代码分析 · 规约库' } },
-      { path: 'code-analysis/settings', name: 'ca-settings',
-        component: () => import('@/views/code-analysis/Settings.vue'),
-        meta: { title: '代码分析 · 设置' } },
+      /* 老路由重定向到新个人设置 —— 兼容已保存的书签 */
+      { path: 'code-analysis/settings',
+        redirect: '/settings/preferences' },
       { path: 'code-analysis/result/:id', name: 'ca-result',
         component: () => import('@/views/code-analysis/AnalysisResult.vue'),
         meta: { title: '代码分析 · 结果详情' } },
