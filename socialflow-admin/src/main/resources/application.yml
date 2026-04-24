@@ -140,6 +140,13 @@ socialflow:
     agent:
       max-rounds: 3
       timeout-seconds: 120
+  # 代码分析模块独立覆盖 provider/model（CodeAnalysisAsyncRunner 用 @Value 注入）。
+  # 2026-04-24：DeepSeek 发布 V4 系列，旧 deepseek-chat/reasoner 将于 2026-07-24 停用。
+  # deepseek-v4-pro = 1.6T MoE / 49B 激活 / 1M context / 旗舰，对长报告质量最好。
+  code-analysis:
+    provider: DEEPSEEK
+    model: deepseek-v4-pro
+    temperature: 0.3
   vector:
     type: pgvector
     host: ${PG_HOST:localhost}

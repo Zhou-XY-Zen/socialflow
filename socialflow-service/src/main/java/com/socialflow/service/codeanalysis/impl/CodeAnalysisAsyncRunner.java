@@ -1425,6 +1425,12 @@ public class CodeAnalysisAsyncRunner {
             if (s.endsWith("```")) s = s.substring(0, s.length() - 3).trim();
         }
 
+        // 0.5) 规范化 direction 关键字大小写 —— mermaid 只认小写 direction，
+        //       LLM（尤其 deepseek-v4-pro）偶尔写成 DIRECTION LR 导致解析器把它
+        //       当成节点 ID，报 "Expecting SEMI/NEWLINE got NODE_STRING"。
+        //       生产事故：id=2047618405536034817 line 79 大写 DIRECTION 无法渲染。
+        s = s.replaceAll("(?m)^(\\s*)DIRECTION(\\s+(?:TB|BT|LR|RL|TD))\\b", "$1direction$2");
+
         // 1) 去重：找第二份 `graph TD` / `sequenceDiagram` / `flowchart` 声明
         java.util.regex.Matcher dup = MERMAID_HEADER_PATTERN.matcher(s);
         int firstStart = -1, secondStart = -1;

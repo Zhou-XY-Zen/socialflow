@@ -534,6 +534,10 @@ public final class CodeReviewPrompts {
                 3. 菱形判断：`id{"..."}`
                 4. arrow label：`A -->|"调用 LLM"| B`
                 5. 只能有一个 `graph TD` / `sequenceDiagram` 声明
+                6. subgraph 内部方向关键字**必须小写**：`direction LR`（不是 `DIRECTION LR`）
+                   ✅ `direction TB` / `direction LR` / `direction TD`
+                   ❌ `DIRECTION TB`（mermaid 只认小写；大写会被解析器当节点 ID，
+                      报 "Expecting SEMI got NODE_STRING" 错误）
 
                 图表规模 30-80 行，覆盖：
                 - 前端入口 / 后端 Controller / 核心 Service / 数据库 / 缓存 / 外部 API
