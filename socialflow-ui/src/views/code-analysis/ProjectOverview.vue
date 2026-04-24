@@ -9,6 +9,7 @@ import { codeAnalysisApi } from '@/api/codeAnalysis'
 import { useMermaid } from '@/composables/useMermaid'
 import { useSummaryMarkdown } from '@/composables/useSummaryMarkdown'
 import RepoPicker from '@/components/code-analysis/RepoPicker.vue'
+import MermaidViewer from '@/components/code-analysis/MermaidViewer.vue'
 import type { CodeAnalysis, LlmCallLog, RepoBookmark } from '@/types/codeAnalysis'
 
 const router = useRouter()
@@ -651,7 +652,7 @@ onUnmounted(() => { stopPoll(); stopElapsedTimer(); stopFactRotate() })
               <pre class="mermaid-code">{{ current.mermaidCode }}</pre>
             </details>
           </div>
-          <div v-else-if="mermaidSvg" class="mermaid-svg" v-html="mermaidSvg" />
+          <MermaidViewer v-else-if="mermaidSvg" :svg="mermaidSvg" />
           <div v-else class="mermaid-loading">渲染中...</div>
         </div>
 

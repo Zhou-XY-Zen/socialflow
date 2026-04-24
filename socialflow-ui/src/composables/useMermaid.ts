@@ -17,8 +17,10 @@ function initOnce() {
     startOnLoad: false,
     theme: 'default',
     securityLevel: 'loose',
-    flowchart: { useMaxWidth: true, htmlLabels: true, curve: 'basis' },
-    sequence:  { useMaxWidth: true, wrap: true },
+    // useMaxWidth:false 让 svg 用自然尺寸输出（不再被强制缩到 100% 容器宽），
+    // 上层用 MermaidViewer 组件 + panzoom 做缩放/拖拽，大图也看得清。
+    flowchart: { useMaxWidth: false, htmlLabels: true, curve: 'basis' },
+    sequence:  { useMaxWidth: false, wrap: true },
     themeVariables: {
       primaryColor: '#ede9fe',
       primaryTextColor: '#1f2937',

@@ -61,6 +61,7 @@ declare module 'vue' {
     ElUpload: typeof import('element-plus/es')['ElUpload']
     EmptyState: typeof import('./src/components/EmptyState.vue')['default']
     FindingCard: typeof import('./src/components/code-analysis/FindingCard.vue')['default']
+    MermaidViewer: typeof import('./src/components/code-analysis/MermaidViewer.vue')['default']
     PageHeader: typeof import('./src/components/PageHeader.vue')['default']
     RepoPicker: typeof import('./src/components/code-analysis/RepoPicker.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']

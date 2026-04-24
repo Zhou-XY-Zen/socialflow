@@ -12,6 +12,7 @@ import { useSummaryMarkdown } from '@/composables/useSummaryMarkdown'
 import type { CodeAnalysis, FindingLevel, LlmCallLog } from '@/types/codeAnalysis'
 import ScoreGauge from '@/components/code-analysis/ScoreGauge.vue'
 import FindingCard from '@/components/code-analysis/FindingCard.vue'
+import MermaidViewer from '@/components/code-analysis/MermaidViewer.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -262,7 +263,7 @@ async function doExport(format: 'markdown' | 'html' | 'pdf') {
       <div v-if="current.analysisType === 'PROJECT_OVERVIEW' && current.mermaidCode" class="content-card">
         <div class="card-title">🧭 核心流程图</div>
         <div v-if="mermaidError" class="mermaid-error">⚠️ {{ mermaidError }}</div>
-        <div v-else-if="mermaidSvg" class="mermaid-svg" v-html="mermaidSvg" />
+        <MermaidViewer v-else-if="mermaidSvg" :svg="mermaidSvg" />
       </div>
 
       <!-- 摘要 -->
