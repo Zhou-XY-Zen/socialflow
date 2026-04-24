@@ -15,20 +15,8 @@
 import { computed, nextTick, ref, watch, type Ref } from 'vue'
 import MarkdownIt from 'markdown-it'
 import mermaid from 'mermaid'
+import { initMermaidOnce } from './mermaidConfig'
 import './useSummaryMarkdown.css'
-
-let mermaidInited = false
-function initMermaidOnce() {
-  if (mermaidInited) return
-  mermaid.initialize({
-    startOnLoad: false,
-    theme: 'default',
-    securityLevel: 'loose',
-    flowchart: { useMaxWidth: true, htmlLabels: true, curve: 'basis' },
-    sequence: { useMaxWidth: true, wrap: true },
-  })
-  mermaidInited = true
-}
 
 /** 处理含 Unicode 的 base64 编码 */
 function utf8ToBase64(s: string): string {
@@ -67,7 +55,7 @@ export function useSummaryMarkdown(source: () => string | undefined | null) {
     if (!host) return
     const nodes = host.querySelectorAll<HTMLElement>('.mermaid-inline[data-mermaid]')
     if (nodes.length === 0) return
-    initMermaidOnce()
+    initMermaidOnce(true)  // summaryMd 内嵌图跟随容器宽度自适应
     for (let i = 0; i < nodes.length; i++) {
       const el = nodes[i]
       const encoded = el.dataset.mermaid || ''

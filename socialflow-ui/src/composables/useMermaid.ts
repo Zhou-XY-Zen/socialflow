@@ -8,30 +8,7 @@
  */
 import { ref } from 'vue'
 import mermaid from 'mermaid'
-
-let inited = false
-
-function initOnce() {
-  if (inited) return
-  mermaid.initialize({
-    startOnLoad: false,
-    theme: 'default',
-    securityLevel: 'loose',
-    // useMaxWidth:false 让 svg 用自然尺寸输出（不再被强制缩到 100% 容器宽），
-    // 上层用 MermaidViewer 组件 + panzoom 做缩放/拖拽，大图也看得清。
-    flowchart: { useMaxWidth: false, htmlLabels: true, curve: 'basis' },
-    sequence:  { useMaxWidth: false, wrap: true },
-    themeVariables: {
-      primaryColor: '#ede9fe',
-      primaryTextColor: '#1f2937',
-      primaryBorderColor: '#7c3aed',
-      lineColor: '#6b7280',
-      secondaryColor: '#e0e7ff',
-      tertiaryColor: '#f3e8ff',
-    },
-  })
-  inited = true
-}
+import { initMermaidOnce } from './mermaidConfig'
 
 export function useMermaid() {
   const svg = ref('')
@@ -42,7 +19,7 @@ export function useMermaid() {
     error.value = ''
     svg.value = ''
     if (!code || !code.trim()) return
-    initOnce()
+    initMermaidOnce(false)  // MermaidViewer + panzoom 接管尺寸
     rendering.value = true
     try {
       const id = 'mm-' + Math.random().toString(36).slice(2, 10)

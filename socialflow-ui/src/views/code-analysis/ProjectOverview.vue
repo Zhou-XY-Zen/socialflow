@@ -10,6 +10,7 @@ import { useMermaid } from '@/composables/useMermaid'
 import { useSummaryMarkdown } from '@/composables/useSummaryMarkdown'
 import RepoPicker from '@/components/code-analysis/RepoPicker.vue'
 import MermaidViewer from '@/components/code-analysis/MermaidViewer.vue'
+import { fmtTokens, fmtLatency } from '@/utils/format'
 import type { CodeAnalysis, LlmCallLog, RepoBookmark } from '@/types/codeAnalysis'
 
 const router = useRouter()
@@ -128,17 +129,7 @@ function stopElapsedTimer() {
 }
 
 /** Token 数字格式化（K / M） */
-function fmtTokens(n?: number | null) {
-  if (n == null || n === 0) return '0'
-  if (n < 1000) return String(n)
-  if (n < 1_000_000) return (n / 1000).toFixed(1) + 'K'
-  return (n / 1_000_000).toFixed(2) + 'M'
-}
-function fmtLatency(ms?: number | null) {
-  if (ms == null) return '—'
-  if (ms < 1000) return `${ms}ms`
-  return `${(ms / 1000).toFixed(1)}s`
-}
+// fmtTokens / fmtLatency 从 @/utils/format 引入（见 import）
 
 /** "你知道吗" 卡片轮播 */
 const FACTS = [
@@ -501,8 +492,8 @@ onUnmounted(() => { stopPoll(); stopElapsedTimer(); stopFactRotate() })
           <div class="pc-stat">
             <div class="pc-stat-icon is-brand"><el-icon><Cpu /></el-icon></div>
             <div class="pc-stat-body">
-              <div class="pc-stat-value">{{ fmtTokens(liveTokens.sum) }}</div>
-              <div class="pc-stat-label">Token · 进 {{ fmtTokens(liveTokens.prompt) }} / 出 {{ fmtTokens(liveTokens.completion) }}</div>
+              <div class="pc-stat-value">{{ fmtTokens(liveTokens.sum, '0') }}</div>
+              <div class="pc-stat-label">Token · 进 {{ fmtTokens(liveTokens.prompt, '0') }} / 出 {{ fmtTokens(liveTokens.completion, '0') }}</div>
             </div>
           </div>
           <div class="pc-stat">
@@ -1836,108 +1827,7 @@ onUnmounted(() => { stopPoll(); stopElapsedTimer(); stopFactRotate() })
   color: var(--sf-text-primary);
   padding: 0 var(--sf-space-5) var(--sf-space-5);
 }
-.markdown-body :deep(h1) {
-  font-size: 24px;
-  margin: var(--sf-space-5) 0 var(--sf-space-3);
-  color: var(--sf-text-primary);
-  font-weight: 700;
-  background: var(--sf-gradient);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  display: inline-block;
-}
-.markdown-body :deep(h2) {
-  font-size: 19px;
-  margin: var(--sf-space-5) 0 var(--sf-space-3);
-  color: var(--sf-text-primary);
-  font-weight: 600;
-  padding-bottom: 6px;
-  border-bottom: 2px solid var(--sf-border-light);
-  display: flex;
-  align-items: center;
-  gap: var(--sf-space-2);
-}
-.markdown-body :deep(h2)::before {
-  content: '';
-  width: 4px;
-  height: 18px;
-  background: var(--sf-gradient);
-  border-radius: var(--sf-radius-full);
-  display: inline-block;
-}
-.markdown-body :deep(h3) {
-  font-size: 16px;
-  margin: var(--sf-space-4) 0 var(--sf-space-2);
-  color: var(--sf-text-secondary);
-  font-weight: 600;
-}
-.markdown-body :deep(p) { margin: var(--sf-space-2) 0; }
-.markdown-body :deep(code) {
-  background: rgba(102, 126, 234, 0.08);
-  padding: 2px 8px;
-  border-radius: var(--sf-radius-xs);
-  font-size: 0.9em;
-  color: var(--sf-primary-dark);
-  font-weight: 500;
-  border: 1px solid rgba(102, 126, 234, 0.12);
-}
-.markdown-body :deep(pre) {
-  background: #fafafa;
-  color: #1e293b;
-  padding: var(--sf-space-4);
-  border-radius: var(--sf-radius-md);
-  overflow-x: auto;
-  border: 1px solid #e5e7eb;
-  font-size: 13px;
-  line-height: 1.6;
-}
-.markdown-body :deep(pre code) {
-  background: transparent;
-  color: inherit;
-  padding: 0;
-  border: none;
-}
-.markdown-body :deep(ul), .markdown-body :deep(ol) { padding-left: 24px; }
-.markdown-body :deep(li) { margin: var(--sf-space-1) 0; }
-.markdown-body :deep(a) {
-  color: var(--sf-primary);
-  text-decoration: none;
-  border-bottom: 1px solid rgba(102, 126, 234, 0.3);
-  transition: all var(--sf-transition-fast);
-}
-.markdown-body :deep(a:hover) {
-  color: var(--sf-accent);
-  border-bottom-color: var(--sf-accent);
-}
-.markdown-body :deep(blockquote) {
-  border-left: 4px solid var(--sf-primary);
-  background: var(--sf-gradient-soft);
-  padding: var(--sf-space-3) var(--sf-space-4);
-  color: var(--sf-text-secondary);
-  margin: var(--sf-space-3) 0;
-  border-radius: 0 var(--sf-radius-sm) var(--sf-radius-sm) 0;
-}
-.markdown-body :deep(table) {
-  border-collapse: collapse;
-  width: 100%;
-  margin: var(--sf-space-3) 0;
-  font-size: 13px;
-}
-.markdown-body :deep(th),
-.markdown-body :deep(td) {
-  padding: 8px 12px;
-  border: 1px solid var(--sf-border-light);
-  text-align: left;
-}
-.markdown-body :deep(th) {
-  background: var(--sf-bg-subtle);
-  font-weight: 600;
-  color: var(--sf-text-secondary);
-}
-.markdown-body :deep(tr:hover td) {
-  background: var(--sf-surface-hover);
-}
+/* 通用 .markdown-body 规则由全局 @/assets/markdown-body.css 提供 */
 
 /* ========== 凭证反馈（保留原样式但用变量化） ========== */
 .cred-badge { margin-top: 6px; padding: 6px 12px; border-radius: var(--sf-radius-sm); font-size: 12px; line-height: 1.6; }

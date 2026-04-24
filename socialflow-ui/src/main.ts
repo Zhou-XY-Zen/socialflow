@@ -49,6 +49,9 @@ import router from './router'
 /** 全局 CSS 变量和基础样式 */
 import './assets/main.css'
 
+/** 代码分析报告通用 Markdown 样式（三页面复用，避免 scoped 重复） */
+import './assets/markdown-body.css'
+
 /** 打印样式（window.print() 导出 PDF 时生效） */
 import './assets/print.css'
 

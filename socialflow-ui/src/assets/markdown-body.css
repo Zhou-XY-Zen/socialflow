@@ -1,0 +1,131 @@
+/*
+ * markdown-body.css —— 代码分析报告通用 Markdown 样式（SocialFlow 品牌风）
+ *
+ * 之前 AnalysisResult / SharedView / ProjectOverview / DiffReview / CommitReview
+ * 每个 .vue 都在 scoped <style> 里复制同一份 .markdown-body 规则，改一处要改五处。
+ * 抽到全局后，所有页面的 .markdown-body 获得一致的品牌化外观；页面独有的装饰
+ * （如 ProjectOverview 之前自己写的 h2 竖条）现在是全局默认。
+ *
+ * 由 main.ts import 注入，不走 scoped。
+ */
+
+.markdown-body {
+  line-height: 1.8;
+  color: var(--sf-text-primary, #1f2937);
+}
+
+/* ---------- 标题 ---------- */
+.markdown-body h1 {
+  font-size: 24px;
+  margin: 20px 0 12px;
+  font-weight: 700;
+  background: var(--sf-gradient, linear-gradient(135deg, #667eea 0%, #764ba2 100%));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  display: inline-block;
+}
+.markdown-body h2 {
+  font-size: 19px;
+  margin: 20px 0 12px;
+  font-weight: 600;
+  color: var(--sf-text-primary, #111827);
+  padding-bottom: 6px;
+  border-bottom: 2px solid var(--sf-border-light, #e5e7eb);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.markdown-body h2::before {
+  content: '';
+  width: 4px;
+  height: 18px;
+  background: var(--sf-gradient, linear-gradient(135deg, #667eea 0%, #764ba2 100%));
+  border-radius: 999px;
+  display: inline-block;
+}
+.markdown-body h3 {
+  font-size: 16px;
+  margin: 16px 0 8px;
+  color: var(--sf-text-secondary, #374151);
+  font-weight: 600;
+}
+.markdown-body p { margin: 8px 0; }
+
+/* ---------- 行内 code（品牌紫） ---------- */
+.markdown-body code {
+  background: rgba(102, 126, 234, 0.08);
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-size: 0.9em;
+  color: var(--sf-primary-dark, #4c1d95);
+  font-weight: 500;
+  border: 1px solid rgba(102, 126, 234, 0.12);
+}
+
+/* ---------- 代码块：白底深字（与行内 code 区分） ---------- */
+.markdown-body pre {
+  background: #fafafa;
+  color: #1e293b;
+  padding: 14px 16px;
+  border-radius: 6px;
+  overflow-x: auto;
+  border: 1px solid #e5e7eb;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.markdown-body pre code {
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  border: none;
+  font-size: 13px;
+  font-weight: normal;
+}
+
+/* ---------- 列表 ---------- */
+.markdown-body ul, .markdown-body ol { padding-left: 24px; }
+.markdown-body li { margin: 4px 0; }
+
+/* ---------- 链接 ---------- */
+.markdown-body a {
+  color: var(--sf-primary, #6d28d9);
+  text-decoration: none;
+  border-bottom: 1px solid rgba(102, 126, 234, 0.3);
+  transition: all 0.2s;
+}
+.markdown-body a:hover {
+  color: var(--sf-accent, #4c1d95);
+  border-bottom-color: var(--sf-accent, #4c1d95);
+}
+
+/* ---------- 引用块（渐变背景） ---------- */
+.markdown-body blockquote {
+  border-left: 4px solid var(--sf-primary, #6d28d9);
+  background: var(--sf-gradient-soft, linear-gradient(135deg, rgba(102,126,234,0.05) 0%, rgba(118,75,162,0.05) 100%));
+  padding: 10px 14px;
+  color: var(--sf-text-secondary, #4b5563);
+  margin: 12px 0;
+  border-radius: 0 6px 6px 0;
+}
+
+/* ---------- 表格 ---------- */
+.markdown-body table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 12px 0;
+  font-size: 13px;
+}
+.markdown-body th, .markdown-body td {
+  padding: 8px 12px;
+  border: 1px solid var(--sf-border-light, #e5e7eb);
+  text-align: left;
+}
+.markdown-body th {
+  background: var(--sf-bg-subtle, #f9fafb);
+  font-weight: 600;
+  color: var(--sf-text-secondary, #374151);
+}
+.markdown-body tr:hover td {
+  background: var(--sf-surface-hover, #f9fafb);
+}

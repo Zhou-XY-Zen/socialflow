@@ -7,6 +7,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { codeAnalysisApi } from '@/api/codeAnalysis'
 import type { CodeAnalysis } from '@/types/codeAnalysis'
+import { fmtTime, fmtTokens, fmtDuration, durationColor } from '@/utils/format'
 
 const router = useRouter()
 const records = ref<CodeAnalysis[]>([])
@@ -73,44 +74,7 @@ function extractRepoName(url: string) {
   return i >= 0 ? u.slice(i + 1) : u
 }
 
-function fmtTime(s?: string) {
-  if (!s) return ''
-  return new Date(s).toLocaleString('zh-CN')
-}
-
-// 黄山版 1.2.1：避免魔法值。Token 量级阈值集中常量化。
-const TOKEN_K = 1000
-const TOKEN_M = 1_000_000
-
-/** Token 数字格式化：123 / 12.3K / 1.23M */
-function fmtTokens(n?: number) {
-  if (n == null || n === 0) return '-'
-  if (n < TOKEN_K) return String(n)
-  if (n < TOKEN_M) return (n / TOKEN_K).toFixed(1) + 'K'
-  return (n / TOKEN_M).toFixed(2) + 'M'
-}
-
-/** 耗时格式化：1.2s / 45s / 3m 25s / 1h 5m */
-function fmtDuration(ms?: number) {
-  if (ms == null || ms <= 0) return '-'
-  if (ms < 1000) return ms + 'ms'
-  const sec = Math.round(ms / 1000)
-  if (sec < 60) return sec + 's'
-  const min = Math.floor(sec / 60)
-  const rsec = sec % 60
-  if (min < 60) return rsec > 0 ? `${min}m ${rsec}s` : `${min}m`
-  const hr = Math.floor(min / 60)
-  const rmin = min % 60
-  return rmin > 0 ? `${hr}h ${rmin}m` : `${hr}h`
-}
-
-/** 耗时健康色：≤8m 绿 / ≤20m 黄 / >20m 红。对标优化后预期 6-8 分钟 */
-function durationColor(ms?: number) {
-  if (ms == null || ms <= 0) return '#9ca3af'
-  if (ms <= 8 * 60_000) return '#059669'
-  if (ms <= 20 * 60_000) return '#b45309'
-  return '#b91c1c'
-}
+// 格式化工具统一从 @/utils/format 引入（见文件顶部 import）
 </script>
 
 <template>

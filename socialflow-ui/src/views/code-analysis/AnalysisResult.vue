@@ -13,6 +13,7 @@ import type { CodeAnalysis, FindingLevel, LlmCallLog } from '@/types/codeAnalysi
 import ScoreGauge from '@/components/code-analysis/ScoreGauge.vue'
 import FindingCard from '@/components/code-analysis/FindingCard.vue'
 import MermaidViewer from '@/components/code-analysis/MermaidViewer.vue'
+import { fmtTokens, fmtLatency } from '@/utils/format'
 
 const route = useRoute()
 const router = useRouter()
@@ -54,19 +55,6 @@ const llmTotal = computed(() => {
   const completion = llmCalls.value.reduce((acc, c) => acc + (c.completionTokens || 0), 0)
   return { sum, prompt, completion, count: llmCalls.value.length }
 })
-
-function fmtTokens(n?: number): string {
-  if (n == null) return '-'
-  if (n < 1000) return String(n)
-  if (n < 1000000) return (n / 1000).toFixed(1) + 'K'
-  return (n / 1000000).toFixed(2) + 'M'
-}
-
-function fmtLatency(ms?: number): string {
-  if (ms == null) return '-'
-  if (ms < 1000) return ms + ' ms'
-  return (ms / 1000).toFixed(1) + ' s'
-}
 
 async function load() {
   // route.params.id 已经是 string，切勿 Number() 转换（雪花 ID 会丢精度）
@@ -743,44 +731,7 @@ async function doExport(format: 'markdown' | 'html' | 'pdf') {
 .ft-l.on { background: var(--sf-info-gradient); }
 
 /* ========== Markdown（与 ProjectOverview 一致） ========== */
-.markdown-body {
-  line-height: 1.8;
-  color: var(--sf-text-primary);
-}
-.markdown-body :deep(h2) {
-  font-size: 17px;
-  margin: var(--sf-space-4) 0 var(--sf-space-2);
-  font-weight: 600;
-  color: var(--sf-text-primary);
-  padding-bottom: 4px;
-  border-bottom: 2px solid var(--sf-border-light);
-}
-.markdown-body :deep(p) { margin: var(--sf-space-2) 0; }
-.markdown-body :deep(code) {
-  background: rgba(102, 126, 234, 0.08);
-  padding: 2px 8px;
-  border-radius: var(--sf-radius-xs);
-  font-size: 0.9em;
-  color: var(--sf-primary-dark);
-  border: 1px solid rgba(102, 126, 234, 0.12);
-}
-.markdown-body :deep(pre) {
-  background: #fafafa;
-  color: #1e293b;
-  padding: var(--sf-space-4);
-  border-radius: var(--sf-radius-md);
-  overflow-x: auto;
-  border: 1px solid #e5e7eb;
-  font-size: 13px;
-  line-height: 1.6;
-}
-.markdown-body :deep(pre code) {
-  background: transparent;
-  color: inherit;
-  padding: 0;
-  border: none;
-  font-size: 13px;
-}
+/* 通用 .markdown-body / :deep(pre|code|h2|p) 规则由全局 @/assets/markdown-body.css 提供 */
 
 /* ========== Mermaid ========== */
 .mermaid-svg {

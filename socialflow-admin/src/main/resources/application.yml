@@ -132,7 +132,6 @@ socialflow:
       enabled: true
       sensitive-word-dict-path: classpath:guardrails/sensitive-words.txt
       max-input-tokens: 2000
-      llm-check-model: deepseek-chat
     quota:
       daily-tokens-per-user: 100000
       monthly-tokens-per-user: 2000000
