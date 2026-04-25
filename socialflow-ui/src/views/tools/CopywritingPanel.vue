@@ -360,9 +360,28 @@ async function onGenerate() {
 
   await start(sseUrl, requestBody, {
     onMessage: (data) => {
-      const d = data as { token?: string; clear?: boolean }
+      const d = data as {
+        token?: string
+        clear?: boolean
+        // 后端流结束前推送的"持久化结果"事件（ContentServiceImpl.generateStream concatWith）
+        // saved=true: 持久化成功，contentId 是新内容的 ID
+        // saved=false: 持久化失败，reason 是错误描述（流已经发出但 DB 没保存）
+        saved?: boolean
+        contentId?: number
+        reason?: string
+      }
       if (d?.clear) { body.value = '' }  // Multi-Agent 优化轮次时清空旧内容
       else if (d?.token) { body.value += d.token }
+      else if (typeof d?.saved === 'boolean') {
+        if (d.saved && d.contentId) {
+          // 直接拿后端给的 contentId，避免 onDone 里 list 查询的时序竞争
+          lastContentId.value = d.contentId
+        } else {
+          // 保存失败：流的内容用户已经看到了，但后端写库失败 —— 提示用户重试
+          ElMessage.warning('内容已生成但保存失败：' + (d.reason || '未知原因') + '，可重新生成')
+          stage.value = '生成完成（保存失败）'
+        }
+      }
     },
     onStage: (data) => {
       stage.value = data.message || data.stage
@@ -383,17 +402,23 @@ async function onGenerate() {
         ElMessage.warning('生成失败：AI 未返回内容，可能是模型正在思考时连接中断，请重试')
         return
       }
-      stage.value = '生成完成'
+      // 注意：stage / lastContentId 优先由 saved 事件填好（见 onMessage 分支）；
+      // 只有当 saved 事件未发出时（如老版本后端、Multi-Agent 等其他流），才走 onDone 兜底。
+      if (stage.value !== '生成完成（保存失败）' && stage.value !== '生成完成') {
+        stage.value = '生成完成'
+      }
       // AI 智能提取配图提示词
       extractImagePrompt(body.value)
-      // 获取刚保存的文案 ID（取最新一条）
-      try {
-        const { contentApi } = await import('@/api/content')
-        const list = await contentApi.list({ pageNum: 1, pageSize: 1 })
-        if (list.records.length > 0) {
-          lastContentId.value = list.records[0].id
-        }
-      } catch { /* ignore */ }
+      // lastContentId 没被 saved 事件填上时，兜底查 list（多见于 Multi-Agent 流）
+      if (!lastContentId.value) {
+        try {
+          const { contentApi } = await import('@/api/content')
+          const list = await contentApi.list({ pageNum: 1, pageSize: 1 })
+          if (list.records.length > 0) {
+            lastContentId.value = list.records[0].id
+          }
+        } catch { /* ignore */ }
+      }
     },
     onError: (data) => {
       stage.value = `生成出错：${data.message}`
