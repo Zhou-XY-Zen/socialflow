@@ -1,5 +1,6 @@
 package com.socialflow.service.ai.eval;
 
+import com.socialflow.common.annotation.Experimental;
 import com.socialflow.model.dto.EvalTaskCreateDTO;
 import com.socialflow.model.entity.EvalTask;
 import com.socialflow.model.vo.EvalReportVO;
@@ -29,6 +30,9 @@ import java.util.List;
  * 完成后生成评测报告。评测结果存入 {@code eval_result} 表，
  * 由 {@link LlmJudgeService} 负责具体的打分逻辑。
  */
+@Experimental(since = "Wave 4.6",
+        value = "LLM-as-Judge 打分稳定，但配对 t 检验置信区间、维度权重、模型自评偏差校正"
+                + "等仍可能调整；EvalReportVO 字段后续可能新增。")
 public interface EvalService {
 
     /**

@@ -217,4 +217,19 @@ public interface ContentService {
      * 查询内容的版本历史列表（按 versionNum 倒序，最新版在前）。
      */
     List<com.socialflow.model.entity.ContentVersion> listVersions(Long userId, Long contentId);
+
+    /**
+     * 计算两个版本之间的字段级差异（V22）。
+     *
+     * <p>对 title / body / tags / status 四个用户可见字段做 before/after 对比，
+     * 仅返回发生变化的字段。便于前端"版本对比"页面以红绿色块展示差异。</p>
+     *
+     * @param userId       请求者 ID（用于权限校验）
+     * @param contentId    内容 ID
+     * @param fromVersion  较早的版本号（base）
+     * @param toVersion    较晚的版本号（head）
+     * @return 差异视图；若两版本字段完全一致，{@code changes} 列表为空
+     */
+    com.socialflow.model.vo.ContentVersionDiffVO diffVersions(
+            Long userId, Long contentId, Integer fromVersion, Integer toVersion);
 }

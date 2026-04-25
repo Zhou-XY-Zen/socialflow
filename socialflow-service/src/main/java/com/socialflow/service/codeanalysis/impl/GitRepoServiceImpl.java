@@ -6,6 +6,7 @@ import com.socialflow.model.vo.RepoCommitVO;
 import com.socialflow.service.codeanalysis.GitRepoService;
 import lombok.extern.slf4j.Slf4j;
 import org.eclipse.jgit.api.Git;
+import org.eclipse.jgit.api.errors.GitAPIException;
 import org.eclipse.jgit.diff.DiffEntry;
 import org.eclipse.jgit.diff.DiffFormatter;
 import org.eclipse.jgit.lib.ObjectId;
@@ -132,7 +133,9 @@ public class GitRepoServiceImpl implements GitRepoService {
                     primaryUrl, fallbackUrl, hasCredential);
             try {
                 return doClone(fallbackUrl, branch, cloneDepth, credential);
-            } catch (Exception e) {
+            } catch (GitAPIException | IOException | RuntimeException e) {
+                // 镜像异常的可能来源：JGit 自己的 GitAPIException、底层 IO、或包成 RuntimeException
+                // 的 TransportException —— 三种都按"镜像失败"处理，回退到原 URL
                 mirrorError = e;
                 log.warn("[Git] 镜像克隆失败 ({}), 尝试回退原 URL: {}",
                         fallbackUrl, truncateMsg(e.getMessage(), 160));
@@ -143,7 +146,7 @@ public class GitRepoServiceImpl implements GitRepoService {
         try {
             log.info("[Git] 使用原 URL: {} (hasCredential={})", primaryUrl, hasCredential);
             return doClone(primaryUrl, branch, cloneDepth, credential);
-        } catch (Exception e) {
+        } catch (GitAPIException | IOException | RuntimeException e) {
             String friendly = buildFriendlyError(primaryUrl, e, hasCredential);
             if (mirrorError != null) {
                 friendly += "\n（镜像 " + fallbackUrl + " 也失败：" +
@@ -159,7 +162,8 @@ public class GitRepoServiceImpl implements GitRepoService {
     }
 
     /** 单次克隆尝试，带超时 + 可选凭证 */
-    private File doClone(String url, String branch, int cloneDepth, RepoAuthCredential credential) throws Exception {
+    private File doClone(String url, String branch, int cloneDepth, RepoAuthCredential credential)
+            throws GitAPIException, IOException {
         File target;
         try {
             target = Files.createTempDirectory("sfca-" + System.currentTimeMillis() + "-").toFile();
@@ -189,7 +193,8 @@ public class GitRepoServiceImpl implements GitRepoService {
                 log.info("[Git] cloned OK, head={}", git.getRepository().resolve("HEAD"));
             }
             return target;
-        } catch (Exception e) {
+        } catch (GitAPIException | IOException | RuntimeException e) {
+            // 任何失败都要先清理 tmp 目录再向上抛
             cleanup(target);
             throw e;
         }
@@ -260,7 +265,7 @@ public class GitRepoServiceImpl implements GitRepoService {
                 // 简化：changedFiles / additions / deletions 在审查入口再算，避免全量计算
                 result.add(vo);
             }
-        } catch (Exception e) {
+        } catch (GitAPIException | IOException e) {
             throw new BusinessException("读取提交列表失败: " + e.getMessage());
         }
         return result;
@@ -281,7 +286,8 @@ public class GitRepoServiceImpl implements GitRepoService {
                         : null;
                 return formatDiff(repo, parent, commit, maxBytes);
             }
-        } catch (Exception e) {
+        } catch (IOException e) {
+            // RepositoryNotFoundException 是 IOException 子类（指 ".git" 目录损坏 / 不存在）
             throw new BusinessException("读取 commit diff 失败: " + e.getMessage());
         }
     }
@@ -300,7 +306,8 @@ public class GitRepoServiceImpl implements GitRepoService {
                 RevCommit headC = walk.parseCommit(head);
                 return formatDiff(repo, baseC, headC, maxBytes);
             }
-        } catch (Exception e) {
+        } catch (IOException e) {
+            // RepositoryNotFoundException 也是 IOException 子类
             throw new BusinessException("读取 diff 失败: " + e.getMessage());
         }
     }
@@ -435,7 +442,12 @@ public class GitRepoServiceImpl implements GitRepoService {
             try {
                 Thread.sleep(50);
                 Files.deleteIfExists(p);
-            } catch (Exception ignore) { /* */ }
+            } catch (InterruptedException ie) {
+                // 中断信号必须保留：恢复中断标志后让上层处理
+                Thread.currentThread().interrupt();
+            } catch (IOException ignore) {
+                // 仍然删不掉就放弃，OS 会在 tmp 清理时收掉
+            }
         }
     }
 
@@ -467,7 +479,8 @@ public class GitRepoServiceImpl implements GitRepoService {
     private static long safeCountLines(Path p) {
         try (Stream<String> s = Files.lines(p, StandardCharsets.UTF_8)) {
             return s.count();
-        } catch (Exception e) {
+        } catch (IOException | java.io.UncheckedIOException e) {
+            // Files.lines 在文件被删 / 编码异常时抛 UncheckedIOException；其他 IO 错也吞掉返回 0
             return 0L;
         }
     }
@@ -529,7 +542,8 @@ public class GitRepoServiceImpl implements GitRepoService {
                         ? walk.parseCommit(commit.getParent(0).getId()) : null;
                 return formatDiffByFile(repo, parent, commit);
             }
-        } catch (Exception e) {
+        } catch (IOException e) {
+            // RepositoryNotFoundException 是 IOException 子类（指 ".git" 目录损坏 / 不存在）
             throw new BusinessException("读取 commit diff 失败: " + e.getMessage());
         }
     }

@@ -30,7 +30,8 @@ def main():
         r(ssh, "systemctl is-active mysql mysqld 2>/dev/null | head -3", "MySQL 服务状态")
         r(
             ssh,
-            f"mysql -u{MYSQL_USER} -p{MYSQL_PASS} -e 'SELECT DATABASE();USE socialflow;SHOW TABLES LIKE \"flyway%\";' 2>&1 | tail -10",
+            f"MYSQL_PWD='{MYSQL_PASS}' mysql -u{MYSQL_USER} "
+            f"-e 'SELECT DATABASE();USE socialflow;SHOW TABLES LIKE \"flyway%\";' 2>&1 | tail -10",
             "MySQL 连通 + Flyway 历史表",
         )
         r(ssh, "df -h /opt 2>/dev/null", "/opt 磁盘空间")

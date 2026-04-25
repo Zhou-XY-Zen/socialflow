@@ -9,6 +9,7 @@ import com.socialflow.dao.mapper.PromptTemplateMapper;
 import com.socialflow.model.entity.PromptTemplate;
 import com.socialflow.model.vo.TemplatePreviewVO;
 import com.socialflow.service.ai.prompt.PromptService;
+import com.socialflow.service.ai.prompt.PromptTemplateLookup;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -28,6 +29,8 @@ public class TemplateController {
 
     private final PromptTemplateMapper templateMapper;
     private final PromptService promptService;
+    /** 模板缓存层 —— 写操作（create/update/delete）后调用 invalidateAll() 刷新缓存 */
+    private final PromptTemplateLookup templateLookup;
 
     @Operation(summary = "list templates")
     @GetMapping("/list")
@@ -51,6 +54,7 @@ public class TemplateController {
         tpl.setUserId(StpUtil.getLoginIdAsLong());
         tpl.setIsSystem(0);
         templateMapper.insert(tpl);
+        templateLookup.invalidateAll();
         return R.ok(tpl);
     }
 
@@ -67,6 +71,7 @@ public class TemplateController {
         existing.setVariables(tpl.getVariables());
         existing.setOutputFormat(tpl.getOutputFormat());
         templateMapper.updateById(existing);
+        templateLookup.invalidateAll();
         return R.ok(existing);
     }
 
@@ -74,6 +79,7 @@ public class TemplateController {
     @DeleteMapping("/{id}")
     public R<Void> delete(@PathVariable Long id) {
         templateMapper.deleteById(id);
+        templateLookup.invalidateAll();
         return R.ok();
     }
 

@@ -92,10 +92,24 @@ const aiGenerating = ref(false)
 const aiImages = ref<string[]>([])
 const aiError = ref('')
 /** 轮询定时器 */
-let pollTimer: ReturnType<typeof setInterval> | null = null
+let pollTimer: ReturnType<typeof setTimeout> | null = null
 /** 轮询次数（用于计算进度条） */
 const pollCount = ref(0)
-const maxPollCount = 40
+/**
+ * 自适应轮询：先密后疏。
+ * - 前 3 次：2s 间隔，快速捕捉低延迟完成（如缓存命中或小图）
+ * - 第 4-8 次：5s 间隔（典型 wanx-v1 生成 30-45s，落在这段窗口）
+ * - 之后：8s 间隔，避免长尾任务高频空轮询
+ *
+ * 总等待时间约 = 3*2 + 5*5 + 17*8 = 6 + 25 + 136 = 167s（25 次拉到 167s，
+ * 保留 ~10 次后置裕度），既覆盖了通常 60-90s 的生成上限，又把空轮询压低到原来的 1/3。
+ */
+const maxPollCount = 25
+function nextPollDelayMs(count: number): number {
+  if (count < 3) return 2000
+  if (count < 8) return 5000
+  return 8000
+}
 
 /** 已选图片 URL 集合 */
 const selectedImageUrls = ref<Set<string>>(new Set())
@@ -161,10 +175,15 @@ async function startAiGenerate() {
   }
 }
 
-/** 轮询 AI 文生图任务状态 */
+/** 轮询 AI 文生图任务状态（自适应间隔，避免 setInterval 的固定步长） */
 function startPollStatus() {
   stopPollStatus()
-  pollTimer = setInterval(async () => {
+  scheduleNextPoll()
+}
+
+function scheduleNextPoll() {
+  // 用 setTimeout 链而不是 setInterval，间隔可在每轮动态调整
+  pollTimer = setTimeout(async () => {
     if (!aiTaskId.value) { stopPollStatus(); return }
     pollCount.value++
 
@@ -176,28 +195,31 @@ function startPollStatus() {
         aiGenerating.value = false
         stopPollStatus()
         ElMessage.success(`成功生成 ${aiImages.value.length} 张配图`)
+        return
       } else if (status.status === 'FAILED') {
         aiError.value = status.errorMessage || '图片生成失败'
         aiGenerating.value = false
         stopPollStatus()
         ElMessage.error('图片生成失败：' + aiError.value)
+        return
       }
       // PENDING / RUNNING → 继续轮询
     } catch {
-      // 网络错误，继续轮询
+      // 网络错误：保留任务，继续按下一档间隔重试
     }
 
-    // 超时保护（40 次 × 3s = 2 分钟）
     if (pollCount.value >= maxPollCount) {
       aiError.value = '生成超时，请重试'
       aiGenerating.value = false
       stopPollStatus()
+      return
     }
-  }, 3000)
+    scheduleNextPoll()
+  }, nextPollDelayMs(pollCount.value))
 }
 
 function stopPollStatus() {
-  if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
+  if (pollTimer) { clearTimeout(pollTimer); pollTimer = null }
 }
 
 /** 计算进度百分比（估算） */

@@ -11,6 +11,7 @@ import com.socialflow.model.dto.MultiAgentGenerateDTO;
 import com.socialflow.model.entity.ContentVersion;
 import com.socialflow.model.vo.ContentVO;
 import com.socialflow.service.content.ContentService;
+import com.socialflow.web.aspect.ApiLog;
 import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -83,6 +84,7 @@ public class ContentController {
     @Operation(summary = "single platform generation")
     @PostMapping("/generate")
     @RateLimiter(name = "ai-generate")
+    @ApiLog("[内容生成-单平台]")
     public R<ContentVO> generate(@Valid @RequestBody ContentGenerateDTO dto) {
         return R.ok(contentService.generate(StpUtil.getLoginIdAsLong(), dto));
     }
@@ -103,6 +105,7 @@ public class ContentController {
     /** 批量软删（Wave 4.3）。请求体：{ids: [1,2,3]}，返回实际删除条数。 */
     @Operation(summary = "bulk soft-delete contents")
     @PostMapping("/bulk/delete")
+    @ApiLog("[批量删除]")
     public R<Map<String, Object>> bulkDelete(@RequestBody Map<String, List<Long>> body) {
         int affected = contentService.bulkDelete(StpUtil.getLoginIdAsLong(), body.get("ids"));
         return R.ok(Map.of("affected", affected));
@@ -143,6 +146,7 @@ public class ContentController {
      */
     @Operation(summary = "single platform generation (SSE)")
     @PostMapping(value = "/generate-stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    @ApiLog("[内容生成-SSE]")
     public Flux<String> generateStream(@Valid @RequestBody ContentGenerateDTO dto) {
         return contentService.generateStream(StpUtil.getLoginIdAsLong(), dto);
     }
@@ -161,6 +165,7 @@ public class ContentController {
     @Operation(summary = "multi-platform batch generation")
     @PostMapping("/generate-batch")
     @RateLimiter(name = "ai-generate")
+    @ApiLog("[内容生成-批量]")
     public R<Map<String, ContentVO>> generateBatch(@Valid @RequestBody ContentBatchGenerateDTO dto) {
         return R.ok(contentService.generateBatch(StpUtil.getLoginIdAsLong(), dto));
     }
@@ -201,6 +206,7 @@ public class ContentController {
      */
     @Operation(summary = "Multi-Agent generation (SSE)")
     @PostMapping(value = "/generate-multi-agent", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    @ApiLog("[Multi-Agent 生成]")
     public Flux<String> generateMultiAgent(@Valid @RequestBody MultiAgentGenerateDTO dto) {
         return contentService.generateMultiAgent(StpUtil.getLoginIdAsLong(), dto);
     }
@@ -219,6 +225,7 @@ public class ContentController {
     @Operation(summary = "rewrite an existing content row")
     @PostMapping("/rewrite")
     @RateLimiter(name = "ai-generate")
+    @ApiLog("[内容改写]")
     public R<ContentVO> rewrite(@Valid @RequestBody ContentRewriteDTO dto) {
         return R.ok(contentService.rewrite(StpUtil.getLoginIdAsLong(), dto));
     }
@@ -405,6 +412,24 @@ public class ContentController {
     @GetMapping("/{id}/versions")
     public R<List<ContentVersion>> getVersions(@PathVariable Long id) {
         return R.ok(contentService.listVersions(StpUtil.getLoginIdAsLong(), id));
+    }
+
+    /**
+     * 对比两个版本之间的字段级差异（V22）。
+     *
+     * 接口路径：GET /api/v1/content/{id}/versions/diff?from=&lt;n&gt;&amp;to=&lt;m&gt;
+     *
+     * <p>返回 {@link com.socialflow.model.vo.ContentVersionDiffVO}，前端可据此渲染
+     * before/after 对比视图。</p>
+     */
+    @Operation(summary = "diff two content versions")
+    @GetMapping("/{id}/versions/diff")
+    public R<com.socialflow.model.vo.ContentVersionDiffVO> diffVersions(
+            @PathVariable Long id,
+            @RequestParam("from") Integer fromVersion,
+            @RequestParam("to") Integer toVersion) {
+        return R.ok(contentService.diffVersions(
+                StpUtil.getLoginIdAsLong(), id, fromVersion, toVersion));
     }
 
     /**

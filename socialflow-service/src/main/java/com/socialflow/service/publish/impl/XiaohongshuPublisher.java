@@ -1,5 +1,6 @@
 package com.socialflow.service.publish.impl;
 
+import com.socialflow.common.annotation.NotImplementedYet;
 import com.socialflow.common.enums.PlatformType;
 import com.socialflow.model.entity.Content;
 import com.socialflow.model.entity.PlatformAccount;
@@ -32,6 +33,8 @@ public class XiaohongshuPublisher implements Publisher {
      * 小红书不支持自动发布，调用此方法将抛出异常。
      */
     @Override
+    @NotImplementedYet(value = "小红书未提供公开发布 API，仅支持辅助发布",
+            plannedFor = "无计划（平台限制）")
     public PublishResult publish(Content content, PlatformAccount account) {
         throw new UnsupportedOperationException("小红书暂不支持自动发布，请使用辅助发布模式");
     }

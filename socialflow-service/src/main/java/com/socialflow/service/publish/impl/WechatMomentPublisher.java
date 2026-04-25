@@ -1,5 +1,6 @@
 package com.socialflow.service.publish.impl;
 
+import com.socialflow.common.annotation.NotImplementedYet;
 import com.socialflow.common.enums.PlatformType;
 import com.socialflow.model.entity.Content;
 import com.socialflow.model.entity.PlatformAccount;
@@ -32,6 +33,8 @@ public class WechatMomentPublisher implements Publisher {
      * 朋友圈不支持自动发布，调用此方法将抛出异常。
      */
     @Override
+    @NotImplementedYet(value = "微信朋友圈无公开 API，无法实现自动发布",
+            plannedFor = "无计划（平台限制）")
     public PublishResult publish(Content content, PlatformAccount account) {
         throw new UnsupportedOperationException("微信朋友圈暂不支持自动发布，请使用辅助发布模式");
     }

@@ -41,7 +41,7 @@ public class ContentPersister {
     @Transactional(rollbackFor = Exception.class)
     public Content insertWithVersion(Content entity, String versionDesc) {
         contentMapper.insert(entity);
-        saveVersion(entity.getId(), entity.getBody(), versionDesc);
+        saveVersion(entity, versionDesc, null);
         return entity;
     }
 
@@ -53,8 +53,10 @@ public class ContentPersister {
      */
     @Transactional(rollbackFor = Exception.class)
     public void updateWithVersion(Content entity, String versionDesc) {
+        // 先取旧值，再 update，最后写版本快照（带 changedFields 计算）
+        Content before = contentMapper.selectById(entity.getId());
         contentMapper.updateById(entity);
-        saveVersion(entity.getId(), entity.getBody(), versionDesc);
+        saveVersion(entity, versionDesc, before);
     }
 
     /**
@@ -67,8 +69,16 @@ public class ContentPersister {
 
     /**
      * 保存版本快照记录。版本号按 content_id 维度自增。
+     *
+     * <p>V22 起额外记录 title / tags / status 快照和 changedFields 列表，让
+     * 历史版本能完整还原内容并支持精细 diff（详见 {@link ContentVersion}）。</p>
+     *
+     * @param entity     当前 content 实体（写入后或写入前，取最新字段当作 snapshot）
+     * @param changeDesc 业务侧给出的变更描述（如 "AI_GENERATE"、"MANUAL_EDIT"）
+     * @param before     更新前的旧实体；insert 场景为 null —— 用于计算 changedFields
      */
-    private void saveVersion(Long contentId, String body, String changeDesc) {
+    private void saveVersion(Content entity, String changeDesc, Content before) {
+        Long contentId = entity.getId();
         Long maxVersion = contentVersionMapper.selectCount(
                 new LambdaQueryWrapper<ContentVersion>()
                         .eq(ContentVersion::getContentId, contentId)
@@ -77,8 +87,42 @@ public class ContentPersister {
         ContentVersion version = new ContentVersion();
         version.setContentId(contentId);
         version.setVersionNum(maxVersion.intValue() + 1);
-        version.setBodySnapshot(body);
+        version.setBodySnapshot(entity.getBody());
         version.setChangeDesc(changeDesc);
+
+        // V22 字段
+        version.setTitleSnapshot(entity.getTitle());
+        version.setTagsSnapshot(entity.getTags());
+        version.setStatusSnapshot(entity.getStatus());
+        version.setChangedFields(computeChangedFields(before, entity));
+
         contentVersionMapper.insert(version);
+    }
+
+    /**
+     * 比较 before / after 实体，返回变更字段名（逗号分隔）。
+     *
+     * <p>insert 场景 before=null，认为所有可见字段都是首次写入，标记为 {@code "INITIAL"}。</p>
+     */
+    private static String computeChangedFields(Content before, Content after) {
+        if (before == null) return "INITIAL";
+        StringBuilder sb = new StringBuilder();
+        appendIfChanged(sb, "title", before.getTitle(), after.getTitle());
+        appendIfChanged(sb, "body", before.getBody(), after.getBody());
+        appendIfChanged(sb, "tags", before.getTags(), after.getTags());
+        appendIfChanged(sb, "status", before.getStatus(), after.getStatus());
+        appendIfChanged(sb, "platform", before.getPlatform(), after.getPlatform());
+        appendIfChanged(sb, "scheduledTime",
+                String.valueOf(before.getScheduledTime()),
+                String.valueOf(after.getScheduledTime()));
+        return sb.length() == 0 ? null : sb.toString();
+    }
+
+    private static void appendIfChanged(StringBuilder sb, String name, String a, String b) {
+        // 用 Objects.equals 处理 null
+        if (!java.util.Objects.equals(a, b)) {
+            if (sb.length() > 0) sb.append(',');
+            sb.append(name);
+        }
     }
 }

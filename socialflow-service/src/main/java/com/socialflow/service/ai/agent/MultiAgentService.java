@@ -1,5 +1,6 @@
 package com.socialflow.service.ai.agent;
 
+import com.socialflow.common.annotation.Experimental;
 import com.socialflow.model.dto.MultiAgentGenerateDTO;
 import reactor.core.publisher.Flux;
 
@@ -31,6 +32,9 @@ import reactor.core.publisher.Flux;
  * 每个推送的字符串是一段 JSON，兼容 SSE（Server-Sent Events）的
  * {@code message} / {@code stage} 事件格式。
  */
+@Experimental(since = "Wave 2.5",
+        value = "Agent 链结构（PLANNER → WRITER → REVIEWER → OPTIMIZER）已稳定，但每个角色"
+                + "的 system prompt、最大重试轮次、退避策略仍在调优；输出格式（SSE event 类型）后续可能扩展。")
 public interface MultiAgentService {
 
     /**

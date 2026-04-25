@@ -1,0 +1,82 @@
+# SocialFlow 后端 systemd 单元文件 —— nohup 替代方案
+#
+# 用 systemd 管的优势：
+#   1. 进程崩溃自动拉起（Restart=on-failure）
+#   2. 标准化日志（journalctl -u socialflow）
+#   3. 干净的依赖管理（After=mysql/redis）
+#   4. 优雅停机（先 SIGTERM 再 SIGKILL，给 Spring 应用 graceful shutdown 时间）
+#   5. 不再担心 SSH session 断开 + nohup 黑魔法
+#
+# ============================================================================
+# 安装步骤（在远端服务器以 root 执行）
+# ============================================================================
+#
+#   1) 把本文件上传到 /etc/systemd/system/socialflow.service
+#        scp scripts/systemd/socialflow.service root@<HOST>:/etc/systemd/system/
+#
+#   2) 确保有 /opt/socialflow/.env 文件（权限 600，包含 MYSQL_PASSWORD 等敏感值）
+#        chmod 600 /opt/socialflow/.env
+#        chown root:root /opt/socialflow/.env
+#
+#   3) 启用并启动
+#        systemctl daemon-reload
+#        systemctl enable socialflow.service
+#        systemctl start socialflow.service
+#
+#   4) 看状态 / 日志
+#        systemctl status socialflow.service
+#        journalctl -u socialflow.service -f      # 实时跟随
+#        journalctl -u socialflow.service --since="1 hour ago"
+#
+# ============================================================================
+# 部署脚本配合
+# ============================================================================
+#
+# 原 nohup 启动方式可平滑迁移到：
+#   ssh root@<HOST> 'systemctl restart socialflow.service'
+#
+# `redeploy.py` 后续可重写 start_backend()：
+#   先 stop → 替换 jar → start，省去 PID 文件 / pgrep 黑魔法。
+
+[Unit]
+Description=SocialFlow Backend (Spring Boot)
+Documentation=https://github.com/socialflow
+After=network-online.target mysql.service redis.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/socialflow
+
+# 从 .env 加载敏感配置（MYSQL_PASSWORD、AI_ENCRYPTION_KEY 等）
+# EnvironmentFile=- 表示文件不存在时不报错（开发环境可能没有）
+EnvironmentFile=-/opt/socialflow/.env
+
+Environment="SPRING_PROFILES_ACTIVE=prod"
+Environment="JAVA_OPTS=-Xms512m -Xmx1536m -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError"
+
+ExecStart=/usr/bin/java $JAVA_OPTS -jar /opt/socialflow/socialflow.jar
+
+# 优雅关闭：先发 SIGTERM（让 Spring shutdown=graceful 处理完进行中请求），
+# 30s 后还没退出再 SIGKILL。配合 application.yml 的 server.shutdown=graceful。
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+# 异常退出 5s 后自动重启，最多 5 次/600s 防止崩溃风暴
+Restart=on-failure
+RestartSec=5
+StartLimitIntervalSec=600
+StartLimitBurst=5
+
+# 日志：标准输出/错误都走 journald，不再写 logs/app.log（如果业务代码里仍在写，可保留）
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=socialflow
+
+# 资源限制：避免单个进程把整个机器拖垮
+LimitNOFILE=65536
+LimitNPROC=4096
+
+[Install]
+WantedBy=multi-user.target

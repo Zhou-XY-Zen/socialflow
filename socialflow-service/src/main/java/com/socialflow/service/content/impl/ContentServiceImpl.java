@@ -107,6 +107,9 @@ public class ContentServiceImpl implements ContentService {
     /** 向量数据库操作服务，用于存储和检索内容向量 */
     private final VectorStoreService vectorStoreService;
 
+    /** 内容生成 pipeline —— 输入护栏 + RAG 检索的统一调度器（Wave 5+ 渐进迁移中） */
+    private final com.socialflow.service.content.pipeline.ContentGenerationPipeline generationPipeline;
+
     /** 默认 LLM 提供者名称，从配置文件读取（如 "glm"、"deepseek"） */
     @Value("${socialflow.ai.default-provider:glm}")
     private String defaultProvider;
@@ -137,16 +140,26 @@ public class ContentServiceImpl implements ContentService {
      */
     @Override
     public ContentVO generate(Long userId, ContentGenerateDTO dto) {
-        // 第一步：安全护栏 —— 检查用户输入的主题是否包含敏感或违规内容
-        guardrailService.checkInput(userId, dto.getTopic());
+        // ============================================================
+        // 第一阶段：通用前置（输入护栏 + RAG 检索）走 GenerationPipeline
+        // ============================================================
+        // 之前这两步是硬编码的内联代码，每多一种生成场景（rewrite、batch、agent）就要复制一份。
+        // 改用 pipeline 后只要 implements GenerationStep + @Component 就自动加入链，
+        // 同时其它生成入口（generateStream / rewrite 等）也能复用同一套前置流程。
+        // 详见 com.socialflow.service.content.pipeline 包说明。
+        com.socialflow.service.content.pipeline.GenerationContext pipelineCtx =
+                new com.socialflow.service.content.pipeline.GenerationContext(userId, dto);
+        generationPipeline.run(pipelineCtx);
+        String ragContext = pipelineCtx.getRagContext();
 
-        // 第二步：RAG 上下文检索 —— 如果指定了知识库，检索相关文档片段
-        String ragContext = null;
-        if (dto.getKbId() != null) {
-            ragContext = ragPipelineService.retrieveAsContext(userId, dto.getKbId(), dto.getTopic(), 5);
-        }
+        // ============================================================
+        // 第二阶段：剩余 4 步仍为内联（提示词渲染 → LLM → 输出护栏 → 持久化）
+        // ============================================================
+        // TODO(pipeline-migration): 后续 PR 把以下步骤拆成独立 GenerationStep，
+        //   主要阻碍是 buildVariablesMap / buildLlmConfig / saveContent 等私有 helper
+        //   需要先抽到独立组件后再被 step 复用，影响面较大，单独 PR 推进更稳。
 
-        // 第三步：渲染提示词模板 —— 将用户参数填入模板
+        // 渲染提示词模板 —— 将用户参数填入模板
         Map<String, Object> vars = buildVariablesMap(dto);
         List<ChatMessage> messages = promptService.render(dto.getTemplateId(), dto.getPlatform(), vars, ragContext);
 
@@ -203,14 +216,18 @@ public class ContentServiceImpl implements ContentService {
         LlmProviderService provider = llmRouter.get(defaultProvider);
         Flux<String> tokenStream = provider.chatStream(messages, config);
 
-        // 使用 StringBuilder 累积所有 token，在流结束时保存完整内容
-        StringBuilder accumulated = new StringBuilder();
+        // 用线程安全的 ConcurrentLinkedQueue 累积 token，在 doOnComplete 时一次性 join。
+        // 之前的 StringBuilder 在单一线程下能跑通，但任何 publishOn/subscribeOn 切换调度器
+        // 都可能让 .map / .doOnComplete 落到不同线程上，那时 StringBuilder 的内部 char[]
+        // 会被并发改写或读到中间态。Queue 的 add() 是 lock-free 的，String.join 在终止信号
+        // 上单线程执行，安全且无显式同步开销。
+        java.util.Queue<String> chunks = new java.util.concurrent.ConcurrentLinkedQueue<>();
         final String finalRagContext = ragContext;
 
         return tokenStream
                 // 累积每个 token 并转换为 JSON SSE 事件格式
                 .map(token -> {
-                    accumulated.append(token);
+                    chunks.add(token);
                     // 转义 JSON 特殊字符，封装为 SSE 事件
                     String escapedToken = token.replace("\\", "\\\\")
                             .replace("\"", "\\\"")
@@ -222,7 +239,7 @@ public class ContentServiceImpl implements ContentService {
                 // 流完成后执行：保存内容到数据库
                 .doOnComplete(() -> {
                     try {
-                        String fullContent = accumulated.toString();
+                        String fullContent = String.join("", chunks);
                         if (fullContent.isBlank()) {
                             log.warn("流式生成完成但内容为空, userId={}, model={}", userId, config.getModel());
                             return;
@@ -955,5 +972,60 @@ public class ContentServiceImpl implements ContentService {
         wrapper.eq(ContentVersion::getContentId, contentId)
                .orderByDesc(ContentVersion::getVersionNum);
         return contentVersionMapper.selectList(wrapper);
+    }
+
+    @Override
+    public com.socialflow.model.vo.ContentVersionDiffVO diffVersions(
+            Long userId, Long contentId, Integer fromVersion, Integer toVersion) {
+        // 权限校验
+        get(userId, contentId);
+
+        if (fromVersion == null || toVersion == null) {
+            throw new com.socialflow.common.exception.ParamException(
+                    "fromVersion / toVersion 不能为空");
+        }
+
+        ContentVersion fromV = loadVersion(contentId, fromVersion);
+        ContentVersion toV = loadVersion(contentId, toVersion);
+
+        java.util.List<com.socialflow.model.vo.ContentVersionDiffVO.FieldDiff> diffs = new java.util.ArrayList<>();
+        addFieldDiff(diffs, "title",  fromV.getTitleSnapshot(),  toV.getTitleSnapshot());
+        addFieldDiff(diffs, "body",   fromV.getBodySnapshot(),   toV.getBodySnapshot());
+        addFieldDiff(diffs, "tags",   fromV.getTagsSnapshot(),   toV.getTagsSnapshot());
+        addFieldDiff(diffs, "status", fromV.getStatusSnapshot(), toV.getStatusSnapshot());
+
+        return com.socialflow.model.vo.ContentVersionDiffVO.builder()
+                .contentId(contentId)
+                .fromVersion(fromVersion)
+                .toVersion(toVersion)
+                .changes(diffs)
+                .build();
+    }
+
+    private ContentVersion loadVersion(Long contentId, Integer versionNum) {
+        ContentVersion v = contentVersionMapper.selectOne(
+                new LambdaQueryWrapper<ContentVersion>()
+                        .eq(ContentVersion::getContentId, contentId)
+                        .eq(ContentVersion::getVersionNum, versionNum)
+                        .last("LIMIT 1"));
+        if (v == null) {
+            throw new com.socialflow.common.exception.NotFoundException(
+                    "version not found: contentId=" + contentId + " versionNum=" + versionNum);
+        }
+        return v;
+    }
+
+    private static void addFieldDiff(
+            java.util.List<com.socialflow.model.vo.ContentVersionDiffVO.FieldDiff> sink,
+            String field, String before, String after) {
+        if (java.util.Objects.equals(before, after)) return;
+        int beforeLen = before == null ? 0 : before.length();
+        int afterLen = after == null ? 0 : after.length();
+        sink.add(com.socialflow.model.vo.ContentVersionDiffVO.FieldDiff.builder()
+                .field(field)
+                .before(before)
+                .after(after)
+                .charsDelta(afterLen - beforeLen)
+                .build());
     }
 }

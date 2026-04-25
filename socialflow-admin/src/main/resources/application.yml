@@ -105,7 +105,10 @@ socialflow:
     public-url: https://socialflow-1315728369.cos.ap-guangzhou.myqcloud.com
   ai:
     default-provider: deepseek
-    encryption-key: ***REDACTED-EXAMPLE-AES-KEY***
+    # AES-256-GCM 主加密密钥 —— 用于加密用户存储的 LLM API Key、代码仓库 token 等敏感数据。
+    # 强制从环境变量注入，不提供默认值；启动时由 EncryptionKeyValidator 做格式 + 弱密钥校验。
+    # 生成方式：openssl rand -hex 32
+    encryption-key: ${AI_ENCRYPTION_KEY}
     system-api-key: ${AI_API_KEY:your-api-key}
     providers:
       deepseek:

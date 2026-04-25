@@ -1,5 +1,6 @@
 package com.socialflow.service.codeanalysis;
 
+import com.fasterxml.jackson.core.JacksonException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.socialflow.common.util.JsonUtil;
 import com.socialflow.dao.mapper.RuleLibraryItemMapper;
@@ -10,8 +11,10 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.ClassPathResource;
+import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Component;
 
+import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -79,8 +82,10 @@ public class RuleLibraryHolder {
             }
             this.byFileType = buildFileTypeIndex(byTopCategory);
             log.info("[RuleLibrary] JSON 兜底加载完成: {} 条规约, 大类 {} 个", codeSet.size(), byTopCategory.size());
-        } catch (Exception e) {
-            log.error("[RuleLibrary] 加载 rules/huangshan_rules.json 失败", e);
+        } catch (JacksonException e) {
+            log.error("[RuleLibrary] rules/huangshan_rules.json 解析失败（JSON 格式错误）", e);
+        } catch (IOException e) {
+            log.error("[RuleLibrary] 读取 rules/huangshan_rules.json 失败（IO 错误）", e);
         }
     }
 
@@ -145,8 +150,11 @@ public class RuleLibraryHolder {
             this.all = nextAll;
             this.byFileType = buildFileTypeIndex(nextByTop);
             log.info("[RuleLibrary] DB 重载完成: {} 条 (enabled=1), 大类 {} 个", nextCodes.size(), nextByTop.size());
-        } catch (Exception e) {
-            log.error("[RuleLibrary] DB 重载失败，保留旧索引", e);
+        } catch (DataAccessException e) {
+            log.error("[RuleLibrary] DB 重载失败（数据库访问异常），保留旧索引", e);
+        } catch (RuntimeException e) {
+            // 其他运行时异常（如索引重建中的非预期错误）：记录但不抛 —— 旧索引仍可用
+            log.error("[RuleLibrary] DB 重载意外失败，保留旧索引", e);
         }
     }
 

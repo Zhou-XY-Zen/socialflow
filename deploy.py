@@ -4,12 +4,15 @@ SocialFlow 完整部署：MySQL 备份 + jar + dist + 启动 + 健康检查 + Sm
 
 如果只需替换 jar 而不动数据库和前端，请改用 redeploy.py。
 
-失败时手动回滚：
-  ssh root@***REDACTED-PROD-IP***
+凭证（SSH/MySQL 密码、生产 IP）必须通过环境变量注入，详见 ops_common.py 顶部注释。
+
+失败时手动回滚（具体 HOST / 凭证以本地环境变量为准）：
+  ssh $SOCIALFLOW_SSH_USER@$SOCIALFLOW_SSH_HOST
   kill <new_pid>
-  cp /opt/socialflow/backups/<timestamp>/socialflow.jar.bak /opt/socialflow/socialflow.jar
-  mysql -uroot -p***REDACTED-DB-PASSWORD*** socialflow < /opt/socialflow/backups/<timestamp>/mysql.sql
-  nohup java -jar /opt/socialflow/socialflow.jar > /opt/socialflow/logs/app.log 2>&1 &
+  cp $SOCIALFLOW_REMOTE_DIR/backups/<timestamp>/socialflow.jar.bak $SOCIALFLOW_REMOTE_DIR/socialflow.jar
+  mysql -u$SOCIALFLOW_MYSQL_USER -p"$SOCIALFLOW_MYSQL_PASSWORD" $SOCIALFLOW_MYSQL_DB \\
+        < $SOCIALFLOW_REMOTE_DIR/backups/<timestamp>/mysql.sql
+  nohup java -jar $SOCIALFLOW_REMOTE_DIR/socialflow.jar > $SOCIALFLOW_REMOTE_DIR/logs/app.log 2>&1 &
 """
 import os
 import sys
@@ -20,8 +23,8 @@ from paramiko import SFTPClient
 
 from ops_common import (
     HOST, USER, MYSQL_USER, MYSQL_PASS, MYSQL_DB, REMOTE_DIR, REMOTE_WEB,
-    change_to_project_root, connect_ssh, kill_backend, run, smoke_test,
-    start_backend, tail_flyway_log, utf8_stdout, wait_health,
+    change_to_project_root, connect_ssh, kill_backend, pre_flight_check,
+    run, smoke_test, start_backend, tail_flyway_log, utf8_stdout, wait_health,
 )
 
 utf8_stdout()
@@ -65,11 +68,26 @@ def main():
     ssh, sftp = connect_ssh()
 
     try:
+        # 先发现环境问题再动停机：磁盘 / Java / MySQL 任一不达标都直接退出
+        try:
+            pre_flight_check(ssh)
+        except RuntimeError as e:
+            print(f"❌ Pre-flight check 失败：{e}")
+            sys.exit(3)
+
         print(f"\n== 准备备份目录 {REMOTE_BACKUP_DIR} ==")
         run(ssh, f"mkdir -p {REMOTE_BACKUP_DIR}")
 
         print("\n== MySQL dump 备份 ==")
-        run(ssh, f"mysqldump -u{MYSQL_USER} -p{MYSQL_PASS} --single-transaction --routines {MYSQL_DB} > {REMOTE_BACKUP_DIR}/mysql.sql 2>/dev/null")
+        # check=True 让 mysqldump 失败立即终止部署，避免拿不到备份就贸然停服。
+        # 密码通过 MYSQL_PWD 环境变量注入而不是命令行参数，避免在远端 ps -ef 里被看到。
+        run(
+            ssh,
+            f"MYSQL_PWD='{MYSQL_PASS}' mysqldump -u{MYSQL_USER} "
+            f"--single-transaction --routines {MYSQL_DB} "
+            f"> {REMOTE_BACKUP_DIR}/mysql.sql",
+            check=True,
+        )
         out, _, _ = run(ssh, f"ls -lh {REMOTE_BACKUP_DIR}/mysql.sql | awk '{{print $5}}'")
         print(f"  ✓ mysql.sql 大小 {out.strip()}")
 

@@ -9,6 +9,7 @@ import com.socialflow.model.dto.RegisterDTO;
 import com.socialflow.model.vo.LoginVO;
 import com.socialflow.model.vo.UserVO;
 import com.socialflow.service.user.UserService;
+import com.socialflow.web.aspect.ApiLog;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -73,6 +74,7 @@ public class UserController {
     @SaIgnore
     @Operation(summary = "register")
     @PostMapping("/register")
+    @ApiLog(value = "[用户注册]", logArgs = false)
     public R<UserVO> register(@Valid @RequestBody RegisterDTO dto) {
         return R.ok(userService.register(dto));
     }
@@ -93,6 +95,7 @@ public class UserController {
     @SaIgnore
     @Operation(summary = "login")
     @PostMapping("/login")
+    @ApiLog(value = "[用户登录]", logArgs = false)
     public R<LoginVO> login(@Valid @RequestBody LoginDTO dto) {
         return R.ok(userService.login(dto));
     }

@@ -4,8 +4,9 @@ import sys
 from pathlib import Path
 
 from ops_common import (
-    REMOTE_DIR, change_to_project_root, connect_ssh, kill_backend, run,
-    smoke_test, start_backend, tail_flyway_log, utf8_stdout, wait_health,
+    HOST, REMOTE_DIR, change_to_project_root, connect_ssh, kill_backend,
+    pre_flight_check, run, smoke_test, start_backend, tail_flyway_log,
+    utf8_stdout, wait_health,
 )
 
 utf8_stdout()
@@ -22,6 +23,13 @@ def main():
     ssh, sftp = connect_ssh()
 
     try:
+        # redeploy 不动 DB，磁盘要求降到 0.5GB（仅放新 jar 和日志增量）
+        try:
+            pre_flight_check(ssh, min_disk_gb=0.5)
+        except RuntimeError as e:
+            print(f"❌ Pre-flight check 失败：{e}")
+            sys.exit(3)
+
         print("== 清理残留进程 ==")
         kill_backend(ssh, force_grace=2)
 
@@ -43,7 +51,7 @@ def main():
         tail_flyway_log(ssh, lines=15)
         smoke_test(ssh)
 
-        print("\n✅ 部署完成！访问 http://***REDACTED-PROD-IP***")
+        print(f"\n✅ 部署完成！访问 http://{HOST}")
 
     finally:
         sftp.close()

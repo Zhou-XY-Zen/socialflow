@@ -25,9 +25,12 @@ def r(cmd, label=None):
     run(ssh, cmd)
 
 
+# 通过 MYSQL_PWD 环境变量传密码，避免在远端 ps -ef 暴露
+MYSQL_CMD = f"MYSQL_PWD='{MYSQL_PASS}' mysql -u{MYSQL_USER}"
+
 try:
     r(
-        f"mysql -u{MYSQL_USER} -p{MYSQL_PASS} -e \"USE socialflow; SELECT installed_rank, version, script, success FROM flyway_schema_history ORDER BY installed_rank;\"",
+        f"{MYSQL_CMD} -e \"USE socialflow; SELECT installed_rank, version, script, success FROM flyway_schema_history ORDER BY installed_rank;\"",
         "Flyway schema_history 表",
     )
     r(
@@ -35,11 +38,11 @@ try:
         "Flyway 启动日志",
     )
     r(
-        f"mysql -u{MYSQL_USER} -p{MYSQL_PASS} -e \"USE socialflow; SHOW COLUMNS FROM content LIKE 'version'; SHOW COLUMNS FROM eval_task LIKE 'p_value'; SHOW COLUMNS FROM media_asset LIKE 'sha256';\"",
+        f"{MYSQL_CMD} -e \"USE socialflow; SHOW COLUMNS FROM content LIKE 'version'; SHOW COLUMNS FROM eval_task LIKE 'p_value'; SHOW COLUMNS FROM media_asset LIKE 'sha256';\"",
         "Wave 4 新增列验证",
     )
     r(
-        f"mysql -u{MYSQL_USER} -p{MYSQL_PASS} -e \"USE socialflow; SHOW TABLES LIKE 'image_asset_cache';\"",
+        f"{MYSQL_CMD} -e \"USE socialflow; SHOW TABLES LIKE 'image_asset_cache';\"",
         "image_asset_cache 新表",
     )
 

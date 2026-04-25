@@ -16,6 +16,7 @@ import com.socialflow.service.codeanalysis.CredentialService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.eclipse.jgit.api.Git;
+import org.eclipse.jgit.api.errors.GitAPIException;
 import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Value;
@@ -44,7 +45,7 @@ public class CredentialServiceImpl implements CredentialService {
     private final RepoAuthCredentialMapper credentialMapper;
     private final RepoCredentialProjectMapper projectMapper;
 
-    @Value("${socialflow.ai.encryption-key:***REDACTED-EXAMPLE-AES-KEY***}")
+    @Value("${socialflow.ai.encryption-key}")
     private String encryptionKey;
 
     // ================== CRUD ==================
@@ -151,7 +152,10 @@ public class CredentialServiceImpl implements CredentialService {
             resultMsg = usingRealRepo
                     ? "✅ 精准验证成功：凭证能访问 " + e.getDefaultRepoUrl()
                     : "✅ Host 可达（建议填一个具体仓库 URL 做精准验证）";
-        } catch (Exception ex) {
+        } catch (GitAPIException | RuntimeException ex) {
+            // GitAPIException：JGit 显式抛出的认证/不存在/超时
+            // RuntimeException：JGit 底层把 IOException 包成 TransportException 等运行时异常
+            // —— InterruptedException 不在此分支，会顺利向上传播
             String msg = ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage();
             String lower = msg.toLowerCase();
             // 无默认仓库测 host root 时，not-found 代表"能到 host 但不是 git 服务"，视为可达
@@ -195,7 +199,10 @@ public class CredentialServiceImpl implements CredentialService {
             // 解密后的明文只放 plainToken（transient/JsonIgnore），不回写 tokenEncrypted 字段。
             // 这样即使 picked 被误打印/序列化，密文仍是密文，明文不泄漏。
             picked.setPlainToken(AesGcmUtil.decrypt(picked.getTokenEncrypted(), encryptionKey));
-        } catch (Exception ex) {
+        } catch (IllegalStateException | IllegalArgumentException ex) {
+            // AesGcmUtil 在 GCM tag 不匹配 / 密钥格式错时抛 IllegalStateException
+            // 长度校验失败抛 IllegalArgumentException
+            // 任何一种都意味着此凭证无法用，跳过即可（不挂主流程）
             log.error("[Credential] decrypt failed for id={}", picked.getId(), ex);
             return Optional.empty();
         }
@@ -216,7 +223,11 @@ public class CredentialServiceImpl implements CredentialService {
         try {
             // 明文只放 transient 字段；调用方通过 getPlainToken() 读取，用完应立即让局部变量离开作用域。
             e.setPlainToken(AesGcmUtil.decrypt(e.getTokenEncrypted(), encryptionKey));
-        } catch (Exception ex) {
+        } catch (IllegalStateException | IllegalArgumentException ex) {
+            // 解密失败的两种典型原因：
+            //   1) encryption-key 变更（IllegalStateException —— GCM tag 校验失败）
+            //   2) 密钥格式错（IllegalArgumentException —— 来自 AesGcmUtil.hexToBytes）
+            // 业务异常友好提示，不把底层堆栈泄给前端
             throw new BusinessException("凭证解密失败，请检查 encryption-key 是否变更");
         }
         return e;
@@ -247,7 +258,8 @@ public class CredentialServiceImpl implements CredentialService {
             String host = uri.getHost();
             if (host == null) return null;
             return uri.getPort() > 0 ? host + ":" + uri.getPort() : host;
-        } catch (Exception e) {
+        } catch (IllegalArgumentException e) {
+            // URI.create 在格式非法时抛 IllegalArgumentException（包装了 URISyntaxException）
             return null;
         }
     }

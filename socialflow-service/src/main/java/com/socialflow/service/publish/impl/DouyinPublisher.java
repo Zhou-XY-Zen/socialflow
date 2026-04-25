@@ -1,5 +1,6 @@
 package com.socialflow.service.publish.impl;
 
+import com.socialflow.common.annotation.NotImplementedYet;
 import com.socialflow.common.enums.PlatformType;
 import com.socialflow.model.entity.Content;
 import com.socialflow.model.entity.PlatformAccount;
@@ -32,6 +33,8 @@ public class DouyinPublisher implements Publisher {
      * 抖音不支持自动发布，调用此方法将抛出异常。
      */
     @Override
+    @NotImplementedYet(value = "抖音 OpenAPI 对开发者准入严格，需要走个人开发者认证 → 视频接口申请",
+            plannedFor = "Wave 5+（待商务对接）")
     public PublishResult publish(Content content, PlatformAccount account) {
         throw new UnsupportedOperationException("抖音暂不支持自动发布，请使用辅助发布模式");
     }

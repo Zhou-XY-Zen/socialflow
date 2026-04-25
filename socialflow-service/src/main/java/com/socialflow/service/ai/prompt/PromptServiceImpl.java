@@ -1,6 +1,5 @@
 package com.socialflow.service.ai.prompt;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.socialflow.common.util.JsonUtil;
 import com.socialflow.dao.mapper.PromptTemplateMapper;
@@ -65,16 +64,16 @@ public class PromptServiceImpl implements PromptService {
             "{{#keywords}}关键词：{{keywords}}。{{/keywords}}" +
             "【字数硬限制】全文必须控制在 {{wordCount}} 字以内，严禁超出！这是最重要的要求。";
 
-    /** 提示词模板 Mapper，用于从数据库查询模板数据 */
+    /** 提示词模板 Mapper —— 仍保留以兼容 preview() 中现有代码的少量直接查询；新写代码请走 lookup */
     private final PromptTemplateMapper promptTemplateMapper;
 
-    /**
-     * 构造函数：注入依赖的 Mapper。
-     *
-     * @param promptTemplateMapper 提示词模板的数据库操作 Mapper
-     */
-    public PromptServiceImpl(PromptTemplateMapper promptTemplateMapper) {
+    /** 模板查询的缓存层（Spring 代理自动应用 @Cacheable） */
+    private final PromptTemplateLookup templateLookup;
+
+    public PromptServiceImpl(PromptTemplateMapper promptTemplateMapper,
+                             PromptTemplateLookup templateLookup) {
         this.promptTemplateMapper = promptTemplateMapper;
+        this.templateLookup = templateLookup;
     }
 
     /**
@@ -240,9 +239,9 @@ public class PromptServiceImpl implements PromptService {
     }
 
     private PromptTemplate loadTemplate(Long templateId, String platform) {
-        // 优先按 ID 查找
+        // 优先按 ID 查找（命中 promptTemplate cache TTL=10min）
         if (templateId != null) {
-            PromptTemplate template = promptTemplateMapper.selectById(templateId);
+            PromptTemplate template = templateLookup.findById(templateId);
             if (template != null) {
                 log.debug("【模板加载】按ID加载模板成功，ID={}, 名称={}", templateId, template.getTemplateName());
                 return template;
@@ -252,13 +251,7 @@ public class PromptServiceImpl implements PromptService {
 
         // 按平台查找默认系统模板
         if (platform != null && !platform.isBlank()) {
-            LambdaQueryWrapper<PromptTemplate> queryWrapper = new LambdaQueryWrapper<PromptTemplate>()
-                    .eq(PromptTemplate::getPlatform, platform)          // 匹配目标平台
-                    .eq(PromptTemplate::getIsSystem, 1)                 // 只查系统预置模板
-                    .orderByAsc(PromptTemplate::getSortOrder)           // 按排序序号升序
-                    .last("LIMIT 1");                                    // 只取第一条
-
-            PromptTemplate template = promptTemplateMapper.selectOne(queryWrapper);
+            PromptTemplate template = templateLookup.findDefaultByPlatform(platform);
             if (template != null) {
                 log.debug("【模板加载】按平台加载默认模板成功，平台={}, 名称={}", platform, template.getTemplateName());
                 return template;

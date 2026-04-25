@@ -12,6 +12,7 @@ import com.socialflow.model.entity.PublishTask;
 import com.socialflow.service.publish.PublishResult;
 import com.socialflow.service.publish.PublishRouter;
 import com.socialflow.service.publish.Publisher;
+import com.socialflow.web.aspect.ApiLog;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -100,6 +101,7 @@ public class PublishController {
      */
     @Operation(summary = "auto publish to platform")
     @PostMapping("/auto")
+    @ApiLog("[发布-立即]")
     public R<PublishResult> autoPublish(@RequestBody Map<String, Object> body) {
         Long userId = StpUtil.getLoginIdAsLong();
         Long contentId = Long.valueOf(body.get("contentId").toString());
@@ -161,6 +163,7 @@ public class PublishController {
      */
     @Operation(summary = "schedule a publish task at a future time")
     @PostMapping("/schedule")
+    @ApiLog("[发布-定时]")
     public R<PublishTask> schedule(@RequestBody Map<String, Object> body) {
         Long userId = StpUtil.getLoginIdAsLong();
         Long contentId = Long.valueOf(body.get("contentId").toString());

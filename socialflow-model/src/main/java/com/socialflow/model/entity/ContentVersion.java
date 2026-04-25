@@ -61,4 +61,39 @@ public class ContentVersion extends BaseEntity {
      * 可为空。
      */
     private String changeDesc;
+
+    /**
+     * 版本写入时的标题快照（V22）。
+     * 让历史版本能完整还原 title，不再受当前 content.title 影响。
+     */
+    private String titleSnapshot;
+
+    /**
+     * 版本写入时的标签快照（V22）。
+     */
+    private String tagsSnapshot;
+
+    /**
+     * 版本写入时的状态快照（V22）。
+     * 比如某次保存时是 "DRAFT"，发布后是 "PUBLISHED"，回滚时一目了然。
+     */
+    private String statusSnapshot;
+
+    /**
+     * 本次变更涉及的字段名，逗号分隔（V22）。
+     * 例：{@code "title,body"} 表示本次同时改了标题和正文。
+     */
+    private String changedFields;
+
+    /**
+     * 变更摘要 JSON（V22）。
+     * 可选填，结构示例：
+     * <pre>{@code
+     * {
+     *   "body": {"beforeLen": 1280, "afterLen": 1342, "delta": 62},
+     *   "title": {"before": "旧标题", "after": "新标题"}
+     * }
+     * }</pre>
+     */
+    private String changeSummary;
 }
