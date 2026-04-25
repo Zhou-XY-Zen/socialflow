@@ -72,6 +72,29 @@ class EncryptionKeyValidatorTest {
     }
 
     @Test
+    @DisplayName("allow-known-weak=true 时即使命中黑名单也能通过（仅打 ERROR 日志）")
+    void allowKnownWeak_overridesBlacklist() {
+        String exampleKey = String.join("", "0123456789", "abcdef", "0123456789", "abcdef",
+                                              "0123456789", "abcdef", "0123456789", "abcdef");
+        EncryptionKeyValidator v = validator(exampleKey);
+        ReflectionTestUtils.setField(v, "allowKnownWeak", true);
+
+        // 不抛异常 = 启动通过
+        assertThatNoException().isThrownBy(v::validate);
+    }
+
+    @Test
+    @DisplayName("allow-known-weak=true 也不放过格式错误的 key")
+    void allowKnownWeak_stillRejectsBadFormat() {
+        EncryptionKeyValidator v = validator("not-hex-just-a-string");
+        ReflectionTestUtils.setField(v, "allowKnownWeak", true);
+
+        assertThatThrownBy(v::validate)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("64 位十六进制");
+    }
+
+    @Test
     @DisplayName("命中已知弱密钥黑名单（全 0）→ 启动失败")
     void rejects_knownWeakKey_allZeros() {
         String allZeros = "0".repeat(64);
