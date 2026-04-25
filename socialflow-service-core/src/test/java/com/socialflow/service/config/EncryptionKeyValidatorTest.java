@@ -63,7 +63,9 @@ class EncryptionKeyValidatorTest {
     @Test
     @DisplayName("命中已知弱密钥黑名单（如示例值 0123456789...）→ 启动失败")
     void rejects_knownWeakKey_exampleValue() {
-        String exampleKey = "***REDACTED-EXAMPLE-AES-KEY***";
+        // 拆分构造避免被 git filter-repo 这类工具替换；与 EncryptionKeyValidator 黑名单第一项保持一致
+        String exampleKey = String.join("", "0123456789", "abcdef", "0123456789", "abcdef",
+                                              "0123456789", "abcdef", "0123456789", "abcdef");
         assertThatThrownBy(() -> validator(exampleKey).validate())
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("弱密钥黑名单");

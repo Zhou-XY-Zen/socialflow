@@ -22,7 +22,10 @@
         <module>socialflow-common</module>
         <module>socialflow-model</module>
         <module>socialflow-dao</module>
-        <module>socialflow-service</module>
+        <module>socialflow-service-ai</module>
+        <module>socialflow-service-publish</module>
+        <module>socialflow-service-codeanalysis</module>
+        <module>socialflow-service-core</module>
         <module>socialflow-web</module>
         <module>socialflow-admin</module>
     </modules>
@@ -93,7 +96,22 @@
             </dependency>
             <dependency>
                 <groupId>com.socialflow</groupId>
-                <artifactId>socialflow-service</artifactId>
+                <artifactId>socialflow-service-ai</artifactId>
+                <version>${revision}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.socialflow</groupId>
+                <artifactId>socialflow-service-publish</artifactId>
+                <version>${revision}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.socialflow</groupId>
+                <artifactId>socialflow-service-codeanalysis</artifactId>
+                <version>${revision}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.socialflow</groupId>
+                <artifactId>socialflow-service-core</artifactId>
                 <version>${revision}</version>
             </dependency>
             <dependency>

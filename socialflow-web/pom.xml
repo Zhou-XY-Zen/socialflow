@@ -15,9 +15,22 @@
     <description>Controllers, interceptors, SSE endpoints, global exception handler</description>
 
     <dependencies>
+        <!--
+          原 socialflow-service 已拆分为 4 个独立模块。
+          web 直接依赖 core / publish / codeanalysis 即可（service-ai 通过 core 传递依赖到达），
+          这样 controllers 引用 ContentService / Publisher / CodeAnalysisService 等都能找到。
+        -->
         <dependency>
             <groupId>com.socialflow</groupId>
-            <artifactId>socialflow-service</artifactId>
+            <artifactId>socialflow-service-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.socialflow</groupId>
+            <artifactId>socialflow-service-publish</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.socialflow</groupId>
+            <artifactId>socialflow-service-codeanalysis</artifactId>
         </dependency>
 
         <dependency>

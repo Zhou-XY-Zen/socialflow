@@ -10,9 +10,9 @@
         <version>1.0.0-SNAPSHOT</version>
     </parent>
 
-    <artifactId>socialflow-service</artifactId>
-    <name>socialflow-service</name>
-    <description>Business service layer, including AI core capabilities</description>
+    <artifactId>socialflow-service-ai</artifactId>
+    <name>socialflow-service-ai</name>
+    <description>AI orchestration: LLM router, RAG, prompt, guardrails, multi-agent, eval, embedding, memory</description>
 
     <dependencies>
         <dependency>
@@ -24,14 +24,10 @@
             <artifactId>mybatis-plus-jsqlparser</artifactId>
         </dependency>
 
+        <!-- Spring 基础设施：HTTP 客户端 / SSE / Redis -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
-        </dependency>
-        <!-- Sa-Token: UserServiceImpl uses StpUtil for login/logout -->
-        <dependency>
-            <groupId>cn.dev33</groupId>
-            <artifactId>sa-token-spring-boot3-starter</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -40,6 +36,12 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+
+        <!-- Sa-Token：AiUsageLog 等需要拿登录用户 ID -->
+        <dependency>
+            <groupId>cn.dev33</groupId>
+            <artifactId>sa-token-spring-boot3-starter</artifactId>
         </dependency>
 
         <!-- LangChain4j -->
@@ -56,33 +58,7 @@
             <artifactId>langchain4j-spring-boot-starter</artifactId>
         </dependency>
 
-        <!-- Redisson -->
-        <dependency>
-            <groupId>org.redisson</groupId>
-            <artifactId>redisson-spring-boot-starter</artifactId>
-        </dependency>
-
-        <!-- 腾讯云 COS -->
-        <dependency>
-            <groupId>com.qcloud</groupId>
-            <artifactId>cos_api</artifactId>
-        </dependency>
-
-        <!-- Tika and PDFBox -->
-        <dependency>
-            <groupId>org.apache.tika</groupId>
-            <artifactId>tika-core</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.tika</groupId>
-            <artifactId>tika-parsers-standard-package</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.pdfbox</groupId>
-            <artifactId>pdfbox</artifactId>
-        </dependency>
-
-        <!-- Vector DBs -->
+        <!-- Vector DB -->
         <dependency>
             <groupId>com.pgvector</groupId>
             <artifactId>pgvector</artifactId>
@@ -92,25 +68,7 @@
             <artifactId>milvus-sdk-java</artifactId>
         </dependency>
 
-        <!-- XXL-Job -->
-        <dependency>
-            <groupId>com.xuxueli</groupId>
-            <artifactId>xxl-job-core</artifactId>
-        </dependency>
-
-        <!-- Jasypt -->
-        <dependency>
-            <groupId>com.github.ulisesbocchio</groupId>
-            <artifactId>jasypt-spring-boot-starter</artifactId>
-        </dependency>
-
-        <!-- MapStruct -->
-        <dependency>
-            <groupId>org.mapstruct</groupId>
-            <artifactId>mapstruct</artifactId>
-        </dependency>
-
-        <!-- Resilience4j: retry / circuit breaker / rate limiter / time limiter for AI/HTTP calls -->
+        <!-- Resilience4j：LLM 调用的 retry / circuit breaker / rate limiter -->
         <dependency>
             <groupId>io.github.resilience4j</groupId>
             <artifactId>resilience4j-spring-boot3</artifactId>
@@ -119,38 +77,27 @@
             <groupId>io.github.resilience4j</groupId>
             <artifactId>resilience4j-reactor</artifactId>
         </dependency>
-        <!-- Required by resilience4j-spring-boot3 for AOP-based annotations -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-aop</artifactId>
         </dependency>
 
-        <!-- ShedLock: 多实例环境下 @Scheduled 任务的分布式锁（Redis 作为锁存储） -->
+        <!-- MapStruct：DTO 映射 -->
         <dependency>
-            <groupId>net.javacrumbs.shedlock</groupId>
-            <artifactId>shedlock-spring</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>net.javacrumbs.shedlock</groupId>
-            <artifactId>shedlock-provider-redis-spring</artifactId>
+            <groupId>org.mapstruct</groupId>
+            <artifactId>mapstruct</artifactId>
         </dependency>
 
-        <!-- Wave 4.5 媒体库缩略图 -->
-        <dependency>
-            <groupId>net.coobird</groupId>
-            <artifactId>thumbnailator</artifactId>
-        </dependency>
-
-        <!-- Wave 4.6 评估配对 t 检验 -->
+        <!-- Apache Commons Math：评估配对 t 检验所需的 TDistribution -->
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-math3</artifactId>
         </dependency>
 
-        <!-- Wave 5 代码分析工具：JGit 用于克隆远程仓库、读取 commit 列表和 diff -->
+        <!-- Redisson：部分 AI 资源限流场景 -->
         <dependency>
-            <groupId>org.eclipse.jgit</groupId>
-            <artifactId>org.eclipse.jgit</artifactId>
+            <groupId>org.redisson</groupId>
+            <artifactId>redisson-spring-boot-starter</artifactId>
         </dependency>
     </dependencies>
 </project>

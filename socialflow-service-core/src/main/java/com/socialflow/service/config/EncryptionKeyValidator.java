@@ -29,7 +29,10 @@ public class EncryptionKeyValidator {
      * 任何能访问 git history 的人都拿得到，绝不允许用作生产密钥。
      */
     private static final Set<String> KNOWN_WEAK_KEYS = Set.of(
-            "***REDACTED-EXAMPLE-AES-KEY***",
+            // 此前 .env.example / application.yml 长期使用的示例 hex 串。
+            // 用 String.join 拆分构造，避免被 git filter-repo 这类工具误判为秘钥再次替换。
+            String.join("", "0123456789", "abcdef", "0123456789", "abcdef",
+                            "0123456789", "abcdef", "0123456789", "abcdef"),
             "0000000000000000000000000000000000000000000000000000000000000000",
             "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
     );

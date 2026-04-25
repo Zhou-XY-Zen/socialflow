@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.socialflow</groupId>
+        <artifactId>socialflow</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>socialflow-service-codeanalysis</artifactId>
+    <name>socialflow-service-codeanalysis</name>
+    <description>Code repository analysis (Wave 5): clone, scan, LLM-based review</description>
+
+    <dependencies>
+        <!-- 依赖 service-ai 复用 LlmRouter / ChatMessage 等 LLM 调用栈 -->
+        <dependency>
+            <groupId>com.socialflow</groupId>
+            <artifactId>socialflow-service-ai</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.socialflow</groupId>
+            <artifactId>socialflow-dao</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <!-- @Async 用于异步执行长时间分析任务 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-aop</artifactId>
+        </dependency>
+
+        <!-- Sa-Token：CredentialService 需要校验当前用户 -->
+        <dependency>
+            <groupId>cn.dev33</groupId>
+            <artifactId>sa-token-spring-boot3-starter</artifactId>
+        </dependency>
+
+        <!-- JGit：克隆远程仓库 / 读取 commit 列表 / diff -->
+        <dependency>
+            <groupId>org.eclipse.jgit</groupId>
+            <artifactId>org.eclipse.jgit</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.mapstruct</groupId>
+            <artifactId>mapstruct</artifactId>
+        </dependency>
+    </dependencies>
+</project>
