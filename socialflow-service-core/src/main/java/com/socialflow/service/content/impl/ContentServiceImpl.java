@@ -236,25 +236,31 @@ public class ContentServiceImpl implements ContentService {
                             .replace("\t", "\\t");
                     return "{\"token\": \"" + escapedToken + "\"}";
                 })
-                // 流完成后执行：保存内容到数据库
-                .doOnComplete(() -> {
-                    try {
-                        String fullContent = String.join("", chunks);
-                        if (fullContent.isBlank()) {
-                            log.warn("流式生成完成但内容为空, userId={}, model={}", userId, config.getModel());
-                            return;
-                        }
-                        // 异步执行输出安全检查（不阻塞流）
-                        checkOutputSafely(userId, fullContent, dto.getPlatform(), finalRagContext);
-                        // 用 TokenCountUtil 估算生成内容的 token 数（流式接口无法获取精确值）
-                        int estimatedTokens = com.socialflow.common.util.TokenCountUtil.estimate(fullContent);
-                        // 持久化
-                        saveContent(userId, dto, fullContent, config.getModel(), estimatedTokens);
-                        log.info("流式生成完成并已保存, userId={}, contentLength={}", userId, fullContent.length());
-                    } catch (Exception e) {
-                        log.error("流式生成保存失败, userId={}", userId, e);
+                // 流完成后执行持久化，并把"是否保存成功"作为最后一个事件推给前端。
+                // 之前用 doOnComplete 只 log 不通知前端，DB 写失败时用户看到"流正常完成"
+                // 但下次刷新发现内容没保存 —— 静默丢数据。改用 concatWith 把保存结果当作
+                // 终止 SSE 事件 {"saved": true/false}，前端可据此提示"点击重试"。
+                .concatWith(reactor.core.publisher.Mono.fromCallable(() -> {
+                    String fullContent = String.join("", chunks);
+                    if (fullContent.isBlank()) {
+                        log.warn("流式生成完成但内容为空, userId={}, model={}", userId, config.getModel());
+                        return "{\"saved\": false, \"reason\": \"empty content\"}";
                     }
-                })
+                    try {
+                        checkOutputSafely(userId, fullContent, dto.getPlatform(), finalRagContext);
+                        int estimatedTokens = com.socialflow.common.util.TokenCountUtil.estimate(fullContent);
+                        Content saved = saveContent(userId, dto, fullContent, config.getModel(), estimatedTokens);
+                        log.info("流式生成完成并已保存, userId={}, contentId={}, length={}",
+                                userId, saved.getId(), fullContent.length());
+                        return "{\"saved\": true, \"contentId\": " + saved.getId() + "}";
+                    } catch (RuntimeException e) {
+                        log.error("流式生成保存失败, userId={}", userId, e);
+                        String reason = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
+                        String escaped = reason.replace("\\", "\\\\").replace("\"", "\\\"")
+                                .replace("\n", " ").replace("\r", "");
+                        return "{\"saved\": false, \"reason\": \"" + escaped + "\"}";
+                    }
+                }))
                 // 流出错时：发送错误事件给前端，而不是静默关闭
                 .onErrorResume(e -> {
                     log.error("流式生成出错, userId={}, error={}", userId, e.getMessage(), e);

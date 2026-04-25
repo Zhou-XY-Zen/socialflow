@@ -58,6 +58,7 @@
         <resilience4j.version>2.2.0</resilience4j.version>
         <shedlock.version>5.16.0</shedlock.version>
         <thumbnailator.version>0.4.20</thumbnailator.version>
+        <archunit.version>1.3.0</archunit.version>
     </properties>
 
     <dependencyManagement>
@@ -283,6 +284,14 @@
                 <groupId>org.eclipse.jgit</groupId>
                 <artifactId>org.eclipse.jgit</artifactId>
                 <version>6.10.0.202406032230-r</version>
+            </dependency>
+
+            <!-- ArchUnit - 架构规则测试，防止模块边界腐化 -->
+            <dependency>
+                <groupId>com.tngtech.archunit</groupId>
+                <artifactId>archunit-junit5</artifactId>
+                <version>${archunit.version}</version>
+                <scope>test</scope>
             </dependency>
         </dependencies>
     </dependencyManagement>

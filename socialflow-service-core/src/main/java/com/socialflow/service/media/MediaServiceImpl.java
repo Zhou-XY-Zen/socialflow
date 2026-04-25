@@ -51,7 +51,12 @@ public class MediaServiceImpl implements MediaService {
     @Override
     public MediaAsset upload(Long userId, MultipartFile file, String tags) {
         try {
-            String originalFilename = file.getOriginalFilename();
+            // 原始文件名只用于 DB 展示和 COS 路径片段，必须先规范化：
+            //   1. 用 Paths.get 取末尾段（剥离 ../ 之类的相对路径前缀）
+            //   2. 仅保留字母 / 数字 / 中文 / `.` / `_` / `-`，其它全部替换为 `_`
+            //   3. 截断到 80 字符，防止恶意超长文件名灌爆字段
+            // 这样不会影响正常的中英文 + 后缀名的体验，但能挡住 path traversal 与控制字符注入。
+            String originalFilename = sanitizeFilename(file.getOriginalFilename());
             String mimeType = file.getContentType();
             String fileType = (mimeType != null && mimeType.startsWith("video/")) ? "VIDEO" : "IMAGE";
 
@@ -133,6 +138,48 @@ public class MediaServiceImpl implements MediaService {
             log.error("素材上传失败: userId={}", userId, e);
             throw new RuntimeException("文件上传失败: " + e.getMessage(), e);
         }
+    }
+
+    /**
+     * 规范化用户上传的文件名 —— 防止路径遍历 / XSS / 控制字符注入。
+     *
+     * <p>处理策略：</p>
+     * <ol>
+     *   <li>null / 空 → 兜底返回 {@code "unnamed"}</li>
+     *   <li>{@code Paths.get(...).getFileName()} 取末尾段，剥掉 {@code ../} 之类的相对前缀
+     *       和 Windows 风格的反斜杠</li>
+     *   <li>仅保留 [a-zA-Z0-9_.-] 和中日韩文（Unicode block CJK Unified Ideographs），
+     *       其它（含空格 / 引号 / 标签字符）替换为 {@code _}</li>
+     *   <li>裁到最多 80 字符，避免超长文件名灌爆 DB 字段或 COS key 限制</li>
+     * </ol>
+     *
+     * <p>对正常的中英文文件名（如 {@code "我的封面.jpg"} / {@code "screenshot 2026.png"}）
+     * 影响极小，但能挡住 {@code "../../../etc/passwd"}、{@code "<script>.png"} 等。</p>
+     */
+    static String sanitizeFilename(String raw) {
+        if (raw == null || raw.isBlank()) return "unnamed";
+        // Paths.get 在 Linux 上不识别反斜杠，先手动替换为正斜杠再剥末尾段
+        String stripped = raw.replace('\\', '/');
+        try {
+            java.nio.file.Path p = java.nio.file.Paths.get(stripped).getFileName();
+            if (p != null) stripped = p.toString();
+        } catch (java.nio.file.InvalidPathException ignored) {
+            // 极端情况（NUL 字符等）按原值继续，下一步的正则会兜住
+        }
+        // 仅保留字母数字 / 下划线 / 连字符 / 点 / 中日韩字符
+        String safe = stripped.replaceAll("[^a-zA-Z0-9._\\-\\u4e00-\\u9fff]", "_");
+        if (safe.isBlank() || ".".equals(safe) || "..".equals(safe)) return "unnamed";
+        if (safe.length() > 80) {
+            // 保留扩展名（最多 8 字符，cover 常见 .jpeg .webp）
+            int dot = safe.lastIndexOf('.');
+            if (dot > 0 && safe.length() - dot <= 9) {
+                String ext = safe.substring(dot);
+                safe = safe.substring(0, Math.min(80 - ext.length(), dot)) + ext;
+            } else {
+                safe = safe.substring(0, 80);
+            }
+        }
+        return safe;
     }
 
     @Override
