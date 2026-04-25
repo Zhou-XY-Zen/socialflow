@@ -560,7 +560,8 @@ public class GitRepoServiceImpl implements GitRepoService {
             try (RevWalk walk = new RevWalk(repo)) {
                 return formatDiffByFile(repo, walk.parseCommit(base), walk.parseCommit(head));
             }
-        } catch (Exception e) {
+        } catch (IOException e) {
+            // RepositoryNotFoundException 也是 IOException 子类（与同文件 readDiff 保持一致）
             throw new BusinessException("读取 diff 失败: " + e.getMessage());
         }
     }
