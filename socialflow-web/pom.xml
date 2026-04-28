@@ -26,6 +26,10 @@
         </dependency>
         <dependency>
             <groupId>com.socialflow</groupId>
+            <artifactId>socialflow-service-note</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.socialflow</groupId>
             <artifactId>socialflow-service-publish</artifactId>
         </dependency>
         <dependency>

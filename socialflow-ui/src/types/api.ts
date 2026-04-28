@@ -212,6 +212,127 @@ export interface TemplatePreviewVO {
   unusedVariables: string[]
 }
 
+/* ====================================================================
+ * 知识中枢（service-note）类型
+ * ==================================================================== */
+
+export interface NoteVO {
+  id: number
+  title: string
+  summary?: string
+  contentMd?: string
+  aiOutline?: string
+  categoryId?: number
+  categoryName?: string
+  tags?: string[]
+  wordCount?: number
+  readScore?: number
+  isPinned?: number
+  isPublic?: number
+  slug?: string
+  status: number              // 1 normal 2 draft 3 trashed
+  sourceType?: string         // manual / upload / url / clip
+  publishedAt?: string
+  createTime?: string
+  updateTime?: string
+}
+
+export interface NoteCategoryVO {
+  id: number
+  parentId?: number
+  name: string
+  sortOrder?: number
+  color?: string
+  noteCount?: number
+  children?: NoteCategoryVO[]
+}
+
+export interface NoteTagVO {
+  id: number
+  name: string
+  usageCount?: number
+}
+
+export interface NoteCreateDTO {
+  title: string
+  contentMd: string
+  summary?: string
+  categoryId?: number
+  tags?: string[]
+  isPinned?: number
+  isPublic?: number
+  status?: number
+}
+
+export type NoteUpdateDTO = Partial<NoteCreateDTO>
+
+export interface NoteQueryDTO {
+  keyword?: string
+  categoryId?: number
+  tagIds?: number[]
+  status?: number
+  sortBy?: 'pinned-first' | 'updated' | 'created'
+  pageNum?: number
+  pageSize?: number
+}
+
+export interface NoteCategoryUpsertDTO {
+  parentId?: number
+  name: string
+  sortOrder?: number
+  color?: string
+}
+
+export interface NoteImportItemVO {
+  id: number
+  taskId: number
+  fileName: string
+  filePath: string
+  fileSize: number
+  parseStatus: string
+  enrichStatus: string
+  parsedTitle?: string
+  parsedMd?: string
+  aiPayload?: string
+  conflictWithNoteId?: number
+  conflictWithNoteTitle?: string
+  resolution: string
+  finalNoteId?: number
+  errorMsg?: string
+}
+
+export interface NoteImportTaskVO {
+  id: number
+  sourceType: string
+  sourceName?: string
+  totalFiles: number
+  processedFiles: number
+  failedFiles: number
+  status: string
+  enrichEnabled?: number
+  createTime?: string
+  finishedAt?: string
+  items?: NoteImportItemVO[]
+}
+
+export interface NoteLinkVO {
+  srcNoteId: number
+  srcTitle?: string
+  dstNoteId: number
+  dstTitle?: string
+  linkType: 'explicit' | 'semantic'
+  similarity?: number
+}
+
+export interface NoteImportItemUpdateDTO {
+  parsedTitle?: string
+  summary?: string
+  tags?: string[]
+  categoryId?: number
+  isPublic?: number
+  resolution?: 'skip' | 'create' | 'overwrite' | 'merge'
+}
+
 /** Wave 4.5 媒体素材增加的字段（已经在 MediaAsset 上自动返回，为前端展示加类型） */
 export interface MediaAssetExt {
   id: number
