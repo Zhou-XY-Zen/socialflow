@@ -1,25 +1,24 @@
 <!--
-  NotesEditor.vue —— 笔记编辑器（P0 简化版）
-  - 左侧 Markdown 输入（textarea） / 右侧实时预览（markdown-it + highlight.js）
-  - 标题 / 分类 / 标签 / 公开 / 置顶 / 草稿 状态
+  NotesEditor.vue —— 笔记编辑器（md-editor-v3 升级版）
+  - md-editor-v3：自带工具栏（标题/加粗/斜体/列表/代码/表格/链接/图片）+ 实时预览 + 全屏
+  - 上方独立 toolbar：返回/标题/分类/标签/置顶/公开/保存
   - 自动保存：3 秒静默保存
-  P1 升级：换 md-editor-v3、加 AI 副驾、双向链接 [[ 自动补全
+  - 底部反向链接面板（点击跳详情）
 -->
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import MarkdownIt from 'markdown-it'
-import hljs from 'highlight.js'
-import 'highlight.js/styles/github.css'
+import { MdEditor } from 'md-editor-v3'
+import 'md-editor-v3/lib/style.css'
 import { noteApi, noteCategoryApi, noteTagApi } from '@/api/note'
 import type { NoteVO, NoteCategoryVO, NoteTagVO, NoteLinkVO } from '@/types/api'
 
 const route = useRoute()
 const router = useRouter()
 
-/* 关键：直接用字符串 ID，不要 Number() —— 雪花 ID 19 位会超出 JS Number 精度 */
+/* 字符串 ID —— 雪花 19 位超 JS Number 精度 */
 const idParam = computed(() => {
   const v = route.params.id
   if (!v) return undefined
@@ -45,16 +44,13 @@ const allTags = ref<NoteTagVO[]>([])
 const backlinks = ref<NoteLinkVO[]>([])
 const forwardLinks = ref<NoteLinkVO[]>([])
 
-const md = new MarkdownIt({
-  html: false, linkify: true, breaks: true,
-  highlight(str, lang) {
-    if (lang && hljs.getLanguage(lang)) {
-      try { return hljs.highlight(str, { language: lang }).value } catch {}
-    }
-    return ''
-  }
-})
-const previewHtml = computed(() => md.render(contentMd.value || ''))
+/* md-editor-v3 工具栏：精选项 */
+const toolbars = [
+  'bold', 'underline', 'italic', 'strikeThrough', '-',
+  'title', 'sub', 'sup', 'quote', 'unorderedList', 'orderedList', 'task', '-',
+  'codeRow', 'code', 'link', 'image', 'table', 'mermaid', 'katex', '-',
+  'revoke', 'next', 'pageFullscreen', 'preview', 'previewOnly', 'catalog',
+] as const
 
 const categoryOptions = computed(() => {
   const flat: { id: string; label: string }[] = []
@@ -93,7 +89,6 @@ async function loadLinks() {
   } catch { /* ignore */ }
 }
 
-/* 编辑器里点反向链接，跳到目标笔记的详情（只读）模式 —— 不直接进编辑 */
 function jumpTo(id: string) { router.push({ name: 'notes-detail', params: { id } }) }
 
 function applyNote(n: NoteVO) {
@@ -110,16 +105,12 @@ function applyNote(n: NoteVO) {
 onMounted(async () => {
   await loadFilters()
   await loadNote()
-  // 监听字段变更标记 dirty
   watch([title, contentMd, categoryId, tags, isPinned, isPublic],
         () => { dirty.value = true })
 })
 
-/* 点击反向链接 → 同一组件复用，需要手动重新拉取目标笔记 */
 watch(idParam, async (newId, oldId) => {
-  if (oldId && newId && oldId !== newId) {
-    await loadNote()
-  }
+  if (oldId && newId && oldId !== newId) await loadNote()
 })
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null
@@ -171,7 +162,6 @@ async function save(silent = false) {
   }
 }
 
-/* 返回：已存在的笔记 → 详情页；新建未保存 → 列表 */
 function back() {
   if (idParam.value) router.push({ name: 'notes-detail', params: { id: idParam.value } })
   else router.push({ name: 'notes' })
@@ -213,11 +203,14 @@ function back() {
       <el-button type="primary" :loading="saving" @click="save(false)">保存</el-button>
     </div>
 
-    <div class="split">
-      <textarea v-model="contentMd" class="md-input"
-                placeholder="开始用 Markdown 写作… 用 [[标题]] 链接到其他笔记"></textarea>
-      <div class="md-preview markdown-body" v-html="previewHtml"></div>
-    </div>
+    <MdEditor v-model="contentMd" class="md-area"
+              :toolbars="toolbars as never"
+              language="zh-CN"
+              previewTheme="github"
+              codeTheme="github"
+              :showCodeRowNumber="true"
+              :preview="true"
+              placeholder="开始用 Markdown 写作… 输入 [[标题]] 链接到其他笔记" />
 
     <div class="links-bar" v-if="!isNew && (backlinks.length || forwardLinks.length)">
       <div class="links-col" v-if="forwardLinks.length">
@@ -246,19 +239,8 @@ function back() {
 .dot { font-size: 8px; }
 .dot.dirty { color: #f59e0b; }
 .dot.saved { color: #10b981; }
-.split { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; min-height: 0; }
-.md-input { width: 100%; height: 100%; padding: 14px; resize: none;
-            border: 1px solid #e5e7eb; border-radius: 8px; font-family: ui-monospace, "SFMono-Regular", monospace;
-            font-size: 14px; line-height: 1.7; outline: none; background: #fafafa; }
-.md-input:focus { border-color: #409eff; background: #fff; }
-.md-preview { padding: 14px 18px; border: 1px solid #e5e7eb; border-radius: 8px;
-              overflow: auto; background: #fff; font-size: 14px; line-height: 1.7; }
-.md-preview :deep(h1), .md-preview :deep(h2), .md-preview :deep(h3) { margin-top: 1em; }
-.md-preview :deep(pre) { background: #f6f8fa; padding: 12px; border-radius: 6px; overflow-x: auto; }
-.md-preview :deep(code) { font-family: ui-monospace, "SFMono-Regular", monospace; font-size: 13px; }
-.md-preview :deep(blockquote) { border-left: 3px solid #d1d5db; color: #6b7280; padding-left: 12px; margin-left: 0; }
-.md-preview :deep(table) { border-collapse: collapse; }
-.md-preview :deep(th), .md-preview :deep(td) { border: 1px solid #e5e7eb; padding: 6px 10px; }
+.md-area { flex: 1; min-height: 0; border-radius: 8px; overflow: hidden; }
+:deep(.md-editor) { height: 100%; }
 .links-bar { display: flex; gap: 24px; padding: 8px 4px 0; flex-wrap: wrap; border-top: 1px dashed #e5e7eb; }
 .links-col { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .links-label { font-size: 12px; color: #9ca3af; margin-right: 2px; }
