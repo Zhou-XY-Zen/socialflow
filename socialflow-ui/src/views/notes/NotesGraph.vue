@@ -15,7 +15,7 @@ import { noteApi } from '@/api/note'
 import type { NoteLinkVO } from '@/types/api'
 
 interface Node {
-  id: number
+  id: string
   title: string
   x: number; y: number
   vx: number; vy: number
@@ -23,7 +23,7 @@ interface Node {
   fy?: number | null
   degree: number
 }
-interface Edge { src: number; dst: number; type: string }
+interface Edge { src: string; dst: string; type: string }
 
 const router = useRouter()
 const loading = ref(false)
@@ -45,8 +45,8 @@ async function load() {
 }
 
 function buildGraph(links: NoteLinkVO[]) {
-  const map = new Map<number, Node>()
-  const addNode = (id: number, title?: string) => {
+  const map = new Map<string, Node>()
+  const addNode = (id: string, title?: string) => {
     if (!map.has(id)) {
       map.set(id, {
         id, title: title ?? `#${id}`,

@@ -20,7 +20,7 @@ async function load() {
 onMounted(load)
 
 const newCatName = ref('')
-const newCatParent = ref<number | undefined>()
+const newCatParent = ref<string | undefined>()
 
 async function addCat() {
   if (!newCatName.value.trim()) return ElMessage.warning('请输入分类名')

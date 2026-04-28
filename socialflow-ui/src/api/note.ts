@@ -4,6 +4,9 @@
  * ============================================================
  * 后端模块：socialflow-service-note
  * 路由前缀：/api/v1/notes 与 /api/v1/notes/import
+ *
+ * ID 用 string —— 后端雪花 Long 通过 JacksonConfig.longToStringCustomizer
+ * 序列化为字符串。如果在 JS 侧用 number 来回转，会触发 19 位精度丢失。
  * ============================================================
  */
 
@@ -19,18 +22,18 @@ import type {
 /* ====================== 笔记 CRUD ====================== */
 
 export const noteApi = {
-  list:    (q: NoteQueryDTO)         => post<PageResult<NoteVO>>('/notes/list', q),
-  get:     (id: number)              => get<NoteVO>(`/notes/${id}`),
-  create:  (dto: NoteCreateDTO)      => post<NoteVO>('/notes', dto),
-  update:  (id: number, d: NoteUpdateDTO) => put<NoteVO>(`/notes/${id}`, d),
-  trash:   (id: number)              => post<void>(`/notes/${id}/trash`),
-  restore: (id: number)              => post<void>(`/notes/${id}/restore`),
-  remove:  (id: number)              => del<void>(`/notes/${id}`),
-  togglePin:    (id: number)         => post<void>(`/notes/${id}/pin`),
-  togglePublic: (id: number)         => post<void>(`/notes/${id}/public`),
-  backlinks:    (id: number)         => get<NoteLinkVO[]>(`/notes/${id}/backlinks`),
-  forwardLinks: (id: number)         => get<NoteLinkVO[]>(`/notes/${id}/forward-links`),
-  graphEdges:   ()                   => get<NoteLinkVO[]>('/notes/graph/edges'),
+  list:    (q: NoteQueryDTO)            => post<PageResult<NoteVO>>('/notes/list', q),
+  get:     (id: string)                  => get<NoteVO>(`/notes/${id}`),
+  create:  (dto: NoteCreateDTO)         => post<NoteVO>('/notes', dto),
+  update:  (id: string, d: NoteUpdateDTO) => put<NoteVO>(`/notes/${id}`, d),
+  trash:   (id: string)                  => post<void>(`/notes/${id}/trash`),
+  restore: (id: string)                  => post<void>(`/notes/${id}/restore`),
+  remove:  (id: string)                  => del<void>(`/notes/${id}`),
+  togglePin:    (id: string)             => post<void>(`/notes/${id}/pin`),
+  togglePublic: (id: string)             => post<void>(`/notes/${id}/public`),
+  backlinks:    (id: string)             => get<NoteLinkVO[]>(`/notes/${id}/backlinks`),
+  forwardLinks: (id: string)             => get<NoteLinkVO[]>(`/notes/${id}/forward-links`),
+  graphEdges:   ()                       => get<NoteLinkVO[]>('/notes/graph/edges'),
 }
 
 /* ====================== 分类 ====================== */
@@ -38,16 +41,16 @@ export const noteApi = {
 export const noteCategoryApi = {
   tree:   ()                                  => get<NoteCategoryVO[]>('/notes/categories'),
   create: (dto: NoteCategoryUpsertDTO)        => post<NoteCategoryVO>('/notes/categories', dto),
-  update: (id: number, dto: NoteCategoryUpsertDTO) => put<NoteCategoryVO>(`/notes/categories/${id}`, dto),
-  delete: (id: number)                        => del<void>(`/notes/categories/${id}`),
+  update: (id: string, dto: NoteCategoryUpsertDTO) => put<NoteCategoryVO>(`/notes/categories/${id}`, dto),
+  delete: (id: string)                        => del<void>(`/notes/categories/${id}`),
 }
 
 /* ====================== 标签 ====================== */
 
 export const noteTagApi = {
   list:   ()                              => get<NoteTagVO[]>('/notes/tags'),
-  rename: (id: number, name: string)      => put<void>(`/notes/tags/${id}?name=${encodeURIComponent(name)}`),
-  delete: (id: number)                    => del<void>(`/notes/tags/${id}`),
+  rename: (id: string, name: string)      => put<void>(`/notes/tags/${id}?name=${encodeURIComponent(name)}`),
+  delete: (id: string)                    => del<void>(`/notes/tags/${id}`),
 }
 
 /* ====================== 导入流水线 ====================== */
@@ -66,23 +69,23 @@ export const noteImportApi = {
    * P1 批量异步导入
    *  - 单 ZIP 自动解包（Notion / Obsidian / 语雀）
    *  - 文件夹：浏览器拆成 MultipartFile[]，path 在 originalFilename 里
-   *  - 立即返回 taskId；前端用 useImportSse 订阅 /notes/import/tasks/:id/stream 看进度
+   *  - 立即返回 taskId（字符串）；前端用 useImportSse 订阅进度
    */
   importBatch: (files: File[], enrichEnabled = true) => {
     const fd = new FormData()
     files.forEach(f => fd.append('files', f))
-    return post<number>(`/notes/import/batch?enrichEnabled=${enrichEnabled}`, fd, {
+    return post<string>(`/notes/import/batch?enrichEnabled=${enrichEnabled}`, fd, {
       headers: { 'Content-Type': 'multipart/form-data' },
     })
   },
 
   listTasks: () => get<NoteImportTaskVO[]>('/notes/import/tasks'),
 
-  getTask:   (taskId: number) => get<NoteImportTaskVO>(`/notes/import/tasks/${taskId}`),
+  getTask:   (taskId: string) => get<NoteImportTaskVO>(`/notes/import/tasks/${taskId}`),
 
-  updateItem: (taskId: number, itemId: number, dto: NoteImportItemUpdateDTO) =>
+  updateItem: (taskId: string, itemId: string, dto: NoteImportItemUpdateDTO) =>
     put<void>(`/notes/import/tasks/${taskId}/items/${itemId}`, dto),
 
-  commit:  (taskId: number) => post<void>(`/notes/import/tasks/${taskId}/commit`),
-  cancel:  (taskId: number) => post<void>(`/notes/import/tasks/${taskId}/cancel`),
+  commit:  (taskId: string) => post<void>(`/notes/import/tasks/${taskId}/commit`),
+  cancel:  (taskId: string) => post<void>(`/notes/import/tasks/${taskId}/cancel`),
 }

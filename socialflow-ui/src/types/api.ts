@@ -216,13 +216,16 @@ export interface TemplatePreviewVO {
  * 知识中枢（service-note）类型
  * ==================================================================== */
 
+/* 注：所有 ID 字段都用 string —— 后端 Jackson 把雪花 Long 序列化为 String，
+ *    避免 19 位数字超出 JS Number.MAX_SAFE_INTEGER (2^53) 时丢精度 */
+
 export interface NoteVO {
-  id: number
+  id: string
   title: string
   summary?: string
   contentMd?: string
   aiOutline?: string
-  categoryId?: number
+  categoryId?: string
   categoryName?: string
   tags?: string[]
   wordCount?: number
@@ -238,8 +241,8 @@ export interface NoteVO {
 }
 
 export interface NoteCategoryVO {
-  id: number
-  parentId?: number
+  id: string
+  parentId?: string
   name: string
   sortOrder?: number
   color?: string
@@ -248,7 +251,7 @@ export interface NoteCategoryVO {
 }
 
 export interface NoteTagVO {
-  id: number
+  id: string
   name: string
   usageCount?: number
 }
@@ -257,7 +260,7 @@ export interface NoteCreateDTO {
   title: string
   contentMd: string
   summary?: string
-  categoryId?: number
+  categoryId?: string
   tags?: string[]
   isPinned?: number
   isPublic?: number
@@ -268,8 +271,8 @@ export type NoteUpdateDTO = Partial<NoteCreateDTO>
 
 export interface NoteQueryDTO {
   keyword?: string
-  categoryId?: number
-  tagIds?: number[]
+  categoryId?: string
+  tagIds?: string[]
   status?: number
   sortBy?: 'pinned-first' | 'updated' | 'created'
   pageNum?: number
@@ -277,15 +280,15 @@ export interface NoteQueryDTO {
 }
 
 export interface NoteCategoryUpsertDTO {
-  parentId?: number
+  parentId?: string
   name: string
   sortOrder?: number
   color?: string
 }
 
 export interface NoteImportItemVO {
-  id: number
-  taskId: number
+  id: string
+  taskId: string
   fileName: string
   filePath: string
   fileSize: number
@@ -294,15 +297,15 @@ export interface NoteImportItemVO {
   parsedTitle?: string
   parsedMd?: string
   aiPayload?: string
-  conflictWithNoteId?: number
+  conflictWithNoteId?: string
   conflictWithNoteTitle?: string
   resolution: string
-  finalNoteId?: number
+  finalNoteId?: string
   errorMsg?: string
 }
 
 export interface NoteImportTaskVO {
-  id: number
+  id: string
   sourceType: string
   sourceName?: string
   totalFiles: number
@@ -316,9 +319,9 @@ export interface NoteImportTaskVO {
 }
 
 export interface NoteLinkVO {
-  srcNoteId: number
+  srcNoteId: string
   srcTitle?: string
-  dstNoteId: number
+  dstNoteId: string
   dstTitle?: string
   linkType: 'explicit' | 'semantic'
   similarity?: number
@@ -328,7 +331,7 @@ export interface NoteImportItemUpdateDTO {
   parsedTitle?: string
   summary?: string
   tags?: string[]
-  categoryId?: number
+  categoryId?: string
   isPublic?: number
   resolution?: 'skip' | 'create' | 'overwrite' | 'merge'
 }
