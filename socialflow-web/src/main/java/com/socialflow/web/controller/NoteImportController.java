@@ -8,6 +8,7 @@ import com.socialflow.model.vo.NoteImportCommitVO;
 import com.socialflow.model.vo.NoteImportTaskVO;
 import com.socialflow.model.vo.NoteVO;
 import com.socialflow.service.note.NoteImportService;
+import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -49,7 +50,8 @@ public class NoteImportController {
         return R.ok(importService.importSingleFile(StpUtil.getLoginIdAsLong(), file));
     }
 
-    @Operation(summary = "batch async import (P1, currently degraded to sync loop)")
+    @Operation(summary = "batch async import (with AI enrichment)")
+    @RateLimiter(name = "ai-generate")
     @PostMapping("/batch")
     public R<Long> importBatch(@RequestPart("files") MultipartFile[] files,
                                @RequestParam(defaultValue = "true") boolean enrichEnabled) {

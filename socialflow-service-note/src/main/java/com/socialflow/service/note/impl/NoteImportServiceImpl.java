@@ -49,7 +49,6 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class NoteImportServiceImpl implements NoteImportService {
 
-    private static final ObjectMapper M = new ObjectMapper();
     private static final Set<String> SUPPORTED_NESTED = Set.of(
             "md", "markdown", "mdown",
             "txt", "text", "log",
@@ -57,6 +56,7 @@ public class NoteImportServiceImpl implements NoteImportService {
             "html", "htm", "ipynb"
     );
 
+    private final ObjectMapper objectMapper;
     private final NoteParserRegistry parserRegistry;
     private final NoteService noteService;
     private final NoteImportTaskMapper taskMapper;
@@ -278,12 +278,12 @@ public class NoteImportServiceImpl implements NoteImportService {
             try {
                 Map<String, Object> payload = item.getAiPayload() == null
                         ? new LinkedHashMap<>()
-                        : M.readValue(item.getAiPayload(), Map.class);
+                        : objectMapper.readValue(item.getAiPayload(), Map.class);
                 if (dto.getSummary() != null)    payload.put("summary", dto.getSummary());
                 if (dto.getTags() != null)       payload.put("tags", dto.getTags());
                 if (dto.getCategoryId() != null) payload.put("categoryId", dto.getCategoryId());
                 if (dto.getIsPublic() != null)   payload.put("isPublic", dto.getIsPublic());
-                item.setAiPayload(M.writeValueAsString(payload));
+                item.setAiPayload(objectMapper.writeValueAsString(payload));
             } catch (Exception e) {
                 log.warn("merge ai_payload failed: {}", e.getMessage());
             }
@@ -526,7 +526,7 @@ public class NoteImportServiceImpl implements NoteImportService {
         AiBag bag = new AiBag();
         if (item.getAiPayload() == null) return bag;
         try {
-            JsonNode root = M.readTree(item.getAiPayload());
+            JsonNode root = objectMapper.readTree(item.getAiPayload());
             if (root.hasNonNull("summary")) bag.summary = root.get("summary").asText();
             if (root.hasNonNull("tags") && root.get("tags").isArray()) {
                 bag.tags = new java.util.ArrayList<>();

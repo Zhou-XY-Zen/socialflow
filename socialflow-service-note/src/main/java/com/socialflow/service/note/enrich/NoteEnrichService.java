@@ -7,9 +7,8 @@ import com.socialflow.model.entity.NoteCategory;
 import com.socialflow.service.ai.llm.LlmConfig;
 import com.socialflow.service.ai.llm.LlmProviderService;
 import com.socialflow.service.ai.llm.LlmRouter;
-import com.socialflow.service.user.ApiKeyService;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -22,55 +21,67 @@ import java.util.concurrent.TimeoutException;
 /**
  * AI 富化协调器 —— 一次性把所有 enricher 并发跑完
  *
- * 关键设计：
- *   - 用户没配 API Key → 整个 enrich 静默跳过（result.enriched=false），不抛错
- *   - 单个 enricher 抛错 → 仅记录到 failures，不影响其他 enricher
- *   - 每个 enricher 30s 超时，避免某家 LLM 慢拖死整批
+ * 设计对齐 ContentServiceImpl / MultiAgentServiceImpl / MemoryServiceImpl：
+ *   - 直接注入项目级 systemApiKey + defaultProvider，不再查用户个人 key
+ *   - LLM Provider 自身会做 user-key → systemApiKey 的兜底
+ *   - 单 enricher 抛错 → 仅记 failures，其他继续
+ *   - 单 enricher 30s 超时
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class NoteEnrichService {
 
     private final List<NoteEnricher> enrichers;
     private final LlmRouter llmRouter;
-    private final ApiKeyService apiKeyService;
     private final NoteCategoryMapper categoryMapper;
 
+    /** 项目级默认 LLM 提供者，由 application.yml / Nacos 注入；缺省 DEEPSEEK */
+    @Value("${socialflow.ai.default-provider:DEEPSEEK}")
+    private String defaultProviderCode;
+
+    /** 项目级 system API key —— 兜底用，不进数据库 */
+    @Value("${socialflow.ai.system-api-key:}")
+    private String systemApiKey;
+
+    /** 默认对话模型，可被 application.yml 覆盖 */
+    @Value("${socialflow.ai.providers.deepseek.default-model:deepseek-chat}")
+    private String defaultModel;
+
     private static final int PER_ENRICHER_TIMEOUT_SEC = 30;
-    private static final String DEFAULT_MODEL = "deepseek-chat";
+
+    public NoteEnrichService(List<NoteEnricher> enrichers,
+                              LlmRouter llmRouter,
+                              NoteCategoryMapper categoryMapper) {
+        this.enrichers = enrichers;
+        this.llmRouter = llmRouter;
+        this.categoryMapper = categoryMapper;
+    }
 
     public NoteEnrichResult enrich(Long userId, String parsedTitle, String parsedMd) {
         NoteEnrichResult result = NoteEnrichResult.builder()
                 .enriched(false)
                 .build();
 
-        // 用户没配默认 provider 或 key → 跳过并把原因带回前端
-        LlmProvider provider;
-        String apiKey;
+        LlmProviderService svc;
         try {
-            provider = apiKeyService.resolveDefaultProvider(userId);
-            apiKey = apiKeyService.getDecryptedKey(userId, provider);
+            svc = llmRouter.get(defaultProviderCode);
         } catch (RuntimeException e) {
-            log.info("user {} has no default provider, skip enrich", userId);
-            result.setSkippedReason("未设置默认 LLM 供应商，请到 设置 → API Key 管理 配置一个");
-            return result;
-        }
-        if (apiKey == null || apiKey.isBlank()) {
-            log.info("user {} has no API key for {}, skip enrich", userId, provider);
-            result.setSkippedReason("未配置 " + provider + " 的 API Key，请到 设置 → API Key 管理 添加");
+            log.warn("default provider [{}] not registered: {}", defaultProviderCode, e.getMessage());
+            result.setSkippedReason("默认 LLM 供应商 " + defaultProviderCode + " 未注册到 LlmRouter");
             return result;
         }
 
-        LlmProviderService svc = llmRouter.get(provider);
+        // systemApiKey 为空时，依赖 Provider 内部的 systemApiKey 字段（@Value 注入到 Provider 自身）
+        // 也兜底，所以这里即使为 null，Provider.resolveApiKey 也会用自己持有的 systemApiKey
         LlmConfig config = LlmConfig.builder()
-                .model(DEFAULT_MODEL)
+                .model(defaultModel)
                 .temperature(0.3)
                 .maxTokens(800)
-                .apiKey(apiKey)
+                .apiKey(systemApiKey == null || systemApiKey.isBlank() ? null : systemApiKey)
                 .userId(userId)
                 .build();
 
+        // 用户的现有分类列表 —— 给 CategoryEnricher 做受限选择
         List<String> existingCats = categoryMapper.selectList(
                 new LambdaQueryWrapper<NoteCategory>().eq(NoteCategory::getUserId, userId)
         ).stream().map(NoteCategory::getName).toList();
@@ -85,7 +96,6 @@ public class NoteEnrichService {
                     e.enrich(ctx, svc, config, result);
                 } catch (Exception ex) {
                     log.warn("enricher {} failed: {}", e.name(), ex.getMessage());
-                    // failures 是 CopyOnWriteArrayList，无需外部同步
                     result.getFailures().add(e.name() + ": " + ex.getMessage());
                 }
             }));
@@ -100,7 +110,7 @@ public class NoteEnrichService {
             } catch (InterruptedException ie) {
                 Thread.currentThread().interrupt();
             } catch (ExecutionException ee) {
-                // 已在 catch 内记录
+                // 已在 runAsync 的 catch 里记录
             }
         }
         result.setEnriched(true);

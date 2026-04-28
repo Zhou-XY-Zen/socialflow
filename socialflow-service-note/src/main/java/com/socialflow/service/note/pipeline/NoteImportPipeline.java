@@ -2,6 +2,7 @@ package com.socialflow.service.note.pipeline;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.socialflow.dao.mapper.NoteImportItemMapper;
+// 注入 Spring 管理的 ObjectMapper，跟 SseRegistry 保持一致；防御未来 ai_payload 引入 Long
 import com.socialflow.dao.mapper.NoteImportTaskMapper;
 import com.socialflow.dao.mapper.NoteMapper;
 import com.socialflow.model.entity.NoteImportItem;
@@ -42,7 +43,7 @@ import java.util.stream.Stream;
 @RequiredArgsConstructor
 public class NoteImportPipeline {
 
-    private static final ObjectMapper M = new ObjectMapper();
+    private final ObjectMapper objectMapper;
 
     private final NoteParserRegistry parserRegistry;
     private final NoteDedupService dedupService;
@@ -173,7 +174,7 @@ public class NoteImportPipeline {
             payload.put("enriched", er.isEnriched());
             payload.put("failures", er.getFailures());
             payload.put("skippedReason", er.getSkippedReason());
-            try { item.setAiPayload(M.writeValueAsString(payload)); }
+            try { item.setAiPayload(objectMapper.writeValueAsString(payload)); }
             catch (Exception e) { item.setAiPayload(null); }
             item.setEnrichStatus(er.isEnriched() ? "done" : "skipped");
         } else {
