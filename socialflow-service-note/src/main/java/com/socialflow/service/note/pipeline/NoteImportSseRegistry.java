@@ -1,6 +1,7 @@
 package com.socialflow.service.note.pipeline;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -17,12 +18,17 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * Pipeline 在后台线程产出事件 → 通过 push() 广播到所有订阅了该 taskId 的 emitter。
  * Controller 创建 emitter → register 到这里，emitter 自动在 timeout/error/complete
  * 时调用 unregister。
+ *
+ * 关键：注入 Spring 管理的 ObjectMapper（带 JacksonConfig.longToStringCustomizer），
+ * 否则 SSE 推送的雪花 ID（Long）会变成裸 JSON Number，浏览器解析时丢失精度
+ * （Long > 2^53 时 JS Number 会四舍五入）。
  */
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class NoteImportSseRegistry {
 
-    private static final ObjectMapper M = new ObjectMapper();
+    private final ObjectMapper objectMapper;
 
     private final Map<Long, List<SseEmitter>> store = new ConcurrentHashMap<>();
 
@@ -39,7 +45,7 @@ public class NoteImportSseRegistry {
         List<SseEmitter> list = store.get(taskId);
         if (list == null || list.isEmpty()) return;
         String json;
-        try { json = M.writeValueAsString(data); }
+        try { json = objectMapper.writeValueAsString(data); }
         catch (Exception e) { json = "{}"; }
         for (SseEmitter em : list) {
             try {
