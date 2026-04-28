@@ -165,10 +165,7 @@ async function trash() {
     </PageHeader>
 
     <div v-if="note" class="layout">
-      <!-- 主内容 -->
-      <article class="content-col markdown-body" v-html="html"></article>
-
-      <!-- 右侧元信息 + TOC -->
+      <!-- 左侧元信息 + TOC -->
       <aside class="info-col">
         <!-- 元信息卡 -->
         <div class="info-card">
@@ -213,6 +210,9 @@ async function trash() {
           </ul>
         </div>
       </aside>
+
+      <!-- 主内容 -->
+      <article class="content-col markdown-body" v-html="html"></article>
     </div>
   </div>
 </template>
@@ -220,7 +220,7 @@ async function trash() {
 <style scoped>
 .detail { padding: 16px; max-width: 1280px; margin: 0 auto; }
 
-.layout { display: grid; grid-template-columns: 1fr 260px; gap: 18px; align-items: start; }
+.layout { display: grid; grid-template-columns: 260px 1fr; gap: 18px; align-items: start; }
 
 /* 主内容 */
 .content-col { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px;
