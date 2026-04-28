@@ -5,17 +5,17 @@
 -->
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import MarkdownIt from 'markdown-it'
 import hljs from 'highlight.js'
 import 'highlight.js/styles/github.css'
 import PageHeader from '@/components/PageHeader.vue'
-import { noteImportApi, noteCategoryApi, noteTagApi } from '@/api/note'
+import { noteImportApi, noteCategoryApi } from '@/api/note'
 import type {
   NoteImportTaskVO, NoteImportItemVO,
-  NoteCategoryVO, NoteTagVO, NoteImportItemUpdateDTO,
+  NoteCategoryVO, NoteImportItemUpdateDTO,
 } from '@/types/api'
 
 const route = useRoute()
@@ -27,7 +27,6 @@ const taskId = Array.isArray(route.params.taskId)
 
 const task = ref<NoteImportTaskVO | null>(null)
 const cats = ref<NoteCategoryVO[]>([])
-const tags = ref<NoteTagVO[]>([])
 const loading = ref(false)
 const committing = ref(false)
 
@@ -45,8 +44,6 @@ const selectedId = ref<string | null>(null)
 const editing = ref<{
   itemId: string
   title: string
-  summary: string
-  tags: string[]
   categoryId: string | null
   isPublic: number
   resolution: NoteImportItemUpdateDTO['resolution']
@@ -85,14 +82,12 @@ const stats = computed(() => {
 async function load() {
   loading.value = true
   try {
-    const [t, c, g] = await Promise.all([
+    const [t, c] = await Promise.all([
       noteImportApi.getTask(taskId),
       noteCategoryApi.tree(),
-      noteTagApi.list(),
     ])
     task.value = t
     cats.value = c
-    tags.value = g
     if (t.items?.length && selectedId.value === null) {
       select(t.items[0].id)
     }
@@ -117,23 +112,17 @@ function select(id: string) {
   editing.value = {
     itemId: id,
     title: item.parsedTitle ?? '',
-    summary: ai.summary ?? '',
-    tags: Array.isArray(ai.tags) ? ai.tags : [],
     categoryId: ai.categoryId ?? null,
     isPublic: ai.isPublic ?? 0,
     resolution: (item.resolution as NoteImportItemUpdateDTO['resolution']) ?? 'create',
   }
 }
 
-watch([editing], async () => { /* 仅触发 dirty；保存走 flush */ }, { deep: true })
-
 async function flush() {
   if (!editing.value) return
   const e = editing.value
   await noteImportApi.updateItem(taskId, e.itemId, {
     parsedTitle: e.title || undefined,
-    summary: e.summary || undefined,
-    tags: e.tags,
     categoryId: e.categoryId ?? undefined,
     isPublic: e.isPublic,
     resolution: e.resolution,
@@ -173,19 +162,6 @@ async function commit() {
   } finally { committing.value = false }
 }
 
-/* AI 跳过原因：取第一条 item 的 ai_payload.skippedReason 当统一提示 */
-const aiSkippedReason = computed<string | null>(() => {
-  if (!task.value || task.value.enrichEnabled !== 1) return null
-  for (const it of items.value) {
-    if (!it.aiPayload) continue
-    try {
-      const p = JSON.parse(it.aiPayload)
-      if (p && p.enriched === false && p.skippedReason) return p.skippedReason
-    } catch {}
-  }
-  return null
-})
-
 async function cancel() {
   try {
     await ElMessageBox.confirm('放弃此次导入？已解析的内容会被清除。', '确认', { type: 'warning' })
@@ -224,18 +200,6 @@ function statusDot(item: NoteImportItemVO) {
       <el-tag v-if="stats.failed > 0" size="large" type="danger">失败 {{ stats.failed }}</el-tag>
     </div>
 
-    <el-alert v-if="aiSkippedReason" class="ai-skip-banner"
-              type="warning" show-icon :closable="false">
-      <template #title>
-        AI 富化未运行 — 摘要 / 标签 / 分类 / 大纲都为空
-      </template>
-      <div>
-        原因：{{ aiSkippedReason }}<br>
-        可以现在去 <router-link to="/settings/api-keys">设置 → API Key 管理</router-link>
-        配置；不影响本次入库（先入库后续在编辑器里补也行）
-      </div>
-    </el-alert>
-
     <div class="layout">
       <!-- 左：item 列表 -->
       <el-card class="col col-list" shadow="never">
@@ -271,9 +235,9 @@ function statusDot(item: NoteImportItemVO) {
         <div v-else class="preview markdown-body" v-html="previewHtml"></div>
       </el-card>
 
-      <!-- 右：AI 结果可改 + 入库设置 -->
+      <!-- 右：入库设置 -->
       <el-card class="col col-edit" shadow="never">
-        <template #header><span>AI 富化 + 入库设置</span></template>
+        <template #header><span>入库设置</span></template>
         <div v-if="editing && selectedItem" class="form">
           <el-alert v-if="selectedItem.conflictWithNoteId"
                     type="warning" :closable="false" show-icon class="conflict">
@@ -286,19 +250,7 @@ function statusDot(item: NoteImportItemVO) {
             <el-input v-model="editing.title" @blur="flush" />
           </el-form-item>
 
-          <el-form-item label="摘要 (AI)">
-            <el-input v-model="editing.summary" type="textarea" :rows="3" @blur="flush" />
-          </el-form-item>
-
-          <el-form-item label="标签 (AI)">
-            <el-select v-model="editing.tags" multiple filterable allow-create
-                       default-first-option placeholder="标签…" style="width:100%"
-                       @change="flush">
-              <el-option v-for="t in tags" :key="t.id" :value="t.name" :label="t.name" />
-            </el-select>
-          </el-form-item>
-
-          <el-form-item label="分类 (AI)">
+          <el-form-item label="分类">
             <el-select v-model="editing.categoryId" placeholder="不归类" clearable style="width:100%"
                        @change="flush">
               <el-option v-for="c in categoryOptions" :key="c.id" :value="c.id" :label="c.label" />
@@ -326,7 +278,6 @@ function statusDot(item: NoteImportItemVO) {
 <style scoped>
 .review { padding: 16px; }
 .stats { display: flex; gap: 8px; margin: 8px 0 14px; }
-.ai-skip-banner { margin-bottom: 14px; }
 .layout { display: grid; grid-template-columns: 280px 1fr 380px; gap: 12px;
           height: calc(100vh - 220px); min-height: 500px; }
 .col { display: flex; flex-direction: column; min-height: 0; }

@@ -4,7 +4,6 @@ import lombok.Data;
 
 import java.io.Serial;
 import java.io.Serializable;
-import java.util.List;
 
 /**
  * 笔记列表查询条件
@@ -19,8 +18,6 @@ public class NoteQueryDTO implements Serializable {
     private String keyword;
 
     private Long categoryId;
-
-    private List<Long> tagIds;
 
     /** 默认 1=正常；前端切换"回收站"传 3 */
     private Integer status;

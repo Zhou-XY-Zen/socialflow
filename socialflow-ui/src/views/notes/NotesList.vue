@@ -1,6 +1,6 @@
 <!--
   NotesList.vue —— 我的笔记 主列表
-  搜索 + 分类/标签筛选 + 卡片列表 + 置顶 + 新建/编辑/删除
+  搜索 + 分类筛选 + 卡片列表 + 置顶 + 新建/编辑/删除
 -->
 
 <script setup lang="ts">
@@ -10,8 +10,8 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import dayjs from 'dayjs'
 import PageHeader from '@/components/PageHeader.vue'
 import EmptyState from '@/components/EmptyState.vue'
-import { noteApi, noteCategoryApi, noteTagApi } from '@/api/note'
-import type { NoteVO, NoteCategoryVO, NoteTagVO, NoteQueryDTO } from '@/types/api'
+import { noteApi, noteCategoryApi } from '@/api/note'
+import type { NoteVO, NoteCategoryVO, NoteQueryDTO } from '@/types/api'
 
 const router = useRouter()
 
@@ -23,11 +23,9 @@ const items = ref<NoteVO[]>([])
 
 const keyword = ref('')
 const categoryId = ref<string | undefined>()
-const tagIds = ref<string[]>([])
 const sortBy = ref<NoteQueryDTO['sortBy']>('pinned-first')
 
 const categories = ref<NoteCategoryVO[]>([])
-const tags = ref<NoteTagVO[]>([])
 
 /** 把树拍平给下拉用 */
 const categoryOptions = computed(() => {
@@ -48,7 +46,6 @@ async function loadAll() {
     const q: NoteQueryDTO = {
       keyword: keyword.value || undefined,
       categoryId: categoryId.value,
-      tagIds: tagIds.value.length ? tagIds.value : undefined,
       status: 1,
       sortBy: sortBy.value,
       pageNum: pageNum.value,
@@ -63,12 +60,7 @@ async function loadAll() {
 }
 
 async function loadFilters() {
-  const [cats, tgs] = await Promise.all([
-    noteCategoryApi.tree(),
-    noteTagApi.list(),
-  ])
-  categories.value = cats
-  tags.value = tgs
+  categories.value = await noteCategoryApi.tree()
 }
 
 onMounted(async () => {
@@ -76,7 +68,7 @@ onMounted(async () => {
   await loadAll()
 })
 
-watch([keyword, categoryId, tagIds, sortBy], () => {
+watch([keyword, categoryId, sortBy], () => {
   pageNum.value = 1
   loadAll()
 })
@@ -116,7 +108,7 @@ function fmtTime(t?: string) {
 
     <el-card class="filter-bar" shadow="never">
       <el-row :gutter="12">
-        <el-col :span="8">
+        <el-col :span="12">
           <el-input v-model="keyword" placeholder="搜索标题、正文、摘要…" clearable :prefix-icon="'Search'" />
         </el-col>
         <el-col :span="6">
@@ -125,12 +117,6 @@ function fmtTime(t?: string) {
           </el-select>
         </el-col>
         <el-col :span="6">
-          <el-select v-model="tagIds" multiple collapse-tags collapse-tags-tooltip
-                     placeholder="标签筛选" clearable style="width:100%">
-            <el-option v-for="t in tags" :key="t.id" :value="t.id" :label="`${t.name} (${t.usageCount ?? 0})`" />
-          </el-select>
-        </el-col>
-        <el-col :span="4">
           <el-select v-model="sortBy" style="width:100%">
             <el-option value="pinned-first" label="置顶 + 最近" />
             <el-option value="updated" label="按更新时间" />
@@ -154,10 +140,9 @@ function fmtTime(t?: string) {
             {{ n.sourceType }}
           </el-tag>
         </div>
-        <p class="note-summary">{{ n.summary || '（暂无摘要）' }}</p>
-        <div class="note-meta">
-          <el-tag v-if="n.categoryName" size="small" type="success">{{ n.categoryName }}</el-tag>
-          <el-tag v-for="t in n.tags || []" :key="t" size="small">{{ t }}</el-tag>
+        <p v-if="n.summary" class="note-summary">{{ n.summary }}</p>
+        <div class="note-meta" v-if="n.categoryName">
+          <el-tag size="small" type="success">{{ n.categoryName }}</el-tag>
         </div>
         <div class="note-footer">
           <span>{{ n.wordCount ?? 0 }} 字 · {{ fmtTime(n.updateTime) }}</span>

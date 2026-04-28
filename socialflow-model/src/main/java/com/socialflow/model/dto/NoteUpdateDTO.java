@@ -5,7 +5,6 @@ import lombok.Data;
 
 import java.io.Serial;
 import java.io.Serializable;
-import java.util.List;
 
 /**
  * 全部字段都可选 —— 部分更新（PATCH 语义）
@@ -24,8 +23,6 @@ public class NoteUpdateDTO implements Serializable {
     private String summary;
 
     private Long categoryId;
-
-    private List<String> tags;
 
     private Integer isPinned;
 

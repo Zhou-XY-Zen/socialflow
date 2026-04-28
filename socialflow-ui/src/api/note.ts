@@ -1,12 +1,12 @@
 /**
  * ============================================================
- * api/note.ts —— 知识中枢（笔记 / 分类 / 标签 / 导入流水线）
+ * api/note.ts —— 知识中枢（笔记 / 分类 / 导入流水线）
  * ============================================================
  * 后端模块：socialflow-service-note
  * 路由前缀：/api/v1/notes 与 /api/v1/notes/import
  *
  * ID 用 string —— 后端雪花 Long 通过 JacksonConfig.longToStringCustomizer
- * 序列化为字符串。如果在 JS 侧用 number 来回转，会触发 19 位精度丢失。
+ * 序列化为字符串，避免 19 位精度丢失。
  * ============================================================
  */
 
@@ -14,7 +14,6 @@ import { del, get, post, put } from './http'
 import type {
   NoteVO, NoteCreateDTO, NoteUpdateDTO, NoteQueryDTO,
   NoteCategoryVO, NoteCategoryUpsertDTO,
-  NoteTagVO, NoteLinkVO,
   NoteImportTaskVO, NoteImportItemUpdateDTO, NoteImportCommitVO,
   PageResult,
 } from '@/types/api'
@@ -31,9 +30,6 @@ export const noteApi = {
   remove:  (id: string)                  => del<void>(`/notes/${id}`),
   togglePin:    (id: string)             => post<void>(`/notes/${id}/pin`),
   togglePublic: (id: string)             => post<void>(`/notes/${id}/public`),
-  backlinks:    (id: string)             => get<NoteLinkVO[]>(`/notes/${id}/backlinks`),
-  forwardLinks: (id: string)             => get<NoteLinkVO[]>(`/notes/${id}/forward-links`),
-  graphEdges:   ()                       => get<NoteLinkVO[]>('/notes/graph/edges'),
 }
 
 /* ====================== 分类 ====================== */
@@ -43,14 +39,6 @@ export const noteCategoryApi = {
   create: (dto: NoteCategoryUpsertDTO)        => post<NoteCategoryVO>('/notes/categories', dto),
   update: (id: string, dto: NoteCategoryUpsertDTO) => put<NoteCategoryVO>(`/notes/categories/${id}`, dto),
   delete: (id: string)                        => del<void>(`/notes/categories/${id}`),
-}
-
-/* ====================== 标签 ====================== */
-
-export const noteTagApi = {
-  list:   ()                              => get<NoteTagVO[]>('/notes/tags'),
-  rename: (id: string, name: string)      => put<void>(`/notes/tags/${id}?name=${encodeURIComponent(name)}`),
-  delete: (id: string)                    => del<void>(`/notes/tags/${id}`),
 }
 
 /* ====================== 导入流水线 ====================== */
@@ -71,10 +59,10 @@ export const noteImportApi = {
    *  - 文件夹：浏览器拆成 MultipartFile[]，path 在 originalFilename 里
    *  - 立即返回 taskId（字符串）；前端用 useImportSse 订阅进度
    */
-  importBatch: (files: File[], enrichEnabled = true) => {
+  importBatch: (files: File[]) => {
     const fd = new FormData()
     files.forEach(f => fd.append('files', f))
-    return post<string>(`/notes/import/batch?enrichEnabled=${enrichEnabled}`, fd, {
+    return post<string>(`/notes/import/batch?enrichEnabled=false`, fd, {
       headers: { 'Content-Type': 'multipart/form-data' },
     })
   },

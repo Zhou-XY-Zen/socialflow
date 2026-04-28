@@ -272,15 +272,12 @@ public class NoteImportServiceImpl implements NoteImportService {
         if (dto.getParsedTitle() != null) item.setParsedTitle(dto.getParsedTitle());
         if (dto.getResolution() != null)  item.setResolution(dto.getResolution());
 
-        // 把可改的 AI 字段（summary/tags/category/isPublic）落到 ai_payload
-        if (dto.getSummary() != null || dto.getTags() != null
-                || dto.getCategoryId() != null || dto.getIsPublic() != null) {
+        // 仅可改 categoryId / isPublic，落到 ai_payload（commit 时被读取后用于建 note）
+        if (dto.getCategoryId() != null || dto.getIsPublic() != null) {
             try {
                 Map<String, Object> payload = item.getAiPayload() == null
                         ? new LinkedHashMap<>()
                         : objectMapper.readValue(item.getAiPayload(), Map.class);
-                if (dto.getSummary() != null)    payload.put("summary", dto.getSummary());
-                if (dto.getTags() != null)       payload.put("tags", dto.getTags());
                 if (dto.getCategoryId() != null) payload.put("categoryId", dto.getCategoryId());
                 if (dto.getIsPublic() != null)   payload.put("isPublic", dto.getIsPublic());
                 item.setAiPayload(objectMapper.writeValueAsString(payload));
@@ -379,8 +376,6 @@ public class NoteImportServiceImpl implements NoteImportService {
         upd.setTitle(item.getParsedTitle());
         upd.setContentMd(item.getParsedMd());
         AiBag bag = readAiBag(item);
-        upd.setSummary(bag.summary);
-        upd.setTags(bag.tags);
         upd.setCategoryId(bag.categoryId);
         noteService.update(userId, item.getConflictWithNoteId(), upd);
         item.setFinalNoteId(item.getConflictWithNoteId());
@@ -514,24 +509,18 @@ public class NoteImportServiceImpl implements NoteImportService {
         dto.setTitle(item.getParsedTitle());
         dto.setContentMd(item.getParsedMd());
         AiBag bag = readAiBag(item);
-        dto.setSummary(bag.summary);
-        dto.setTags(bag.tags);
         dto.setCategoryId(bag.categoryId);
         dto.setIsPublic(bag.isPublic);
         dto.setStatus(1);
         return dto;
     }
 
+    /** 从 ai_payload 读出审阅页里手填的 categoryId / isPublic */
     private AiBag readAiBag(NoteImportItem item) {
         AiBag bag = new AiBag();
         if (item.getAiPayload() == null) return bag;
         try {
             JsonNode root = objectMapper.readTree(item.getAiPayload());
-            if (root.hasNonNull("summary")) bag.summary = root.get("summary").asText();
-            if (root.hasNonNull("tags") && root.get("tags").isArray()) {
-                bag.tags = new java.util.ArrayList<>();
-                root.get("tags").forEach(t -> bag.tags.add(t.asText()));
-            }
             if (root.hasNonNull("categoryId")) bag.categoryId = root.get("categoryId").asLong();
             if (root.hasNonNull("isPublic"))   bag.isPublic = root.get("isPublic").asInt();
         } catch (Exception e) {
@@ -541,8 +530,6 @@ public class NoteImportServiceImpl implements NoteImportService {
     }
 
     private static class AiBag {
-        String summary;
-        List<String> tags;
         Long categoryId;
         Integer isPublic;
     }

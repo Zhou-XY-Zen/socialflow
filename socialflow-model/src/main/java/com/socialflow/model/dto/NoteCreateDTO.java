@@ -6,7 +6,6 @@ import lombok.Data;
 
 import java.io.Serial;
 import java.io.Serializable;
-import java.util.List;
 
 @Data
 public class NoteCreateDTO implements Serializable {
@@ -24,9 +23,6 @@ public class NoteCreateDTO implements Serializable {
     private String summary;
 
     private Long categoryId;
-
-    /** 标签名数组；后端按 user_id+name 自动 upsert 到 note_tag */
-    private List<String> tags;
 
     private Integer isPinned;
 

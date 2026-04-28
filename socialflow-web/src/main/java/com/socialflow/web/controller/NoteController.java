@@ -9,13 +9,9 @@ import com.socialflow.model.dto.NoteCreateDTO;
 import com.socialflow.model.dto.NoteQueryDTO;
 import com.socialflow.model.dto.NoteUpdateDTO;
 import com.socialflow.model.vo.NoteCategoryVO;
-import com.socialflow.model.vo.NoteLinkVO;
-import com.socialflow.model.vo.NoteTagVO;
 import com.socialflow.model.vo.NoteVO;
 import com.socialflow.service.note.NoteCategoryService;
-import com.socialflow.service.note.NoteLinkService;
 import com.socialflow.service.note.NoteService;
-import com.socialflow.service.note.NoteTagService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -27,13 +23,12 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
 /**
- * 知识中枢 · 笔记 + 分类 + 标签
+ * 知识中枢 · 笔记 + 分类
  *
  * 路由前缀：/api/v1/notes
  * 鉴权：所有端点要求 Sa-Token 登录态
@@ -46,8 +41,6 @@ public class NoteController {
 
     private final NoteService noteService;
     private final NoteCategoryService categoryService;
-    private final NoteTagService tagService;
-    private final NoteLinkService linkService;
 
     @Operation(summary = "list notes (paginated, with filters)")
     @PostMapping("/list")
@@ -134,47 +127,5 @@ public class NoteController {
     public R<Void> deleteCategory(@PathVariable Long id) {
         categoryService.delete(StpUtil.getLoginIdAsLong(), id);
         return R.ok();
-    }
-
-    // ==================== tags ====================
-
-    @Operation(summary = "list all tags of current user")
-    @GetMapping("/tags")
-    public R<List<NoteTagVO>> listTags() {
-        return R.ok(tagService.listAll(StpUtil.getLoginIdAsLong()));
-    }
-
-    @Operation(summary = "rename tag")
-    @PutMapping("/tags/{id}")
-    public R<Void> renameTag(@PathVariable Long id, @RequestParam String name) {
-        tagService.rename(StpUtil.getLoginIdAsLong(), id, name);
-        return R.ok();
-    }
-
-    @Operation(summary = "delete tag (and all rels)")
-    @DeleteMapping("/tags/{id}")
-    public R<Void> deleteTag(@PathVariable Long id) {
-        tagService.delete(StpUtil.getLoginIdAsLong(), id);
-        return R.ok();
-    }
-
-    // ==================== links / graph ====================
-
-    @Operation(summary = "backlinks of a note (who links to me)")
-    @GetMapping("/{id}/backlinks")
-    public R<List<NoteLinkVO>> backlinks(@PathVariable Long id) {
-        return R.ok(linkService.findBacklinks(StpUtil.getLoginIdAsLong(), id));
-    }
-
-    @Operation(summary = "forward links of a note (who do I link to)")
-    @GetMapping("/{id}/forward-links")
-    public R<List<NoteLinkVO>> forwardLinks(@PathVariable Long id) {
-        return R.ok(linkService.findForwardLinks(StpUtil.getLoginIdAsLong(), id));
-    }
-
-    @Operation(summary = "all links of current user (knowledge graph data)")
-    @GetMapping("/graph/edges")
-    public R<List<NoteLinkVO>> graphEdges() {
-        return R.ok(linkService.findAllForUser(StpUtil.getLoginIdAsLong()));
     }
 }

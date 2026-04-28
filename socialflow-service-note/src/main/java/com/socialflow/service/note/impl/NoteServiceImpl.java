@@ -7,30 +7,21 @@ import com.socialflow.common.exception.NotFoundException;
 import com.socialflow.common.result.PageResult;
 import com.socialflow.dao.mapper.NoteCategoryMapper;
 import com.socialflow.dao.mapper.NoteMapper;
-import com.socialflow.dao.mapper.NoteTagMapper;
-import com.socialflow.dao.mapper.NoteTagRelMapper;
 import com.socialflow.dao.mapper.NoteVersionMapper;
 import com.socialflow.model.dto.NoteCreateDTO;
 import com.socialflow.model.dto.NoteQueryDTO;
 import com.socialflow.model.dto.NoteUpdateDTO;
 import com.socialflow.model.entity.Note;
 import com.socialflow.model.entity.NoteCategory;
-import com.socialflow.model.entity.NoteTag;
-import com.socialflow.model.entity.NoteTagRel;
 import com.socialflow.model.entity.NoteVersion;
 import com.socialflow.model.vo.NoteVO;
-import com.socialflow.service.note.NoteLinkService;
 import com.socialflow.service.note.NoteService;
-import com.socialflow.service.note.NoteTagService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -48,14 +39,9 @@ public class NoteServiceImpl implements NoteService {
 
     private final NoteMapper noteMapper;
     private final NoteCategoryMapper categoryMapper;
-    private final NoteTagMapper tagMapper;
-    private final NoteTagRelMapper tagRelMapper;
     private final NoteVersionMapper versionMapper;
-    private final NoteTagService tagService;
-    private final NoteLinkService linkService;
 
     private static final int STATUS_NORMAL  = 1;
-    private static final int STATUS_DRAFT   = 2;
     private static final int STATUS_TRASHED = 3;
 
     @Override
@@ -77,19 +63,10 @@ public class NoteServiceImpl implements NoteService {
         if (query.getCategoryId() != null) {
             w.eq(Note::getCategoryId, query.getCategoryId());
         }
-        // tagIds 过滤前置到 SQL：先查 note_tag_rel 拿 noteIds，再 IN 限制，
-        // 这样分页/总数都准确。空交集 → 直接返回空页。
-        if (!CollectionUtils.isEmpty(query.getTagIds())) {
-            List<Long> noteIds = tagRelMapper.selectList(
-                    new LambdaQueryWrapper<NoteTagRel>().in(NoteTagRel::getTagId, query.getTagIds())
-            ).stream().map(NoteTagRel::getNoteId).distinct().toList();
-            if (noteIds.isEmpty()) return PageResult.empty(pageNum, pageSize);
-            w.in(Note::getId, noteIds);
-        }
 
         // 列表不返回 contentMd（节省带宽）
         w.select(Note::getId, Note::getUserId, Note::getTitle, Note::getSummary,
-                 Note::getCategoryId, Note::getWordCount, Note::getReadScore,
+                 Note::getCategoryId, Note::getWordCount,
                  Note::getIsPinned, Note::getIsPublic, Note::getSlug, Note::getStatus,
                  Note::getSourceType, Note::getPublishedAt,
                  Note::getCreateTime, Note::getUpdateTime);
@@ -109,12 +86,9 @@ public class NoteServiceImpl implements NoteService {
                 .map(n -> toVO(n, false))
                 .toList();
 
-        // 标签 + 分类名批量回填，避免 N+1
         if (!records.isEmpty()) {
-            attachTagsBatch(records, result.getRecords());
             attachCategoryNames(records, result.getRecords());
         }
-
         return PageResult.of(records, result.getTotal(), pageNum, pageSize);
     }
 
@@ -122,7 +96,6 @@ public class NoteServiceImpl implements NoteService {
     public NoteVO get(Long userId, Long id) {
         Note n = loadOwnedOrThrow(userId, id);
         NoteVO vo = toVO(n, true);
-        attachTagsBatch(List.of(vo), List.of(n));
         attachCategoryNames(List.of(vo), List.of(n));
         return vo;
     }
@@ -142,9 +115,6 @@ public class NoteServiceImpl implements NoteService {
         n.setWordCount(countWords(dto.getContentMd()));
         n.setSourceType("manual");
         noteMapper.insert(n);
-
-        replaceTags(userId, n.getId(), dto.getTags());
-        linkService.rebuildExplicitLinks(userId, n.getId(), n.getContentMd());
         return get(userId, n.getId());
     }
 
@@ -152,7 +122,6 @@ public class NoteServiceImpl implements NoteService {
     @Transactional
     public NoteVO update(Long userId, Long id, NoteUpdateDTO dto) {
         Note n = loadOwnedOrThrow(userId, id);
-        boolean contentChanged = false;
         String oldTitle = n.getTitle();
         String oldContent = n.getContentMd();
 
@@ -162,7 +131,6 @@ public class NoteServiceImpl implements NoteService {
             snapshotVersion(n.getId(), oldTitle, oldContent, "edited");
             n.setContentMd(dto.getContentMd());
             n.setWordCount(countWords(dto.getContentMd()));
-            contentChanged = true;
         }
         if (dto.getSummary() != null)   n.setSummary(dto.getSummary());
         if (dto.getCategoryId() != null) n.setCategoryId(dto.getCategoryId());
@@ -176,13 +144,6 @@ public class NoteServiceImpl implements NoteService {
         }
         if (dto.getStatus() != null)    n.setStatus(dto.getStatus());
         noteMapper.updateById(n);
-
-        if (dto.getTags() != null) {
-            replaceTags(userId, id, dto.getTags());
-        }
-        if (contentChanged) {
-            linkService.rebuildExplicitLinks(userId, id, n.getContentMd());
-        }
         return get(userId, id);
     }
 
@@ -210,9 +171,6 @@ public class NoteServiceImpl implements NoteService {
         if (n.getStatus() != STATUS_TRASHED) {
             throw new BusinessException("仅回收站内的笔记可彻底删除");
         }
-        // 清关联表
-        tagRelMapper.delete(new LambdaQueryWrapper<NoteTagRel>().eq(NoteTagRel::getNoteId, id));
-        linkService.deleteAllForNote(id);
         noteMapper.deleteById(id);
     }
 
@@ -268,11 +226,9 @@ public class NoteServiceImpl implements NoteService {
         v.setSummary(n.getSummary());
         if (withContent) {
             v.setContentMd(n.getContentMd());
-            v.setAiOutline(n.getAiOutline());
         }
         v.setCategoryId(n.getCategoryId());
         v.setWordCount(n.getWordCount());
-        v.setReadScore(n.getReadScore());
         v.setIsPinned(n.getIsPinned());
         v.setIsPublic(n.getIsPublic());
         v.setSlug(n.getSlug());
@@ -284,53 +240,12 @@ public class NoteServiceImpl implements NoteService {
         return v;
     }
 
-    /** 替换某笔记的标签关联（先全删再 upsert + 关联） */
-    private void replaceTags(Long userId, Long noteId, List<String> tagNames) {
-        tagRelMapper.delete(new LambdaQueryWrapper<NoteTagRel>().eq(NoteTagRel::getNoteId, noteId));
-        if (CollectionUtils.isEmpty(tagNames)) return;
-
-        List<NoteTag> tags = tagService.resolveOrCreate(userId, tagNames);
-        LocalDateTime now = LocalDateTime.now();
-        for (NoteTag t : tags) {
-            NoteTagRel rel = new NoteTagRel();
-            rel.setNoteId(noteId);
-            rel.setTagId(t.getId());
-            rel.setCreateTime(now);
-            tagRelMapper.insert(rel);
-            tagMapper.incrementUsage(t.getId(), 1);
-        }
-    }
-
-    /** 给一批 VO 批量挂上 tags（避免 N+1） */
-    private void attachTagsBatch(List<NoteVO> vos, List<Note> notes) {
-        if (vos.isEmpty()) return;
-        List<Long> noteIds = notes.stream().map(Note::getId).toList();
-        List<NoteTagRel> rels = tagRelMapper.selectList(
-                new LambdaQueryWrapper<NoteTagRel>().in(NoteTagRel::getNoteId, noteIds));
-        if (rels.isEmpty()) {
-            vos.forEach(v -> v.setTags(Collections.emptyList()));
-            return;
-        }
-        List<Long> tagIds = rels.stream().map(NoteTagRel::getTagId).distinct().toList();
-        Map<Long, String> tagIdToName = tagMapper.selectBatchIds(tagIds).stream()
-                .collect(Collectors.toMap(NoteTag::getId, NoteTag::getName));
-        Map<Long, List<String>> noteIdToTags = new HashMap<>();
-        for (NoteTagRel r : rels) {
-            String name = tagIdToName.get(r.getTagId());
-            if (name == null) continue;
-            noteIdToTags.computeIfAbsent(r.getNoteId(), k -> new ArrayList<>()).add(name);
-        }
-        for (NoteVO v : vos) {
-            v.setTags(noteIdToTags.getOrDefault(v.getId(), Collections.emptyList()));
-        }
-    }
-
     private void attachCategoryNames(List<NoteVO> vos, List<Note> notes) {
         List<Long> catIds = notes.stream()
                 .map(Note::getCategoryId).filter(java.util.Objects::nonNull).distinct().toList();
         if (catIds.isEmpty()) return;
-        Map<Long, String> map = categoryMapper.selectBatchIds(catIds).stream()
-                .collect(Collectors.toMap(NoteCategory::getId, NoteCategory::getName));
+        Map<Long, String> map = new HashMap<>(categoryMapper.selectBatchIds(catIds).stream()
+                .collect(Collectors.toMap(NoteCategory::getId, NoteCategory::getName)));
         for (NoteVO v : vos) {
             if (v.getCategoryId() != null) v.setCategoryName(map.get(v.getCategoryId()));
         }
@@ -339,13 +254,12 @@ public class NoteServiceImpl implements NoteService {
     /** 简单字数统计：去掉 Markdown 标记后按 char 计 */
     private int countWords(String md) {
         if (!StringUtils.hasText(md)) return 0;
-        String stripped = md.replaceAll("```[\\s\\S]*?```", "")    // 代码块
-                            .replaceAll("`[^`]*`", "")              // 行内代码
-                            .replaceAll("!\\[[^]]*]\\([^)]*\\)", "") // 图片
-                            .replaceAll("\\[[^]]*]\\([^)]*\\)", "")  // 链接
-                            .replaceAll("[#*_>~`\\-]+", "")          // 标记符号
+        String stripped = md.replaceAll("```[\\s\\S]*?```", "")
+                            .replaceAll("`[^`]*`", "")
+                            .replaceAll("!\\[[^]]*]\\([^)]*\\)", "")
+                            .replaceAll("\\[[^]]*]\\([^)]*\\)", "")
+                            .replaceAll("[#*_>~`\\-]+", "")
                             .replaceAll("\\s+", "");
         return stripped.length();
     }
-
 }

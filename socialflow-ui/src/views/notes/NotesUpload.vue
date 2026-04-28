@@ -2,7 +2,7 @@
   NotesUpload.vue —— 导入笔记（P1+P2 升级版）
    - 拖多文件 / 选文件夹 / 拖 ZIP（Notion / Obsidian 导出自动解包）
    - 立即异步入库 → SSE 实时显示流水线进度
-   - 任务完成后跳"审阅页"，让用户在入库前确认 AI 富化结果
+   - 任务完成后跳"审阅页"，让用户在入库前确认
 -->
 
 <script setup lang="ts">
@@ -18,7 +18,6 @@ import type { NoteImportTaskVO } from '@/types/api'
 const router = useRouter()
 const recentTasks = ref<NoteImportTaskVO[]>([])
 const loading = ref(false)
-const enrichEnabled = ref(true)
 
 /* SSE 进度状态 */
 const liveTaskId = ref<string | null>(null)
@@ -95,7 +94,7 @@ async function upload(files: File[]) {
   pushLog('开始上传 ' + valid.length + ' 个文件', 'info')
 
   try {
-    const taskId = await noteImportApi.importBatch(valid, enrichEnabled.value)
+    const taskId = await noteImportApi.importBatch(valid)
     liveTaskId.value = taskId
     liveStage.value = '后端已接收，开始解析…'
     pushLog(`任务 #${taskId} 已创建，订阅进度…`, 'info')
@@ -112,12 +111,11 @@ function subscribe(taskId: string) {
       liveStage.value = stageLabel(d.stage)
       if (d.stage === 'parsing' && d.fileName) pushLog(`解析中：${d.fileName}`, 'info')
       else if (d.stage === 'parsed' && d.title) pushLog(`✓ 已解析「${d.title}」`, 'ok')
-      else if (d.stage === 'enriching') pushLog(`🤖 AI 富化中…`, 'info')
     },
     onItemDone(d) {
       liveDone.value++
       const tail = d.conflictWithNoteId ? `（检测到冲突 #${d.conflictWithNoteId}）` : ''
-      pushLog(`✅ #${d.itemId} ${d.parsedTitle ?? ''}  富化=${d.enrichStatus ?? '-'}  ${tail}`, 'ok')
+      pushLog(`✅ ${d.parsedTitle ?? '#'+d.itemId}${tail}`, 'ok')
     },
     onError(d) {
       liveFailed.value++
@@ -136,7 +134,7 @@ function subscribe(taskId: string) {
 function stageLabel(s: string) {
   const map: Record<string, string> = {
     running: '处理中', parsing: '解析中', parsed: '解析完成',
-    enriching: 'AI 富化', done: '完成',
+    done: '完成',
   }
   return map[s] ?? s
 }
@@ -166,7 +164,7 @@ function goReview(t: NoteImportTaskVO) {
 <template>
   <div class="notes-upload">
     <PageHeader title="导入笔记"
-                subtitle="批量上传 / Notion·Obsidian ZIP / 整文件夹 — AI 自动摘要 · 标签 · 分类 · 冲突检测"
+                subtitle="批量上传 / Notion·Obsidian ZIP / 整文件夹 · 自动去重 · 冲突检测"
                 icon="Upload" />
 
     <el-card class="dropzone" shadow="never">
@@ -183,7 +181,6 @@ function goReview(t: NoteImportTaskVO) {
           支持 {{ SUPPORTED.join(' / ') }}，单文件 ≤ 50MB · ZIP 自动识别 Notion / Obsidian 结构
         </div>
         <div class="dz-opt">
-          <el-switch v-model="enrichEnabled" active-text="开启 AI 富化（摘要 / 标签 / 分类 / 大纲）" />
         </div>
         <input ref="fileInputRef" type="file" multiple style="display:none"
                :accept="SUPPORTED.join(',')" @change="onFilePicked" />

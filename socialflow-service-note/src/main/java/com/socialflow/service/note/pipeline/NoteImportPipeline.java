@@ -2,13 +2,10 @@ package com.socialflow.service.note.pipeline;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.socialflow.dao.mapper.NoteImportItemMapper;
-// 注入 Spring 管理的 ObjectMapper，跟 SseRegistry 保持一致；防御未来 ai_payload 引入 Long
 import com.socialflow.dao.mapper.NoteImportTaskMapper;
 import com.socialflow.dao.mapper.NoteMapper;
 import com.socialflow.model.entity.NoteImportItem;
 import com.socialflow.model.entity.NoteImportTask;
-import com.socialflow.service.note.enrich.NoteEnrichResult;
-import com.socialflow.service.note.enrich.NoteEnrichService;
 import com.socialflow.service.note.importer.NoteDedupService;
 import com.socialflow.service.note.parser.NoteParser;
 import com.socialflow.service.note.parser.NoteParserRegistry;
@@ -24,19 +21,17 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.Stream;
 
 /**
- * 异步导入流水线 —— 从 tempDir 读字节，逐 item 处理
+ * 异步导入流水线 —— 从 tempDir 读字节，逐 item 处理：
+ *   parse → dedup（L1/L2）→ 写 item 状态
  *
- * SSE 事件：
- *   stage / item-done / task-done / error
+ * SSE 事件：stage / item-done / task-done / error
  *
- * 关键保证：
- *   - 整个 run() 包在 try/catch/finally —— 任意异常都不会让 task 卡在 running
- *   - finally 强制 sse.complete + 清理临时目录
+ * 整个 run() 包在 try/catch/finally —— 任意异常都不会让 task 卡在 running，
+ * finally 强制 sse.complete + 清理临时目录。
  */
 @Slf4j
 @Service
@@ -47,17 +42,11 @@ public class NoteImportPipeline {
 
     private final NoteParserRegistry parserRegistry;
     private final NoteDedupService dedupService;
-    private final NoteEnrichService enrichService;
     private final NoteMapper noteMapper;
     private final NoteImportTaskMapper taskMapper;
     private final NoteImportItemMapper itemMapper;
     private final NoteImportSseRegistry sse;
 
-    /**
-     * @param taskId         任务 id
-     * @param itemPaths      item.id → 已落到磁盘的临时文件路径
-     * @param tempDir        本次任务的临时根目录（结束时整体删掉）
-     */
     @Async
     public void run(Long taskId, Map<Long, Path> itemPaths, Path tempDir) {
         NoteImportTask task = taskMapper.selectById(taskId);
@@ -119,7 +108,6 @@ public class NoteImportPipeline {
         Long itemId = item.getId();
         sse.push(taskId, "stage", Map.of("itemId", itemId, "stage", "parsing", "fileName", item.getFileName()));
 
-        // 一次性读出该文件字节（单文件，OOM 风险可控；如果担心超大文件可改 stream 解析）
         byte[] bytes = Files.readAllBytes(filePath);
 
         // L1 dedup
@@ -160,26 +148,7 @@ public class NoteImportPipeline {
         }
         sse.push(taskId, "stage", Map.of("itemId", itemId, "stage", "parsed", "title", parsed.getTitle()));
 
-        // enrich
-        if (task.getEnrichEnabled() != null && task.getEnrichEnabled() == 1) {
-            item.setEnrichStatus("running");
-            itemMapper.updateById(item);
-            sse.push(taskId, "stage", Map.of("itemId", itemId, "stage", "enriching"));
-            NoteEnrichResult er = enrichService.enrich(item.getUserId(), parsed.getTitle(), parsed.getContentMd());
-            Map<String, Object> payload = new HashMap<>();
-            payload.put("summary", er.getSummary());
-            payload.put("tags", er.getTags());
-            payload.put("outline", er.getOutline());
-            payload.put("categoryGuess", er.getCategoryGuess());
-            payload.put("enriched", er.isEnriched());
-            payload.put("failures", er.getFailures());
-            payload.put("skippedReason", er.getSkippedReason());
-            try { item.setAiPayload(objectMapper.writeValueAsString(payload)); }
-            catch (Exception e) { item.setAiPayload(null); }
-            item.setEnrichStatus(er.isEnriched() ? "done" : "skipped");
-        } else {
-            item.setEnrichStatus("skipped");
-        }
+        item.setEnrichStatus("skipped");
 
         if (item.getResolution() == null || item.getResolution().equals("pending")) {
             if (item.getConflictWithNoteId() == null) item.setResolution("create");
@@ -206,5 +175,4 @@ public class NoteImportPipeline {
             log.debug("cleanup tempDir {} failed: {}", dir, e.getMessage());
         }
     }
-
 }

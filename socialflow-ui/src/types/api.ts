@@ -224,12 +224,9 @@ export interface NoteVO {
   title: string
   summary?: string
   contentMd?: string
-  aiOutline?: string
   categoryId?: string
   categoryName?: string
-  tags?: string[]
   wordCount?: number
-  readScore?: number
   isPinned?: number
   isPublic?: number
   slug?: string
@@ -250,18 +247,11 @@ export interface NoteCategoryVO {
   children?: NoteCategoryVO[]
 }
 
-export interface NoteTagVO {
-  id: string
-  name: string
-  usageCount?: number
-}
-
 export interface NoteCreateDTO {
   title: string
   contentMd: string
   summary?: string
   categoryId?: string
-  tags?: string[]
   isPinned?: number
   isPublic?: number
   status?: number
@@ -272,7 +262,6 @@ export type NoteUpdateDTO = Partial<NoteCreateDTO>
 export interface NoteQueryDTO {
   keyword?: string
   categoryId?: string
-  tagIds?: string[]
   status?: number
   sortBy?: 'pinned-first' | 'updated' | 'created'
   pageNum?: number
@@ -318,15 +307,6 @@ export interface NoteImportTaskVO {
   items?: NoteImportItemVO[]
 }
 
-export interface NoteLinkVO {
-  srcNoteId: string
-  srcTitle?: string
-  dstNoteId: string
-  dstTitle?: string
-  linkType: 'explicit' | 'semantic'
-  similarity?: number
-}
-
 export interface NoteImportCommitVO {
   total: number
   created: number
@@ -339,8 +319,6 @@ export interface NoteImportCommitVO {
 
 export interface NoteImportItemUpdateDTO {
   parsedTitle?: string
-  summary?: string
-  tags?: string[]
   categoryId?: string
   isPublic?: number
   resolution?: 'skip' | 'create' | 'overwrite' | 'merge'
