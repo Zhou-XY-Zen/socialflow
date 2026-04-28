@@ -170,6 +170,38 @@ function sourceLabel(s?: string) {
       </template>
     </PageHeader>
 
+    <!-- 顶部统计 -->
+    <div class="stats-row">
+      <div class="stat-card s1">
+        <el-icon class="stat-icon"><component :is="'Files'" /></el-icon>
+        <div class="stat-meta">
+          <div class="stat-label">总笔记</div>
+          <div class="stat-value">{{ allCount }}</div>
+        </div>
+      </div>
+      <div class="stat-card s2">
+        <el-icon class="stat-icon"><component :is="'CollectionTag'" /></el-icon>
+        <div class="stat-meta">
+          <div class="stat-label">分类数</div>
+          <div class="stat-value">{{ flatCats.length }}</div>
+        </div>
+      </div>
+      <div class="stat-card s3">
+        <el-icon class="stat-icon"><component :is="'FolderOpened'" /></el-icon>
+        <div class="stat-meta">
+          <div class="stat-label">未分类</div>
+          <div class="stat-value">{{ uncatCount }}</div>
+        </div>
+      </div>
+      <div class="stat-card s4">
+        <el-icon class="stat-icon"><component :is="'Document'" /></el-icon>
+        <div class="stat-meta">
+          <div class="stat-label">当前显示</div>
+          <div class="stat-value">{{ total }}</div>
+        </div>
+      </div>
+    </div>
+
     <div class="layout">
       <!-- 左侧分类目录 -->
       <aside class="sidebar">
@@ -291,6 +323,29 @@ function sourceLabel(s?: string) {
 
 <style scoped>
 .notes-list { padding: 16px; }
+
+/* ============ 顶部统计 ============ */
+.stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px;
+              margin-bottom: 16px; }
+.stat-card { display: flex; align-items: center; gap: 14px; padding: 18px 20px;
+              border-radius: 12px; background: #fff; border: 1px solid #e5e7eb;
+              box-shadow: 0 1px 3px rgba(0,0,0,.03);
+              position: relative; overflow: hidden; transition: all .2s; }
+.stat-card:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(0,0,0,.06); }
+.stat-card::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0;
+                     width: 4px; }
+.stat-card.s1::before { background: linear-gradient(180deg, #3b82f6, #6366f1); }
+.stat-card.s2::before { background: linear-gradient(180deg, #10b981, #059669); }
+.stat-card.s3::before { background: linear-gradient(180deg, #f59e0b, #f97316); }
+.stat-card.s4::before { background: linear-gradient(180deg, #8b5cf6, #d946ef); }
+.stat-icon { font-size: 28px; padding: 10px; border-radius: 10px; }
+.stat-card.s1 .stat-icon { color: #3b82f6; background: #eff6ff; }
+.stat-card.s2 .stat-icon { color: #10b981; background: #ecfdf5; }
+.stat-card.s3 .stat-icon { color: #f59e0b; background: #fffbeb; }
+.stat-card.s4 .stat-icon { color: #8b5cf6; background: #f5f3ff; }
+.stat-meta { display: flex; flex-direction: column; gap: 2px; }
+.stat-label { font-size: 12px; color: #6b7280; }
+.stat-value { font-size: 22px; font-weight: 700; color: #111827; line-height: 1.1; }
 
 .layout { display: grid; grid-template-columns: 240px 1fr; gap: 16px; align-items: start; }
 
