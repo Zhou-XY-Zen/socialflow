@@ -97,4 +97,10 @@ public class NoteImportController {
         importService.cancel(StpUtil.getLoginIdAsLong(), taskId);
         return R.ok();
     }
+
+    @Operation(summary = "clear all import history of current user")
+    @DeleteMapping("/tasks")
+    public R<Integer> clearAllTasks() {
+        return R.ok(importService.clearAllTasks(StpUtil.getLoginIdAsLong()));
+    }
 }

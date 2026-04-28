@@ -262,6 +262,7 @@ export type NoteUpdateDTO = Partial<NoteCreateDTO>
 export interface NoteQueryDTO {
   keyword?: string
   categoryId?: string
+  uncategorizedOnly?: boolean
   status?: number
   sortBy?: 'pinned-first' | 'updated' | 'created'
   pageNum?: number

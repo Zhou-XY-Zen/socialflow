@@ -62,6 +62,8 @@ public class NoteServiceImpl implements NoteService {
         }
         if (query.getCategoryId() != null) {
             w.eq(Note::getCategoryId, query.getCategoryId());
+        } else if (Boolean.TRUE.equals(query.getUncategorizedOnly())) {
+            w.isNull(Note::getCategoryId);
         }
 
         // 列表不返回 contentMd（节省带宽）

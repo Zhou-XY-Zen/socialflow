@@ -48,4 +48,7 @@ public interface NoteImportService {
 
     /** 放弃：清掉 parsed_md，task 置 cancelled */
     void cancel(Long userId, Long taskId);
+
+    /** 清空当前用户所有导入任务记录（软删 task + item） */
+    int clearAllTasks(Long userId);
 }

@@ -76,4 +76,7 @@ export const noteImportApi = {
 
   commit:  (taskId: string) => post<NoteImportCommitVO>(`/notes/import/tasks/${taskId}/commit`),
   cancel:  (taskId: string) => post<void>(`/notes/import/tasks/${taskId}/cancel`),
+
+  /** 清空当前用户所有导入任务记录，返回清掉的任务条数 */
+  clearAllTasks: () => del<number>('/notes/import/tasks'),
 }

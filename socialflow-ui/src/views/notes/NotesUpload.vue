@@ -8,7 +8,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import dayjs from 'dayjs'
 import PageHeader from '@/components/PageHeader.vue'
 import { noteImportApi } from '@/api/note'
@@ -41,6 +41,19 @@ async function loadRecent() {
   try { recentTasks.value = await noteImportApi.listTasks() }
   finally { loading.value = false }
 }
+
+async function clearRecent() {
+  if (recentTasks.value.length === 0) return ElMessage.info('没有记录可清空')
+  try {
+    await ElMessageBox.confirm(
+      `清空全部 ${recentTasks.value.length} 条导入记录？`,
+      '确认', { type: 'warning', confirmButtonText: '清空', cancelButtonText: '取消' })
+  } catch { return }
+  const n = await noteImportApi.clearAllTasks()
+  ElMessage.success(`已清空 ${n} 条记录`)
+  await loadRecent()
+}
+
 onMounted(loadRecent)
 onUnmounted(() => sse.stop())
 
@@ -215,7 +228,12 @@ function goReview(t: NoteImportTaskVO) {
       <template #header>
         <div class="recent-head">
           <span>最近导入</span>
-          <el-button link :icon="'Refresh'" @click="loadRecent">刷新</el-button>
+          <span class="recent-actions">
+            <el-button link :icon="'Refresh'" @click="loadRecent">刷新</el-button>
+            <el-button link type="danger" :icon="'Delete'"
+                       :disabled="recentTasks.length === 0"
+                       @click="clearRecent">清空记录</el-button>
+          </span>
         </div>
       </template>
       <el-table :data="recentTasks" v-loading="loading" empty-text="还没有导入记录" stripe>

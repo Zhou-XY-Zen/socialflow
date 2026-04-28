@@ -19,6 +19,10 @@ public class NoteQueryDTO implements Serializable {
 
     private Long categoryId;
 
+    /** true 表示只返回 category_id IS NULL 的笔记（"未分类"侧栏按钮用）；
+     *  与 categoryId 互斥，同时传时 categoryId 优先 */
+    private Boolean uncategorizedOnly;
+
     /** 默认 1=正常；前端切换"回收站"传 3 */
     private Integer status;
 

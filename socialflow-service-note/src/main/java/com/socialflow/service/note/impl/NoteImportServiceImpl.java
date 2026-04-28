@@ -417,6 +417,22 @@ public class NoteImportServiceImpl implements NoteImportService {
         }
     }
 
+    @Override
+    @Transactional
+    public int clearAllTasks(Long userId) {
+        // 取所有非已删任务的 id（task 表有 @TableLogic）
+        List<NoteImportTask> tasks = taskMapper.selectList(
+                new LambdaQueryWrapper<NoteImportTask>().eq(NoteImportTask::getUserId, userId));
+        if (tasks.isEmpty()) return 0;
+        List<Long> taskIds = tasks.stream().map(NoteImportTask::getId).toList();
+
+        // 物理删 import_item 行（item 没有逻辑删除字段，物理删避免遗留）
+        itemMapper.delete(
+                new LambdaQueryWrapper<NoteImportItem>().in(NoteImportItem::getTaskId, taskIds));
+        // 软删 task（保留审计痕迹；列表查询会自动过滤 is_deleted=1）
+        return taskMapper.deleteBatchIds(taskIds);
+    }
+
     /* ============= helpers ============= */
 
     private NoteImportTask newTask(Long userId, String sourceType, String sourceName,
