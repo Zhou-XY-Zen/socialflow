@@ -20,7 +20,10 @@ import type {
 
 const route = useRoute()
 const router = useRouter()
-const taskId = Number(route.params.taskId)
+/* 直接当字符串用 —— Number() 会让 19 位雪花 ID 末尾几位变 0 */
+const taskId = Array.isArray(route.params.taskId)
+  ? route.params.taskId[0]
+  : (route.params.taskId as string)
 
 const task = ref<NoteImportTaskVO | null>(null)
 const cats = ref<NoteCategoryVO[]>([])
@@ -38,13 +41,13 @@ const md = new MarkdownIt({
   }
 })
 
-const selectedId = ref<number | null>(null)
+const selectedId = ref<string | null>(null)
 const editing = ref<{
-  itemId: number
+  itemId: string
   title: string
   summary: string
   tags: string[]
-  categoryId: number | null
+  categoryId: string | null
   isPublic: number
   resolution: NoteImportItemUpdateDTO['resolution']
 } | null>(null)
@@ -55,7 +58,7 @@ const selectedItem = computed<NoteImportItemVO | undefined>(() =>
 const previewHtml = computed(() => md.render(selectedItem.value?.parsedMd ?? ''))
 
 const categoryOptions = computed(() => {
-  const flat: { id: number; label: string }[] = []
+  const flat: { id: string; label: string }[] = []
   function walk(list: NoteCategoryVO[], depth: number) {
     for (const c of list) {
       flat.push({ id: c.id, label: '— '.repeat(depth) + c.name })
@@ -104,7 +107,7 @@ function parsedAi(item: NoteImportItemVO) {
   catch { return {} }
 }
 
-function select(id: number) {
+function select(id: string) {
   // 提交当前 editing 改动
   if (editing.value) flush()
   selectedId.value = id

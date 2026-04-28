@@ -19,12 +19,17 @@ import type { NoteVO, NoteCategoryVO, NoteTagVO, NoteLinkVO } from '@/types/api'
 const route = useRoute()
 const router = useRouter()
 
-const idParam = computed(() => route.params.id ? Number(route.params.id) : undefined)
+/* 关键：直接用字符串 ID，不要 Number() —— 雪花 ID 19 位会超出 JS Number 精度 */
+const idParam = computed(() => {
+  const v = route.params.id
+  if (!v) return undefined
+  return Array.isArray(v) ? v[0] : v
+})
 const isNew = computed(() => !idParam.value)
 
 const title = ref('')
 const contentMd = ref('')
-const categoryId = ref<number | undefined>()
+const categoryId = ref<string | undefined>()
 const tags = ref<string[]>([])
 const isPinned = ref(0)
 const isPublic = ref(0)
@@ -52,7 +57,7 @@ const md = new MarkdownIt({
 const previewHtml = computed(() => md.render(contentMd.value || ''))
 
 const categoryOptions = computed(() => {
-  const flat: { id: number; label: string }[] = []
+  const flat: { id: string; label: string }[] = []
   function walk(list: NoteCategoryVO[], depth: number) {
     for (const c of list) {
       flat.push({ id: c.id, label: '— '.repeat(depth) + c.name })
@@ -88,7 +93,7 @@ async function loadLinks() {
   } catch { /* ignore */ }
 }
 
-function jumpTo(id: number) { router.push({ name: 'notes-edit', params: { id } }) }
+function jumpTo(id: string) { router.push({ name: 'notes-edit', params: { id } }) }
 
 function applyNote(n: NoteVO) {
   title.value = n.title

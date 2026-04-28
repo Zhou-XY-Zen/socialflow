@@ -9,17 +9,17 @@ import { ref, onUnmounted } from 'vue'
 import { useUserStore } from '@/stores/user'
 
 export interface ImportSseHandlers {
-  onStage?:    (data: { taskId?: number; itemId?: number; stage: string; fileName?: string; title?: string }) => void
-  onItemDone?: (data: { itemId: number; parsedTitle?: string; conflictWithNoteId?: number; enrichStatus?: string; reason?: string }) => void
-  onTaskDone?: (data: { taskId: number; processed: number; failed: number }) => void
-  onError?:    (data: { itemId?: number; msg: string }) => void
+  onStage?:    (data: { taskId?: string; itemId?: string; stage: string; fileName?: string; title?: string }) => void
+  onItemDone?: (data: { itemId: string; parsedTitle?: string; conflictWithNoteId?: string; enrichStatus?: string; reason?: string }) => void
+  onTaskDone?: (data: { taskId: string; processed: number; failed: number }) => void
+  onError?:    (data: { itemId?: string; msg: string }) => void
 }
 
 export function useImportSse() {
   const streaming = ref(false)
   let abort: AbortController | null = null
 
-  async function start(taskId: number, handlers: ImportSseHandlers) {
+  async function start(taskId: string, handlers: ImportSseHandlers) {
     const userStore = useUserStore()
     streaming.value = true
     abort = new AbortController()

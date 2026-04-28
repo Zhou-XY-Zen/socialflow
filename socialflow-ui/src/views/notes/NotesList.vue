@@ -22,8 +22,8 @@ const pageSize = ref(20)
 const items = ref<NoteVO[]>([])
 
 const keyword = ref('')
-const categoryId = ref<number | undefined>()
-const tagIds = ref<number[]>([])
+const categoryId = ref<string | undefined>()
+const tagIds = ref<string[]>([])
 const sortBy = ref<NoteQueryDTO['sortBy']>('pinned-first')
 
 const categories = ref<NoteCategoryVO[]>([])
@@ -31,7 +31,7 @@ const tags = ref<NoteTagVO[]>([])
 
 /** 把树拍平给下拉用 */
 const categoryOptions = computed(() => {
-  const flat: { id: number; label: string }[] = []
+  const flat: { id: string; label: string }[] = []
   function walk(list: NoteCategoryVO[], depth: number) {
     for (const c of list) {
       flat.push({ id: c.id, label: '— '.repeat(depth) + c.name })

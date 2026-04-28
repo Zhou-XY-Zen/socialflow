@@ -21,7 +21,7 @@ const loading = ref(false)
 const enrichEnabled = ref(true)
 
 /* SSE 进度状态 */
-const liveTaskId = ref<number | null>(null)
+const liveTaskId = ref<string | null>(null)
 const liveTotal = ref(0)
 const liveDone = ref(0)
 const liveFailed = ref(0)
@@ -106,7 +106,7 @@ async function upload(files: File[]) {
   }
 }
 
-function subscribe(taskId: number) {
+function subscribe(taskId: string) {
   sse.start(taskId, {
     onStage(d) {
       liveStage.value = stageLabel(d.stage)
