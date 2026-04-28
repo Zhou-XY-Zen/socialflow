@@ -36,13 +36,15 @@ public class NoteCategoryServiceImpl implements NoteCategoryService {
                         .orderByAsc(NoteCategory::getSortOrder));
 
         // 一次查所有笔记的 category_id 计数
+        // 注：用 .select(单列) 在某些 MyBatis-Plus 版本下，列值全为 NULL 的行会
+        // 映射出 null 元素到 List 里，所以 stream 里要防 n == null
         List<Note> notes = noteMapper.selectList(
                 new LambdaQueryWrapper<Note>()
-                        .select(Note::getCategoryId)
+                        .select(Note::getId, Note::getCategoryId)  // 多查一列 id 强制非空映射
                         .eq(Note::getUserId, userId)
                         .ne(Note::getStatus, 3));
         Map<Long, Long> countByCat = notes.stream()
-                .filter(n -> n.getCategoryId() != null)
+                .filter(n -> n != null && n.getCategoryId() != null)
                 .collect(Collectors.groupingBy(Note::getCategoryId, Collectors.counting()));
 
         // 转 VO + 计数
