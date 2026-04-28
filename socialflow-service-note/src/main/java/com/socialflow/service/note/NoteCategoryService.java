@@ -12,8 +12,6 @@ public interface NoteCategoryService {
 
     NoteCategoryVO create(Long userId, NoteCategoryUpsertDTO dto);
 
-    NoteCategoryVO update(Long userId, Long id, NoteCategoryUpsertDTO dto);
-
     /** 删除分类：若仍关联笔记则把笔记的 category_id 置 NULL */
     void delete(Long userId, Long id);
 }

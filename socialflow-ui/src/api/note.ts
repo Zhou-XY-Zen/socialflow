@@ -37,7 +37,6 @@ export const noteApi = {
 export const noteCategoryApi = {
   tree:   ()                                  => get<NoteCategoryVO[]>('/notes/categories'),
   create: (dto: NoteCategoryUpsertDTO)        => post<NoteCategoryVO>('/notes/categories', dto),
-  update: (id: string, dto: NoteCategoryUpsertDTO) => put<NoteCategoryVO>(`/notes/categories/${id}`, dto),
   delete: (id: string)                        => del<void>(`/notes/categories/${id}`),
 }
 

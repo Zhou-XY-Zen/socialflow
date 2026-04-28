@@ -90,6 +90,42 @@ watch([keyword, activeCat, sortBy], () => {
 
 function selectCat(id: string) { activeCat.value = id }
 
+/* ============== 分类增删（移到侧栏内联） ============== */
+const addPopVisible = ref(false)
+const newCatName = ref('')
+const newCatParent = ref<string | undefined>()
+
+function openAddPopover() {
+  newCatName.value = ''
+  newCatParent.value = undefined
+  addPopVisible.value = true
+}
+
+async function submitAddCat() {
+  if (!newCatName.value.trim()) return ElMessage.warning('请输入分类名')
+  await noteCategoryApi.create({
+    name: newCatName.value.trim(),
+    parentId: newCatParent.value,
+  })
+  ElMessage.success('已创建')
+  addPopVisible.value = false
+  await loadFilters()
+}
+
+async function deleteCat(id: string, label: string, count: number) {
+  try {
+    const msg = count > 0
+      ? `删除分类「${label}」？该分类下 ${count} 条笔记的分类会被清空（笔记本身保留）`
+      : `删除分类「${label}」？`
+    await ElMessageBox.confirm(msg, '确认', { type: 'warning' })
+    await noteCategoryApi.delete(id)
+    if (activeCat.value === id) activeCat.value = 'all'
+    ElMessage.success('已删除')
+    await loadFilters()
+    await loadAll()
+  } catch { /* cancel */ }
+}
+
 function goNew()             { router.push({ name: 'notes-edit' }) }
 function goDetail(n: NoteVO) { router.push({ name: 'notes-detail', params: { id: n.id } }) }
 function goEdit(n: NoteVO)   { router.push({ name: 'notes-edit', params: { id: n.id } }) }
@@ -137,8 +173,29 @@ function sourceLabel(s?: string) {
       <!-- 左侧分类目录 -->
       <aside class="sidebar">
         <div class="sidebar-head">
-          <el-icon><component :is="'CollectionTag'" /></el-icon>
-          <span>分类目录</span>
+          <span class="sidebar-title">
+            <el-icon><component :is="'CollectionTag'" /></el-icon>
+            分类目录
+          </span>
+          <el-popover v-model:visible="addPopVisible" trigger="click" placement="bottom"
+                      :width="260" popper-class="cat-add-popover">
+            <template #reference>
+              <el-button :icon="'Plus'" link size="small" @click="openAddPopover" />
+            </template>
+            <div class="add-form">
+              <el-input v-model="newCatName" placeholder="新分类名"
+                        size="small" clearable @keyup.enter="submitAddCat" />
+              <el-select v-model="newCatParent" placeholder="父分类（可空 = 顶级）"
+                         clearable size="small" style="width:100%; margin-top:8px">
+                <el-option v-for="c in flatCats" :key="c.id" :value="c.id"
+                           :label="'— '.repeat(c.depth) + c.label" />
+              </el-select>
+              <div class="add-actions">
+                <el-button size="small" @click="addPopVisible = false">取消</el-button>
+                <el-button size="small" type="primary" @click="submitAddCat">添加</el-button>
+              </div>
+            </div>
+          </el-popover>
         </div>
         <ul class="cat-list">
           <li :class="['cat-item', { active: activeCat === 'all' }]" @click="selectCat('all')">
@@ -147,11 +204,13 @@ function sourceLabel(s?: string) {
             <span class="cat-count">{{ allCount }}</span>
           </li>
           <li v-for="c in flatCats" :key="c.id"
-              :class="['cat-item', { active: activeCat === c.id }]"
+              :class="['cat-item', 'has-actions', { active: activeCat === c.id }]"
               :style="{ paddingLeft: `${12 + c.depth * 16}px` }"
               @click="selectCat(c.id)">
             <el-icon class="cat-icon"><component :is="'Folder'" /></el-icon>
             <span class="cat-label">{{ c.label }}</span>
+            <el-button class="cat-del" :icon="'Delete'" link size="small" type="danger"
+                       @click.stop="deleteCat(c.id, c.label, c.count)" />
             <span class="cat-count">{{ c.count }}</span>
           </li>
           <li :class="['cat-item', { active: activeCat === 'uncat' }]" @click="selectCat('uncat')">
@@ -236,9 +295,12 @@ function sourceLabel(s?: string) {
 /* ============ 左侧分类目录 ============ */
 .sidebar { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px;
            padding: 12px 8px; position: sticky; top: 16px; }
-.sidebar-head { display: flex; align-items: center; gap: 6px; padding: 4px 8px 10px;
+.sidebar-head { display: flex; align-items: center; justify-content: space-between;
+                padding: 4px 8px 10px;
                 font-size: 12px; color: #6b7280; font-weight: 600;
                 border-bottom: 1px dashed #e5e7eb; margin-bottom: 6px; }
+.sidebar-title { display: inline-flex; align-items: center; gap: 6px; }
+.add-form .add-actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 10px; }
 .cat-list { list-style: none; padding: 0; margin: 0; }
 .cat-item { display: flex; align-items: center; gap: 8px;
             padding: 8px 12px; border-radius: 6px; cursor: pointer;
@@ -252,6 +314,9 @@ function sourceLabel(s?: string) {
 .cat-count { font-size: 11px; color: #9ca3af; background: #f3f4f6; padding: 0 8px;
               border-radius: 999px; min-width: 24px; text-align: center; }
 .cat-item.active .cat-count { background: #dbeafe; }
+/* hover 时露出删除按钮 */
+.cat-del { opacity: 0; transition: opacity .12s; padding: 0 4px !important; }
+.cat-item.has-actions:hover .cat-del { opacity: 1; }
 
 /* ============ 主区 ============ */
 .main { min-width: 0; }

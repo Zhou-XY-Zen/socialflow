@@ -96,24 +96,6 @@ public class NoteCategoryServiceImpl implements NoteCategoryService {
 
     @Override
     @Transactional
-    public NoteCategoryVO update(Long userId, Long id, NoteCategoryUpsertDTO dto) {
-        NoteCategory c = loadOwnedOrThrow(userId, id);
-        c.setName(dto.getName());
-        c.setParentId(dto.getParentId());
-        if (dto.getSortOrder() != null) c.setSortOrder(dto.getSortOrder());
-        if (dto.getColor() != null) c.setColor(dto.getColor());
-        categoryMapper.updateById(c);
-        NoteCategoryVO v = new NoteCategoryVO();
-        v.setId(c.getId());
-        v.setParentId(c.getParentId());
-        v.setName(c.getName());
-        v.setSortOrder(c.getSortOrder());
-        v.setColor(c.getColor());
-        return v;
-    }
-
-    @Override
-    @Transactional
     public void delete(Long userId, Long id) {
         loadOwnedOrThrow(userId, id);
         // 关联笔记的 category_id 置 NULL（不连带删笔记）

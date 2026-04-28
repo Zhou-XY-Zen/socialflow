@@ -115,13 +115,6 @@ public class NoteController {
         return R.ok(categoryService.create(StpUtil.getLoginIdAsLong(), dto));
     }
 
-    @Operation(summary = "update category")
-    @PutMapping("/categories/{id}")
-    public R<NoteCategoryVO> updateCategory(@PathVariable Long id,
-                                            @Valid @RequestBody NoteCategoryUpsertDTO dto) {
-        return R.ok(categoryService.update(StpUtil.getLoginIdAsLong(), id, dto));
-    }
-
     @Operation(summary = "delete category (note.category_id will be set NULL)")
     @DeleteMapping("/categories/{id}")
     public R<Void> deleteCategory(@PathVariable Long id) {

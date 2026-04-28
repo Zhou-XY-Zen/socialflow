@@ -55,7 +55,6 @@ const menuGroups: MenuGroup[] = [
     children: [
       { path: '/notes',          label: '我的笔记',  icon: 'Notebook' },
       { path: '/notes/upload',   label: '导入笔记',  icon: 'Upload' },
-      { path: '/notes/categories', label: '分类',     icon: 'CollectionTag' },
       { path: '/notes/trash',    label: '回收站',    icon: 'Delete' },
     ],
   },
