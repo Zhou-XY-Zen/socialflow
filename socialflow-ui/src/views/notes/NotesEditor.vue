@@ -93,7 +93,8 @@ async function loadLinks() {
   } catch { /* ignore */ }
 }
 
-function jumpTo(id: string) { router.push({ name: 'notes-edit', params: { id } }) }
+/* 编辑器里点反向链接，跳到目标笔记的详情（只读）模式 —— 不直接进编辑 */
+function jumpTo(id: string) { router.push({ name: 'notes-detail', params: { id } }) }
 
 function applyNote(n: NoteVO) {
   title.value = n.title
@@ -170,7 +171,11 @@ async function save(silent = false) {
   }
 }
 
-function back() { router.push({ name: 'notes' }) }
+/* 返回：已存在的笔记 → 详情页；新建未保存 → 列表 */
+function back() {
+  if (idParam.value) router.push({ name: 'notes-detail', params: { id: idParam.value } })
+  else router.push({ name: 'notes' })
+}
 </script>
 
 <template>

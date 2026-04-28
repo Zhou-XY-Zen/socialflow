@@ -110,6 +110,11 @@ const routes: RouteRecordRaw[] = [
       { path: 'notes/edit/:id?', name: 'notes-edit',
         component: () => import('@/views/notes/NotesEditor.vue'),
         meta: { title: '编辑笔记' } },
+      /* 笔记详情（只读）—— 必须在 /notes/edit /notes/upload 等静态子路由之后注册，
+         以便 Vue Router 优先匹配静态路径 */
+      { path: 'notes/:id', name: 'notes-detail',
+        component: () => import('@/views/notes/NotesDetail.vue'),
+        meta: { title: '笔记详情' } },
       { path: 'notes/import/:taskId/review', name: 'notes-import-review',
         component: () => import('@/views/notes/NotesImportReview.vue'),
         meta: { title: '上传审阅' } },

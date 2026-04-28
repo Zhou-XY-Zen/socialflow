@@ -81,9 +81,10 @@ watch([keyword, categoryId, tagIds, sortBy], () => {
   loadAll()
 })
 
-function goNew()      { router.push({ name: 'notes-edit' }) }
-function goEdit(n: NoteVO) { router.push({ name: 'notes-edit', params: { id: n.id } }) }
-function goUpload()   { router.push({ name: 'notes-upload' }) }
+function goNew()        { router.push({ name: 'notes-edit' }) }
+function goDetail(n: NoteVO) { router.push({ name: 'notes-detail', params: { id: n.id } }) }
+function goEdit(n: NoteVO)   { router.push({ name: 'notes-edit', params: { id: n.id } }) }
+function goUpload()     { router.push({ name: 'notes-upload' }) }
 
 async function pin(n: NoteVO) {
   await noteApi.togglePin(n.id)
@@ -143,7 +144,7 @@ function fmtTime(t?: string) {
       <EmptyState v-if="!loading && items.length === 0"
                   title="还没有笔记"
                   description="点右上角「导入笔记」批量上传，或「新建笔记」从零开始" />
-      <el-card v-for="n in items" :key="n.id" class="note-card" shadow="hover" @click="goEdit(n)">
+      <el-card v-for="n in items" :key="n.id" class="note-card" shadow="hover" @click="goDetail(n)">
         <div class="note-head">
           <span class="note-title">
             <el-icon v-if="n.isPinned === 1" color="#f59e0b"><component :is="'Star'" /></el-icon>
@@ -161,6 +162,7 @@ function fmtTime(t?: string) {
         <div class="note-footer">
           <span>{{ n.wordCount ?? 0 }} 字 · {{ fmtTime(n.updateTime) }}</span>
           <span class="actions" @click.stop>
+            <el-button link size="small" type="primary" @click="goEdit(n)">编辑</el-button>
             <el-button link size="small" @click="pin(n)">{{ n.isPinned === 1 ? '取消置顶' : '置顶' }}</el-button>
             <el-button link size="small" type="danger" @click="trash(n)">回收站</el-button>
           </span>
