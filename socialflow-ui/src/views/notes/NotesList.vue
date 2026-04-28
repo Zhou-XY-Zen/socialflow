@@ -91,14 +91,15 @@ watch([keyword, activeCat, sortBy], () => {
 function selectCat(id: string) { activeCat.value = id }
 
 /* ============== 分类增删（移到侧栏内联） ============== */
-const addPopVisible = ref(false)
+/* el-popover 自身管理显隐（trigger="click"），点击外部自动关。
+ * 我们只在 @show 时重置表单，submit 后用 ref.hide() 主动关。 */
+const addPopRef = ref<{ hide: () => void } | null>(null)
 const newCatName = ref('')
 const newCatParent = ref<string | undefined>()
 
-function openAddPopover() {
+function resetAddForm() {
   newCatName.value = ''
   newCatParent.value = undefined
-  addPopVisible.value = true
 }
 
 async function submitAddCat() {
@@ -108,7 +109,7 @@ async function submitAddCat() {
     parentId: newCatParent.value,
   })
   ElMessage.success('已创建')
-  addPopVisible.value = false
+  addPopRef.value?.hide?.()
   await loadFilters()
 }
 
@@ -177,12 +178,13 @@ function sourceLabel(s?: string) {
             <el-icon><component :is="'CollectionTag'" /></el-icon>
             分类目录
           </span>
-          <el-popover v-model:visible="addPopVisible" trigger="click" placement="bottom"
-                      :width="260" popper-class="cat-add-popover">
+          <el-popover ref="addPopRef" trigger="click" placement="bottom"
+                      :width="260" popper-class="cat-add-popover"
+                      @show="resetAddForm">
             <template #reference>
-              <el-button :icon="'Plus'" link size="small" @click="openAddPopover" />
+              <el-button :icon="'Plus'" link size="small" />
             </template>
-            <div class="add-form">
+            <div class="add-form" @click.stop>
               <el-input v-model="newCatName" placeholder="新分类名"
                         size="small" clearable @keyup.enter="submitAddCat" />
               <el-select v-model="newCatParent" placeholder="父分类（可空 = 顶级）"
@@ -191,7 +193,7 @@ function sourceLabel(s?: string) {
                            :label="'— '.repeat(c.depth) + c.label" />
               </el-select>
               <div class="add-actions">
-                <el-button size="small" @click="addPopVisible = false">取消</el-button>
+                <el-button size="small" @click="addPopRef?.hide?.()">取消</el-button>
                 <el-button size="small" type="primary" @click="submitAddCat">添加</el-button>
               </div>
             </div>
