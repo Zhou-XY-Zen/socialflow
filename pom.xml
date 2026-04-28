@@ -26,6 +26,7 @@
         <module>socialflow-service-publish</module>
         <module>socialflow-service-codeanalysis</module>
         <module>socialflow-service-core</module>
+        <module>socialflow-service-note</module>
         <module>socialflow-web</module>
         <module>socialflow-admin</module>
     </modules>
@@ -113,6 +114,11 @@
             <dependency>
                 <groupId>com.socialflow</groupId>
                 <artifactId>socialflow-service-core</artifactId>
+                <version>${revision}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.socialflow</groupId>
+                <artifactId>socialflow-service-note</artifactId>
                 <version>${revision}</version>
             </dependency>
             <dependency>
