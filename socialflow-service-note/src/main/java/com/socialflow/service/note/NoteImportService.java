@@ -1,6 +1,7 @@
 package com.socialflow.service.note;
 
 import com.socialflow.model.dto.NoteImportItemUpdateDTO;
+import com.socialflow.model.vo.NoteImportCommitVO;
 import com.socialflow.model.vo.NoteImportTaskVO;
 import com.socialflow.model.vo.NoteVO;
 import org.springframework.web.multipart.MultipartFile;
@@ -39,8 +40,11 @@ public interface NoteImportService {
     /** 审阅页修改单 item */
     void updateItem(Long userId, Long taskId, Long itemId, NoteImportItemUpdateDTO dto);
 
-    /** 提交：按 resolution 把 reviewing 中的 items 真正入库为 note */
-    void commit(Long userId, Long taskId);
+    /**
+     * 提交：按 resolution 把 reviewing 中的 items 真正入库为 note。
+     * 返回逐项分类统计，前端可直接呈现"新建 X、跳过 Y、合并 Z"。
+     */
+    NoteImportCommitVO commit(Long userId, Long taskId);
 
     /** 放弃：清掉 parsed_md，task 置 cancelled */
     void cancel(Long userId, Long taskId);

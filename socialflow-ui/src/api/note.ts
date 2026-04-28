@@ -15,7 +15,7 @@ import type {
   NoteVO, NoteCreateDTO, NoteUpdateDTO, NoteQueryDTO,
   NoteCategoryVO, NoteCategoryUpsertDTO,
   NoteTagVO, NoteLinkVO,
-  NoteImportTaskVO, NoteImportItemUpdateDTO,
+  NoteImportTaskVO, NoteImportItemUpdateDTO, NoteImportCommitVO,
   PageResult,
 } from '@/types/api'
 
@@ -86,6 +86,6 @@ export const noteImportApi = {
   updateItem: (taskId: string, itemId: string, dto: NoteImportItemUpdateDTO) =>
     put<void>(`/notes/import/tasks/${taskId}/items/${itemId}`, dto),
 
-  commit:  (taskId: string) => post<void>(`/notes/import/tasks/${taskId}/commit`),
+  commit:  (taskId: string) => post<NoteImportCommitVO>(`/notes/import/tasks/${taskId}/commit`),
   cancel:  (taskId: string) => post<void>(`/notes/import/tasks/${taskId}/cancel`),
 }

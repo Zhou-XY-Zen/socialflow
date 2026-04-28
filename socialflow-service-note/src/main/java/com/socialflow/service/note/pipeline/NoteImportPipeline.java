@@ -172,6 +172,7 @@ public class NoteImportPipeline {
             payload.put("categoryGuess", er.getCategoryGuess());
             payload.put("enriched", er.isEnriched());
             payload.put("failures", er.getFailures());
+            payload.put("skippedReason", er.getSkippedReason());
             try { item.setAiPayload(M.writeValueAsString(payload)); }
             catch (Exception e) { item.setAiPayload(null); }
             item.setEnrichStatus(er.isEnriched() ? "done" : "skipped");

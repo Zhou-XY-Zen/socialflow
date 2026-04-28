@@ -4,6 +4,7 @@ import cn.dev33.satoken.stp.StpUtil;
 import com.socialflow.common.constant.CommonConstants;
 import com.socialflow.common.result.R;
 import com.socialflow.model.dto.NoteImportItemUpdateDTO;
+import com.socialflow.model.vo.NoteImportCommitVO;
 import com.socialflow.model.vo.NoteImportTaskVO;
 import com.socialflow.model.vo.NoteVO;
 import com.socialflow.service.note.NoteImportService;
@@ -82,11 +83,10 @@ public class NoteImportController {
         return R.ok();
     }
 
-    @Operation(summary = "commit task (apply resolutions)")
+    @Operation(summary = "commit task (apply resolutions); returns per-resolution stats")
     @PostMapping("/tasks/{taskId}/commit")
-    public R<Void> commit(@PathVariable Long taskId) {
-        importService.commit(StpUtil.getLoginIdAsLong(), taskId);
-        return R.ok();
+    public R<NoteImportCommitVO> commit(@PathVariable Long taskId) {
+        return R.ok(importService.commit(StpUtil.getLoginIdAsLong(), taskId));
     }
 
     @Operation(summary = "cancel task")

@@ -47,6 +47,11 @@ public class TikaParser implements NoteParser {
         String md = text.replaceAll("[\\t\\x0B\\f\\r]+", " ")
                         .replaceAll("\\n{3,}", "\n\n")
                         .trim();
-        return ParsedNote.builder().title(title).contentMd(md).build();
+        ParsedNote pn = ParsedNote.builder().title(title).contentMd(md).build();
+        // 命中 5MB 上限 —— 提示用户内容已被截断
+        if (md.length() >= MAX_CHARS - 100) {
+            pn.warn("文件内容超过 5MB，已截断到 5MB 入库；如需完整内容请拆分后再上传");
+        }
+        return pn;
     }
 }

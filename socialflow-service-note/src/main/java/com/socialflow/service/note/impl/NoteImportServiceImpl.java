@@ -15,6 +15,7 @@ import com.socialflow.model.dto.NoteUpdateDTO;
 import com.socialflow.model.entity.Note;
 import com.socialflow.model.entity.NoteImportItem;
 import com.socialflow.model.entity.NoteImportTask;
+import com.socialflow.model.vo.NoteImportCommitVO;
 import com.socialflow.model.vo.NoteImportItemVO;
 import com.socialflow.model.vo.NoteImportTaskVO;
 import com.socialflow.model.vo.NoteVO;
@@ -293,7 +294,7 @@ public class NoteImportServiceImpl implements NoteImportService {
 
     @Override
     @Transactional
-    public void commit(Long userId, Long taskId) {
+    public NoteImportCommitVO commit(Long userId, Long taskId) {
         NoteImportTask task = loadTask(userId, taskId);
         if (!"reviewing".equals(task.getStatus()) && !"running".equals(task.getStatus())) {
             throw new BusinessException("任务当前状态不允许提交：" + task.getStatus());
@@ -302,25 +303,55 @@ public class NoteImportServiceImpl implements NoteImportService {
         List<NoteImportItem> items = itemMapper.selectList(
                 new LambdaQueryWrapper<NoteImportItem>().eq(NoteImportItem::getTaskId, taskId));
 
-        int created = 0;
+        NoteImportCommitVO stats = new NoteImportCommitVO();
+        stats.setTotal(items.size());
         for (NoteImportItem item : items) {
-            // 已经有 finalNoteId 跳过（避免重复入库）
-            if (item.getFinalNoteId() != null) continue;
-            // 解析失败的也跳过
-            if (!"done".equals(item.getParseStatus()) && !"skipped".equals(item.getParseStatus())) continue;
+            // 解析失败：直接计 failed 不入库
+            if ("failed".equals(item.getParseStatus())) {
+                stats.setFailed(stats.getFailed() + 1);
+                continue;
+            }
+            // 已落库（重复 commit）跳过
+            if (item.getFinalNoteId() != null) {
+                if ("skip".equals(item.getResolution()))    stats.setSkipped(stats.getSkipped() + 1);
+                else if ("overwrite".equals(item.getResolution())) stats.setOverwritten(stats.getOverwritten() + 1);
+                else if ("merge".equals(item.getResolution()))     stats.setMerged(stats.getMerged() + 1);
+                else                                               stats.setCreated(stats.getCreated() + 1);
+                continue;
+            }
 
-            String resolution = item.getResolution() == null ? "skip" : item.getResolution();
+            String resolution = item.getResolution();
+            // null 或 "pending" 一律按 skip 处理（前端弹框已确认）
+            if (resolution == null || "pending".equals(resolution)) {
+                resolution = "skip";
+            }
             switch (resolution) {
                 case "skip" -> {
-                    item.setParsedMd(null); // 释放占用
+                    item.setParsedMd(null);
                     itemMapper.updateById(item);
+                    stats.setSkipped(stats.getSkipped() + 1);
+                    // L1 重复（解析直接被 skip 掉的）单独计数
+                    if ("skipped".equals(item.getParseStatus())) {
+                        stats.setSkippedDup(stats.getSkippedDup() + 1);
+                    }
                 }
-                case "create"    -> commitAsCreate(userId, item);
-                case "overwrite" -> commitAsOverwrite(userId, item);
-                case "merge"     -> commitAsMerge(userId, item);
-                default          -> log.warn("unknown resolution {} for item {}", resolution, item.getId());
+                case "create" -> {
+                    commitAsCreate(userId, item);
+                    if (item.getFinalNoteId() != null) stats.setCreated(stats.getCreated() + 1);
+                }
+                case "overwrite" -> {
+                    commitAsOverwrite(userId, item);
+                    if (item.getFinalNoteId() != null) stats.setOverwritten(stats.getOverwritten() + 1);
+                }
+                case "merge" -> {
+                    commitAsMerge(userId, item);
+                    if (item.getFinalNoteId() != null) stats.setMerged(stats.getMerged() + 1);
+                }
+                default -> {
+                    log.warn("unknown resolution {} for item {}", resolution, item.getId());
+                    stats.setSkipped(stats.getSkipped() + 1);
+                }
             }
-            if (item.getFinalNoteId() != null) created++;
         }
 
         task.setStatus("committed");
@@ -328,7 +359,8 @@ public class NoteImportServiceImpl implements NoteImportService {
         task.setFinishedAt(LocalDateTime.now());
         task.setUpdateTime(LocalDateTime.now());
         taskMapper.updateById(task);
-        log.info("committed task {} created {} notes", taskId, created);
+        log.info("committed task {} stats={}", taskId, stats);
+        return stats;
     }
 
     private void commitAsCreate(Long userId, NoteImportItem item) {

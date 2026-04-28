@@ -172,6 +172,13 @@ const radius = (n: Node) => 6 + Math.min(14, n.degree * 1.5)
 
 const empty = computed(() => !loading.value && nodes.value.length === 0)
 
+/* 模板里渲染边时按 id 拿坐标用 —— 避免每帧 nodes.find O(N) */
+const nodeById = computed(() => {
+  const m = new Map<string, Node>()
+  for (const n of nodes.value) m.set(n.id, n)
+  return m
+})
+
 onMounted(load)
 onBeforeUnmount(() => { if (raf != null) cancelAnimationFrame(raf) })
 </script>
@@ -181,7 +188,7 @@ onBeforeUnmount(() => { if (raf != null) cancelAnimationFrame(raf) })
     <PageHeader title="知识图谱"
                 subtitle="节点 = 笔记 · 边 = [[双向链接]] · 节点越大表示被引用越多"
                 icon="Share">
-      <template #extra>
+      <template #actions>
         <el-button :icon="'Refresh'" @click="load">刷新</el-button>
       </template>
     </PageHeader>
@@ -194,10 +201,10 @@ onBeforeUnmount(() => { if (raf != null) cancelAnimationFrame(raf) })
          @mousemove="onMouseMove" @mouseup="onMouseUp" @mouseleave="onMouseUp" @wheel="onWheel">
       <g :transform="`translate(${transform.x}, ${transform.y}) scale(${transform.k})`">
         <line v-for="(e, i) in edges" :key="'e'+i+'-'+tick"
-              :x1="nodes.find(n => n.id === e.src)?.x"
-              :y1="nodes.find(n => n.id === e.src)?.y"
-              :x2="nodes.find(n => n.id === e.dst)?.x"
-              :y2="nodes.find(n => n.id === e.dst)?.y"
+              :x1="nodeById.get(e.src)?.x"
+              :y1="nodeById.get(e.src)?.y"
+              :x2="nodeById.get(e.dst)?.x"
+              :y2="nodeById.get(e.dst)?.y"
               stroke="#cbd5e1" :stroke-dasharray="e.type === 'semantic' ? '4 3' : ''" stroke-width="1" />
         <g v-for="n in nodes" :key="n.id">
           <circle :cx="n.x" :cy="n.y" :r="radius(n)" :fill="nodeColor(n)" stroke="#fff" stroke-width="2"

@@ -114,6 +114,13 @@ onMounted(async () => {
         () => { dirty.value = true })
 })
 
+/* 点击反向链接 → 同一组件复用，需要手动重新拉取目标笔记 */
+watch(idParam, async (newId, oldId) => {
+  if (oldId && newId && oldId !== newId) {
+    await loadNote()
+  }
+})
+
 let saveTimer: ReturnType<typeof setTimeout> | null = null
 watch([title, contentMd], () => {
   if (saveTimer) clearTimeout(saveTimer)

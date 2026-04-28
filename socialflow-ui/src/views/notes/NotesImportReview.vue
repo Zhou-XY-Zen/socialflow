@@ -157,11 +157,34 @@ async function commit() {
   if (editing.value) await flush()
   committing.value = true
   try {
-    await noteImportApi.commit(taskId)
-    ElMessage.success('已入库')
+    const r = await noteImportApi.commit(taskId)
+    const inDb = r.created + r.overwritten + r.merged
+    const parts: string[] = []
+    if (r.created > 0)     parts.push(`新建 ${r.created}`)
+    if (r.overwritten > 0) parts.push(`覆盖 ${r.overwritten}`)
+    if (r.merged > 0)      parts.push(`合并 ${r.merged}`)
+    if (r.skipped > 0)     parts.push(`跳过 ${r.skipped}${r.skippedDup ? `（含 ${r.skippedDup} 条重复）` : ''}`)
+    if (r.failed > 0)      parts.push(`失败 ${r.failed}`)
+    const msg = inDb > 0
+      ? `已入库 ${inDb} 条 — ${parts.join('、')}`
+      : `没有新笔记入库（${parts.join('、') || '全部已存在'}）`
+    ElMessage({ type: inDb > 0 ? 'success' : 'warning', message: msg, duration: 5000 })
     router.push({ name: 'notes' })
   } finally { committing.value = false }
 }
+
+/* AI 跳过原因：取第一条 item 的 ai_payload.skippedReason 当统一提示 */
+const aiSkippedReason = computed<string | null>(() => {
+  if (!task.value || task.value.enrichEnabled !== 1) return null
+  for (const it of items.value) {
+    if (!it.aiPayload) continue
+    try {
+      const p = JSON.parse(it.aiPayload)
+      if (p && p.enriched === false && p.skippedReason) return p.skippedReason
+    } catch {}
+  }
+  return null
+})
 
 async function cancel() {
   try {
@@ -184,10 +207,11 @@ function statusDot(item: NoteImportItemVO) {
     <PageHeader title="审阅与入库"
                 :subtitle="task?.sourceName ? `任务 #${taskId} · ${task.sourceName}` : ''"
                 icon="DocumentChecked">
-      <template #extra>
+      <template #actions>
         <el-button :icon="'Close'" @click="cancel">放弃</el-button>
-        <el-button type="primary" :icon="'Check'" :loading="committing" @click="commit">
-          入库（{{ stats.total - stats.pending - stats.skip - stats.failed }} 条）
+        <el-button type="primary" :icon="'Check'" :loading="committing" @click="commit"
+                   :disabled="stats.total === 0">
+          入库（{{ stats.create + stats.overwrite + stats.merge }} 条）
         </el-button>
       </template>
     </PageHeader>
@@ -199,6 +223,18 @@ function statusDot(item: NoteImportItemVO) {
       <el-tag size="large" type="warning">未决 {{ stats.pending }}</el-tag>
       <el-tag v-if="stats.failed > 0" size="large" type="danger">失败 {{ stats.failed }}</el-tag>
     </div>
+
+    <el-alert v-if="aiSkippedReason" class="ai-skip-banner"
+              type="warning" show-icon :closable="false">
+      <template #title>
+        AI 富化未运行 — 摘要 / 标签 / 分类 / 大纲都为空
+      </template>
+      <div>
+        原因：{{ aiSkippedReason }}<br>
+        可以现在去 <router-link to="/settings/api-keys">设置 → API Key 管理</router-link>
+        配置；不影响本次入库（先入库后续在编辑器里补也行）
+      </div>
+    </el-alert>
 
     <div class="layout">
       <!-- 左：item 列表 -->
@@ -290,6 +326,7 @@ function statusDot(item: NoteImportItemVO) {
 <style scoped>
 .review { padding: 16px; }
 .stats { display: flex; gap: 8px; margin: 8px 0 14px; }
+.ai-skip-banner { margin-bottom: 14px; }
 .layout { display: grid; grid-template-columns: 280px 1fr 380px; gap: 12px;
           height: calc(100vh - 220px); min-height: 500px; }
 .col { display: flex; flex-direction: column; min-height: 0; }

@@ -26,6 +26,9 @@ public class NoteEnrichResult {
 
     private boolean enriched;        // 整体是否走了富化（false=用户没配 key 等被跳过）
 
+    /** 整体被跳过时的原因（用于前端审阅页给用户看）；enriched=true 时为 null */
+    private String skippedReason;
+
     @Builder.Default
     private List<String> failures = new CopyOnWriteArrayList<>();
 }

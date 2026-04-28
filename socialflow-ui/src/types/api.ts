@@ -327,6 +327,16 @@ export interface NoteLinkVO {
   similarity?: number
 }
 
+export interface NoteImportCommitVO {
+  total: number
+  created: number
+  overwritten: number
+  merged: number
+  skipped: number
+  skippedDup: number   // L1 字节重复自动跳过的数量（已计入 skipped）
+  failed: number
+}
+
 export interface NoteImportItemUpdateDTO {
   parsedTitle?: string
   summary?: string

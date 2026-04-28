@@ -107,7 +107,7 @@ function fmtTime(t?: string) {
 <template>
   <div class="notes-list">
     <PageHeader title="我的笔记" subtitle="知识中枢 · 学习沉淀" icon="Notebook">
-      <template #extra>
+      <template #actions>
         <el-button type="primary" :icon="'Upload'" @click="goUpload">导入笔记</el-button>
         <el-button type="success" :icon="'Plus'" @click="goNew">新建笔记</el-button>
       </template>

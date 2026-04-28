@@ -241,9 +241,10 @@ function goReview(t: NoteImportTaskVO) {
           <template #default="{ row }">
             <el-button v-if="row.status === 'reviewing'" link type="warning"
                        size="small" @click="goReview(row)">去审阅</el-button>
-            <el-button v-else-if="row.status === 'committed' || row.status === 'failed'"
+            <el-button v-else-if="row.status === 'committed' || row.status === 'failed' || row.status === 'cancelled'"
                        link size="small" @click="goReview(row)">查看详情</el-button>
-            <el-button v-else link size="small" @click="subscribe(row.id)">订阅进度</el-button>
+            <el-button v-else-if="row.status === 'running' || row.status === 'pending'"
+                       link size="small" @click="subscribe(row.id)">订阅进度</el-button>
           </template>
         </el-table-column>
       </el-table>

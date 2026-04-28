@@ -45,7 +45,7 @@ public class NoteEnrichService {
                 .enriched(false)
                 .build();
 
-        // 用户没配默认 provider 或 key → 静默跳过
+        // 用户没配默认 provider 或 key → 跳过并把原因带回前端
         LlmProvider provider;
         String apiKey;
         try {
@@ -53,10 +53,12 @@ public class NoteEnrichService {
             apiKey = apiKeyService.getDecryptedKey(userId, provider);
         } catch (RuntimeException e) {
             log.info("user {} has no default provider, skip enrich", userId);
+            result.setSkippedReason("未设置默认 LLM 供应商，请到 设置 → API Key 管理 配置一个");
             return result;
         }
         if (apiKey == null || apiKey.isBlank()) {
             log.info("user {} has no API key for {}, skip enrich", userId, provider);
+            result.setSkippedReason("未配置 " + provider + " 的 API Key，请到 设置 → API Key 管理 添加");
             return result;
         }
 

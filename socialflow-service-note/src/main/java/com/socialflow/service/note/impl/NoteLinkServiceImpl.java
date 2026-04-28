@@ -9,6 +9,7 @@ import com.socialflow.model.vo.NoteLinkVO;
 import com.socialflow.service.note.NoteLinkService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -70,10 +71,11 @@ public class NoteLinkServiceImpl implements NoteLinkService {
             link.setCreateTime(now);
             try {
                 linkMapper.insert(link);
-            } catch (Exception e) {
-                // 唯一索引冲突忽略
+            } catch (DuplicateKeyException e) {
+                // 唯一索引冲突 = 已建过同名边，安全跳过
                 log.debug("insert link skip dup: {} → {}", noteId, dst);
             }
+            // 其他异常不再吞 —— 让上层事务回滚 / 暴露真实问题
         }
     }
 
